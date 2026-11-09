@@ -1,0 +1,65 @@
+@model TransactionDetailViewModel
+@{
+    var t = Model.Transaction;
+    var a = t.Account!;
+    var effect = t.IsCredit
+        ? $"{t.Amount:C} will be taken back OUT of ••{a.Last4}"
+        : $"{t.Amount:C} will be put back INTO ••{a.Last4}";
+    var reverse = new ConfirmModalViewModel("reverseModal", $"Reverse transaction #{t.Id}",
+        $"A new offsetting \"Reversal\" transaction will be added: {effect}." +
+        (Model.Linked != null ? $" Because this is a transfer, the other side (#{Model.Linked.Id} on ••{Model.Linked.Account?.Last4}) is reversed too." : "") +
+        " The original is kept and marked Reversed, and the rows are linked. This can't be undone by reversing again.",
+        Url.Action("Reverse", new { id = t.Id })!, "Reverse transaction", "danger");
+}
+
+<div class="detail-head">
+    <div>
+        <a asp-action="Index" class="small text-decoration-none"><i class="bi bi-chevron-left"></i> Transactions</a>
+        <h2 class="mt-1">#@t.Id · @t.TypeLabel <partial name="_StatusPill" model="t.Status.ToString()" /></h2>
+        <div class="text-muted-alto small">@t.LocalDate.ToString("dddd, MMM d, yyyy h:mm:ss tt")</div>
+    </div>
+    <div class="detail-actions">
+        @if (Model.CannotReverseReason == null)
+        {
+            <button class="btn btn-admin-danger" data-bs-toggle="modal" data-bs-target="#reverseModal"><i class="bi bi-arrow-counterclockwise me-1"></i>Reverse</button>
+        }
+        else
+        {
+            <span class="small text-muted-alto" style="max-width: 320px"><i class="bi bi-info-circle me-1"></i>@Model.CannotReverseReason</span>
+        }
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="admin-card h-100">
+            <div class="big-balance mb-2"><money amount="@t.SignedAmount" colorize="true" show-sign="true" /></div>
+            <dl class="kv">
+                <dt>Description</dt><dd>@t.Description</dd>
+                <dt>Memo</dt><dd>@(t.Memo ?? "—")</dd>
+                <dt>Type</dt><dd>@t.TypeLabel (@t.Type)</dd>
+                <dt>Balance after</dt><dd><money amount="@t.BalanceAfter" /></dd>
+                <dt>Account</dt><dd><a asp-controller="Accounts" asp-action="Details" asp-route-id="@a.Id">@a.DisplayName ••@a.Last4</a> (@a.Status)</dd>
+                <dt>Customer</dt><dd><a asp-controller="Customers" asp-action="Details" asp-route-id="@a.UserId">@a.User?.FirstName @a.User?.LastName</a> · @a.User?.Email</dd>
+            </dl>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="admin-card h-100">
+            <h2 class="h6 mb-3">Linked transactions</h2>
+            <dl class="kv">
+                <dt>Other transfer leg</dt>
+                <dd>@if (Model.Linked != null) { <a asp-action="Details" asp-route-id="@Model.Linked.Id">#@Model.Linked.Id · @Model.Linked.TypeLabel on ••@Model.Linked.Account?.Last4</a> } else { <text>—</text> }</dd>
+                <dt>Reverses</dt>
+                <dd>@if (Model.ReversalOf != null) { <a asp-action="Details" asp-route-id="@Model.ReversalOf.Id">#@Model.ReversalOf.Id · @Model.ReversalOf.Description</a> } else { <text>—</text> }</dd>
+                <dt>Reversed by</dt>
+                <dd>@if (Model.ReversedBy != null) { <a asp-action="Details" asp-route-id="@Model.ReversedBy.Id">#@Model.ReversedBy.Id · @Model.ReversedBy.LocalDate.ToString("MMM d, h:mm tt")</a> } else { <text>—</text> }</dd>
+            </dl>
+        </div>
+    </div>
+</div>
+
+@if (Model.CannotReverseReason == null)
+{
+    <partial name="_ConfirmModal" model="reverse" />
+}

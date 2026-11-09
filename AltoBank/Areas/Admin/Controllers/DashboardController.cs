@@ -1,26 +1,18 @@
-using AltoBank.Data;
-using AltoBank.Services;
-using Microsoft.AspNetCore.Authorization;
+using AltoBank.Areas.Admin.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AltoBank.Areas.Admin.Controllers;
 
-/// <summary>
-/// /admin — the admin OVERVIEW page.
-/// [Area("Admin")] puts this controller in the Admin area (URL prefix /admin, views in Areas/Admin/Views).
-/// [Authorize(Roles = "Admin")] means only admins get in; customers see the Access Denied page.
-/// </summary>
-[Area("Admin")]
-[Authorize(Roles = SeedData.AdminRole)]
-public class DashboardController : Controller
+/// <summary>/admin — OVERVIEW: KPI tiles, charts (from /api/admin/stats) and the "Needs attention" panel.</summary>
+public class DashboardController : AdminControllerBase
 {
-    private readonly IBankService _bank;
+    private readonly IAdminService _admin;
 
-    public DashboardController(IBankService bank) => _bank = bank;
+    public DashboardController(IAdminService admin) => _admin = admin;
 
     public async Task<IActionResult> Index()
     {
         ViewData["Title"] = "Overview";
-        return View(await _bank.GetRecentApplicationsAsync(count: 8));
+        return View(await _admin.GetOverviewAsync());
     }
 }

@@ -40,6 +40,12 @@ namespace AltoBank.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("DailyTransferLimit")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal?>("GoalAmount")
                         .HasColumnType("decimal(18,2)");
 
@@ -52,6 +58,20 @@ namespace AltoBank.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("OpenedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Active");
+
+                    b.Property<DateTime?>("StatusChangedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StatusReason")
+                        .HasMaxLength(300)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("UserId")
@@ -85,6 +105,10 @@ namespace AltoBank.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("CardDesign")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Citizenship")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -96,6 +120,10 @@ namespace AltoBank.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<DateOnly>("DateOfBirth")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DenialReason")
+                        .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ESignName")
@@ -124,6 +152,9 @@ namespace AltoBank.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("TEXT");
+
+                    b.Property<int?>("FundingAccountId")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("FundingSource")
                         .HasMaxLength(100)
@@ -178,6 +209,13 @@ namespace AltoBank.Migrations
                         .HasMaxLength(5)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReviewedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("SourceOfFunds")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -218,6 +256,8 @@ namespace AltoBank.Migrations
 
                     b.HasIndex("AccountId");
 
+                    b.HasIndex("Status");
+
                     b.HasIndex("UserId", "SubmittedAt");
 
                     b.ToTable("AccountApplications");
@@ -241,6 +281,9 @@ namespace AltoBank.Migrations
 
                     b.Property<string>("ConcurrencyStamp")
                         .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("CreatedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<DateOnly?>("DateOfBirth")
@@ -270,6 +313,9 @@ namespace AltoBank.Migrations
                     b.Property<string>("MiddleInitial")
                         .HasMaxLength(1)
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("MustChangePassword")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("NormalizedEmail")
                         .HasMaxLength(256)
@@ -322,6 +368,214 @@ namespace AltoBank.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("AltoBank.Models.AuditLog", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ActorEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ActorRole")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ActorUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AfterJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("BeforeJson")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetId")
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetType")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Action");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("Timestamp");
+
+                    b.ToTable("AuditLogs");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.BankSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("AutoApproveApplications")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("CheckingApy")
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<decimal>("DefaultDailyTransferLimit")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("LargeTransactionThreshold")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("SavingsApy")
+                        .HasColumnType("decimal(9,6)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UpdatedBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("BankSettings");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            AutoApproveApplications = true,
+                            CheckingApy = 0.0000m,
+                            DefaultDailyTransferLimit = 5000m,
+                            LargeTransactionThreshold = 2500m,
+                            SavingsApy = 0.0410m
+                        });
+                });
+
+            modelBuilder.Entity("AltoBank.Models.Card", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AccountId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CancelReason")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CardNumber")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Design")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ExpiryMonth")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ExpiryYear")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("FrozenAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("IssuedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NameOnCard")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ReplacesCardId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("CardNumber")
+                        .IsUnique();
+
+                    b.ToTable("Cards");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.CustomerNote", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AuthorName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AuthorUserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CustomerUserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerUserId", "CreatedAt");
+
+                    b.ToTable("CustomerNotes");
+                });
+
             modelBuilder.Entity("AltoBank.Models.Transaction", b =>
                 {
                     b.Property<int>("Id")
@@ -337,6 +591,9 @@ namespace AltoBank.Migrations
                     b.Property<decimal>("BalanceAfter")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<int?>("CounterpartyAccountId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime>("Date")
                         .HasColumnType("TEXT");
 
@@ -345,6 +602,26 @@ namespace AltoBank.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("LinkedTransactionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Memo")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ReversalOfTransactionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ReversedByTransactionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Posted");
+
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -352,6 +629,8 @@ namespace AltoBank.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("AccountId");
+
+                    b.HasIndex("Date");
 
                     b.ToTable("Transactions");
                 });
@@ -489,7 +768,7 @@ namespace AltoBank.Migrations
                     b.HasOne("AltoBank.Models.ApplicationUser", "User")
                         .WithMany("Accounts")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("User");
@@ -500,12 +779,12 @@ namespace AltoBank.Migrations
                     b.HasOne("AltoBank.Models.Account", "Account")
                         .WithMany()
                         .HasForeignKey("AccountId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("AltoBank.Models.ApplicationUser", "User")
                         .WithMany("Applications")
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Account");
@@ -513,12 +792,34 @@ namespace AltoBank.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("AltoBank.Models.Card", b =>
+                {
+                    b.HasOne("AltoBank.Models.Account", "Account")
+                        .WithMany("Cards")
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Account");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.CustomerNote", b =>
+                {
+                    b.HasOne("AltoBank.Models.ApplicationUser", "Customer")
+                        .WithMany("Notes")
+                        .HasForeignKey("CustomerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+                });
+
             modelBuilder.Entity("AltoBank.Models.Transaction", b =>
                 {
                     b.HasOne("AltoBank.Models.Account", "Account")
                         .WithMany("Transactions")
                         .HasForeignKey("AccountId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Account");
@@ -577,6 +878,8 @@ namespace AltoBank.Migrations
 
             modelBuilder.Entity("AltoBank.Models.Account", b =>
                 {
+                    b.Navigation("Cards");
+
                     b.Navigation("Transactions");
                 });
 
@@ -585,6 +888,8 @@ namespace AltoBank.Migrations
                     b.Navigation("Accounts");
 
                     b.Navigation("Applications");
+
+                    b.Navigation("Notes");
                 });
 #pragma warning restore 612, 618
         }

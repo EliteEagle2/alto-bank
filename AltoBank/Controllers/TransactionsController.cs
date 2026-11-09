@@ -136,10 +136,13 @@ public class TransactionsController : Controller
 
     // ---------- Helpers ----------
 
-    // Builds the account dropdown, e.g. "Everyday Checking ••4821 — $1,234.56".
+    // Builds the account dropdown, e.g. "Everyday Checking ••4821 — $1,234.56". Closed accounts are left out;
+    // frozen ones are labeled (BankService still decides what's allowed and explains why if not).
     private async Task<List<SelectListItem>> BuildOptionsAsync() =>
         (await _bank.GetAccountsAsync(UserId))
-            .Select(a => new SelectListItem($"{a.DisplayName} ••{a.Last4} — {a.Balance:C}", a.Id.ToString()))
+            .Where(a => a.Status != AccountStatus.Closed)
+            .Select(a => new SelectListItem(
+                $"{a.DisplayName} ••{a.Last4} — {a.Balance:C}{(a.Status == AccountStatus.Frozen ? " (frozen)" : "")}", a.Id.ToString()))
             .ToList();
 
     private async Task FillOptionsAsync(MoneyMovementViewModel model) =>

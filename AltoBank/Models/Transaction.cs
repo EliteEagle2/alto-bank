@@ -9,7 +9,22 @@ public enum TransactionType
     Deposit,
     Withdrawal,
     TransferIn,
-    TransferOut
+    TransferOut,
+    Interest,           // interest paid on an account (credit)
+    AdjustmentCredit,   // "Admin adjustment" that adds money
+    AdjustmentDebit,    // "Admin adjustment" that removes money
+    ReversalCredit,     // offsets (undoes) an earlier debit
+    ReversalDebit       // offsets (undoes) an earlier credit
+}
+
+/// <summary>
+/// Posted = normal. Reversed = an admin undid it with an offsetting transaction.
+/// Transactions are NEVER deleted or edited in place; a reversal is a new row, so history stays complete.
+/// </summary>
+public enum TransactionStatus
+{
+    Posted,
+    Reversed
 }
 
 /// <summary>
@@ -30,6 +45,8 @@ public class Transaction
 
     public TransactionType Type { get; set; }
 
+    public TransactionStatus Status { get; set; } = TransactionStatus.Posted;
+
     [Column(TypeName = "decimal(18,2)")]
     public decimal Amount { get; set; }
 
@@ -37,13 +54,31 @@ public class Transaction
     [Column(TypeName = "decimal(18,2)")]
     public decimal BalanceAfter { get; set; }
 
+    // Optional note, e.g. the customer's transfer memo or the admin's reason for an adjustment.
+    [StringLength(200)]
+    public string? Memo { get; set; }
+
+    // Transfers: the OTHER account involved, and the matching leg on that account.
+    public int? CounterpartyAccountId { get; set; }
+    public int? LinkedTransactionId { get; set; }
+
+    // Reversals: this row undoes ReversalOfTransactionId; the original points back via ReversedByTransactionId.
+    public int? ReversalOfTransactionId { get; set; }
+    public int? ReversedByTransactionId { get; set; }
+
+    // ----- Computed helpers (not stored) -----
+
     // True when money came INTO the account (shown in green).
     [NotMapped]
     public bool IsCredit => IsCreditType(Type);
 
     /// <summary>Does this kind of transaction ADD money to the account?</summary>
     public static bool IsCreditType(TransactionType type) =>
-        type is TransactionType.Deposit or TransactionType.TransferIn;
+        type is TransactionType.Deposit or TransactionType.TransferIn or TransactionType.Interest
+             or TransactionType.AdjustmentCredit or TransactionType.ReversalCredit;
+
+    [NotMapped]
+    public bool IsReversal => Type is TransactionType.ReversalCredit or TransactionType.ReversalDebit;
 
     // Amount with a sign: +50.00 for credits, -50.00 for debits.
     [NotMapped]
@@ -54,10 +89,14 @@ public class Transaction
     public DateTime LocalDate => DateTime.SpecifyKind(Date, DateTimeKind.Utc).ToLocalTime();
 
     [NotMapped]
-    public string TypeLabel => Type switch
+    public string TypeLabel => LabelFor(Type);
+
+    public static string LabelFor(TransactionType type) => type switch
     {
         TransactionType.TransferIn => "Transfer In",
         TransactionType.TransferOut => "Transfer Out",
-        _ => Type.ToString()
+        TransactionType.AdjustmentCredit or TransactionType.AdjustmentDebit => "Admin adjustment",
+        TransactionType.ReversalCredit or TransactionType.ReversalDebit => "Reversal",
+        _ => type.ToString()
     };
 }

@@ -1,0 +1,143 @@
+@model AccountDetailViewModel
+@{
+    var a = Model.Account;
+    var owner = $"{a.User?.FirstName} {a.User?.LastName}";
+    var label = $"{a.DisplayName} ••{a.Last4}";
+    var isSavings = a.AccountType == AccountType.Savings;
+    var moveOptions = Model.OtherAccounts.Select(o => new KeyValuePair<string, string>(o.Id.ToString(), $"{o.DisplayName} ••{o.Last4} ({o.Balance:C})")).ToList();
+
+    // Each modal says EXACTLY what will happen. All require a reason (checked again by IAdminService).
+    var freeze = new ConfirmModalViewModel("freezeModal", $"Freeze {label}",
+        $"{owner} will NOT be able to withdraw or transfer money out of {label}. Deposits and incoming transfers still work. Nothing is moved and the balance ({a.Balance:C}) stays the same.",
+        Url.Action("Freeze", new { id = a.Id })!, "Freeze account", "warn");
+    var unfreeze = new ConfirmModalViewModel("unfreezeModal", $"Unfreeze {label}",
+        $"{owner} will be able to withdraw and transfer from {label} again.",
+        Url.Action("Unfreeze", new { id = a.Id })!, "Unfreeze account", "warn");
+    var close = new ConfirmModalViewModel("closeModal", $"Close {label}",
+        a.Balance > 0
+            ? $"The remaining balance of {a.Balance:C} will be moved to the account you choose below, then {label} will be closed and its cards cancelled. The account and its history are kept (not deleted) and it can be reopened."
+            : $"{label} has a $0.00 balance. It will be closed and its cards cancelled. The account and its history are kept (not deleted) and it can be reopened.",
+        Url.Action("Close", new { id = a.Id })!, "Close account", "danger",
+        a.Balance > 0 ? new[] { new ConfirmField("moveTo", "Move the balance to", Options: moveOptions) } : null);
+    var reopen = new ConfirmModalViewModel("reopenModal", $"Reopen {label}",
+        $"{label} will become Active again. Its old cards stay cancelled; {a.User?.FirstName} can request a new card.",
+        Url.Action("Reopen", new { id = a.Id })!, "Reopen account", "warn");
+    var adjust = new ConfirmModalViewModel("adjustModal", "Manual adjustment",
+        $"A transaction of type \"Admin adjustment\" will be added to {label} for the amount below, with your reason as its memo. A debit can't take the balance below $0.00 (currently {a.Balance:C}).",
+        Url.Action("Adjust", new { id = a.Id })!, "Post adjustment", "danger",
+        new[] {
+            new ConfirmField("direction", "Direction", Options: new[] { new KeyValuePair<string,string>("credit", "Credit (add money)"), new KeyValuePair<string,string>("debit", "Debit (remove money)") }),
+            new ConfirmField("amount", "Amount ($)", "number", Min: "0.01", Step: "0.01", Placeholder: "0.00")
+        });
+    var settings = new ConfirmModalViewModel("settingsModal", "Edit account settings",
+        $"Updates the nickname and the daily transfer limit for {label}. Leave the limit blank to use the bank default. Overdrafts are never allowed.",
+        Url.Action("UpdateSettings", new { id = a.Id })!, "Save settings", "primary",
+        new[] {
+            new ConfirmField("nickname", "Nickname", Required: false, Value: a.Nickname, Placeholder: "e.g. Everyday Checking"),
+            new ConfirmField("dailyLimit", "Daily transfer limit ($)", "number", Required: false, Min: "0", Step: "0.01",
+                             Value: a.DailyTransferLimit?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), Placeholder: $"Default {Model.DailyLimit:C}")
+        });
+    var interest = new ConfirmModalViewModel("interestModal", "Post interest now",
+        $"One month of interest at {Model.Apy:P2} APY (about {Model.NextInterest:C} on the current balance) will be credited to {label} as an \"Interest\" transaction.",
+        Url.Action("PostInterest", new { id = a.Id })!, "Post interest", "primary");
+}
+
+<div class="detail-head">
+    <div>
+        <a asp-action="Index" class="small text-decoration-none"><i class="bi bi-chevron-left"></i> Accounts</a>
+        <h2 class="mt-1">@label <partial name="_StatusPill" model="a.Status.ToString()" /></h2>
+        <div class="text-muted-alto small">
+            @a.AccountType · owner <a asp-controller="Customers" asp-action="Details" asp-route-id="@a.UserId">@owner</a> · opened @a.OpenedAt.ToString("MMM d, yyyy")
+            @if (a.ClosedAt != null) { <text> · closed @a.ClosedAt.Value.ToString("MMM d, yyyy")</text> }
+        </div>
+    </div>
+    <div class="detail-actions">
+        @if (a.Status == AccountStatus.Active) { <button class="btn btn-admin-warn" data-bs-toggle="modal" data-bs-target="#freezeModal"><i class="bi bi-snow me-1"></i>Freeze</button> }
+        @if (a.Status == AccountStatus.Frozen) { <button class="btn btn-admin-warn" data-bs-toggle="modal" data-bs-target="#unfreezeModal"><i class="bi bi-sun me-1"></i>Unfreeze</button> }
+        @if (a.Status != AccountStatus.Closed)
+        {
+            <button class="btn btn-admin-ghost" data-bs-toggle="modal" data-bs-target="#adjustModal"><i class="bi bi-plus-slash-minus me-1"></i>Adjust</button>
+            <button class="btn btn-admin-ghost" data-bs-toggle="modal" data-bs-target="#settingsModal"><i class="bi bi-sliders me-1"></i>Settings</button>
+            @if (isSavings) { <button class="btn btn-admin-ghost" data-bs-toggle="modal" data-bs-target="#interestModal"><i class="bi bi-percent me-1"></i>Post interest</button> }
+            <button class="btn btn-admin-danger" data-bs-toggle="modal" data-bs-target="#closeModal" disabled="@(a.Balance > 0 && !Model.OtherAccounts.Any())"
+                    title="@(a.Balance > 0 && !Model.OtherAccounts.Any() ? "The customer has no other open account to move the balance to." : null)"><i class="bi bi-slash-circle me-1"></i>Close</button>
+        }
+        else
+        {
+            <button class="btn btn-admin-warn" data-bs-toggle="modal" data-bs-target="#reopenModal"><i class="bi bi-arrow-counterclockwise me-1"></i>Reopen</button>
+        }
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="admin-card h-100">
+            <div class="kpi-label">Balance</div>
+            <div class="big-balance"><money amount="@a.Balance" /></div>
+            @if (a.Status != AccountStatus.Active && a.StatusReason != null)
+            {
+                <div class="small mt-2"><span class="text-muted-alto">@a.Status reason:</span> @a.StatusReason</div>
+            }
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="admin-card h-100">
+            <dl class="kv">
+                <dt>Account #</dt><dd class="font-monospace">@a.AccountNumber</dd>
+                <dt>Nickname</dt><dd>@(a.Nickname ?? "—")</dd>
+                <dt>Daily limit</dt><dd><money amount="@Model.DailyLimit" /> @(Model.UsesDefaultLimit ? "(default)" : "(custom)")</dd>
+                <dt>Used today</dt><dd><money amount="@Model.UsedToday" /></dd>
+                <dt>Overdraft</dt><dd>Not allowed</dd>
+                @if (isSavings) { <dt>APY</dt><dd>@Model.Apy.ToString("P2")</dd> }
+            </dl>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="admin-card h-100">
+            <div class="kpi-label mb-2">Cards</div>
+            @if (!a.Cards.Any()) { <p class="small text-muted-alto mb-0">No cards (savings accounts don't get one).</p> }
+            @foreach (var c in a.Cards.OrderByDescending(c => c.IssuedAt))
+            {
+                <div class="d-flex justify-content-between align-items-center py-1">
+                    <span class="font-monospace">@c.Type ••@c.Last4 <span class="small text-muted-alto">exp @c.Expiry</span></span>
+                    <partial name="_StatusPill" model="c.Status.ToString()" />
+                </div>
+                @if (c.CancelReason != null) { <div class="small text-muted-alto mb-1">@c.CancelReason</div> }
+            }
+        </div>
+    </div>
+</div>
+
+<div class="admin-card p-0">
+    <div class="admin-card-head px-3 pt-3">
+        <h2>Transaction history (@Model.Transactions.Count)</h2>
+        <a class="small" asp-controller="Transactions" asp-action="Export" asp-route-accountId="@a.Id"><i class="bi bi-download me-1"></i>CSV</a>
+    </div>
+    <div class="table-responsive" style="max-height: 560px">
+        <table class="table admin-table table-hover mb-0">
+            <thead><tr><th>#</th><th>Date</th><th>Description</th><th>Type</th><th>Status</th><th class="text-end">Amount</th><th class="text-end">Balance</th></tr></thead>
+            <tbody>
+                @foreach (var t in Model.Transactions)
+                {
+                    <tr class="@(t.Status == TransactionStatus.Reversed ? "is-muted" : "")">
+                        <td><a asp-controller="Transactions" asp-action="Details" asp-route-id="@t.Id">@t.Id</a></td>
+                        <td class="text-nowrap">@t.LocalDate.ToString("MMM d, yyyy h:mm tt")</td>
+                        <td>@t.Description @if (t.Memo != null) { <div class="small text-muted-alto">@t.Memo</div> }</td>
+                        <td>@t.TypeLabel</td>
+                        <td><partial name="_StatusPill" model="t.Status.ToString()" /></td>
+                        <td class="text-end"><money amount="@t.SignedAmount" colorize="true" show-sign="true" /></td>
+                        <td class="text-end"><money amount="@t.BalanceAfter" /></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<partial name="_ConfirmModal" model="freeze" />
+<partial name="_ConfirmModal" model="unfreeze" />
+<partial name="_ConfirmModal" model="close" />
+<partial name="_ConfirmModal" model="reopen" />
+<partial name="_ConfirmModal" model="adjust" />
+<partial name="_ConfirmModal" model="settings" />
+<partial name="_ConfirmModal" model="interest" />

@@ -6,8 +6,14 @@ using Microsoft.EntityFrameworkCore;
 namespace AltoBank.Services;
 
 /// <summary>
-/// All of the money logic lives here (not in the controllers) so the rules
-/// — no negative amounts, no overdrafts, only touch your own accounts — are in one place.
+/// All of the CUSTOMER money logic lives here (not in the controllers), so the rules are in one
+/// place and both the MVC pages and the JSON API obey them:
+///   • only touch your own accounts (every lookup filters by userId — IDOR protection)
+///   • no negative amounts, max $1,000,000, at most 2 decimals, no overdrafts
+///   • account STATUS: Frozen blocks withdrawals and outgoing transfers (deposits still allowed);
+///     Closed blocks everything
+///   • DAILY TRANSFER LIMIT per account (account override, or the bank-wide default in BankSetting)
+///   • every money movement runs in ONE database transaction with a concurrency check on Balance
 ///
 /// LOADING STRATEGIES used in this class (EF Core):
 ///  • EAGER loading  — GetDashboardDataAsync: .Include()/.ThenInclude() load the user, their
@@ -27,23 +33,30 @@ public class BankService : IBankService
     public const decimal MaxAmount = 1_000_000m;
 
     private readonly ApplicationDbContext _db;
+    private readonly IAuditLogger _audit;
+    private readonly ICardService _cards;
 
-    public BankService(ApplicationDbContext db) => _db = db;
+    public BankService(ApplicationDbContext db, IAuditLogger audit, ICardService cards)
+    {
+        _db = db;
+        _audit = audit;
+        _cards = cards;
+    }
 
     // =====================================================================
     // Reading accounts
     // =====================================================================
 
-    /// <summary>All accounts owned by the user, checking first.</summary>
+    /// <summary>All accounts owned by the user (including closed ones, shown with their status), checking first.</summary>
     public async Task<List<Account>> GetAccountsAsync(string userId) =>
         await _db.Accounts
             .Where(a => a.UserId == userId)
-            .OrderBy(a => a.AccountType).ThenBy(a => a.OpenedAt)
+            .OrderBy(a => a.Status == AccountStatus.Closed).ThenBy(a => a.AccountType).ThenBy(a => a.OpenedAt)
             .ToListAsync();
 
     /// <summary>
     /// Returns the account ONLY if it belongs to this user. This ownership check
-    /// prevents someone from typing another person's account id into the URL.
+    /// prevents someone from typing another person's account id into the URL (IDOR).
     /// </summary>
     public Task<Account?> GetAccountAsync(int accountId, string userId) =>
         _db.Accounts.FirstOrDefaultAsync(a => a.Id == accountId && a.UserId == userId);
@@ -123,6 +136,21 @@ public class BankService : IBankService
         return (items, total);
     }
 
+    /// <summary>The account's daily transfer limit and how much of it has been used today (UTC day).</summary>
+    public async Task<(decimal Limit, decimal UsedToday)> GetDailyTransferUsageAsync(Account account)
+    {
+        var settings = await _db.GetSettingsAsync();
+        var limit = account.DailyTransferLimit ?? settings.DefaultDailyTransferLimit;
+        var today = DateTime.UtcNow.Date;
+        // SQLite can't SUM decimals in SQL, so the (few) amounts are added up in memory.
+        var amounts = await _db.Transactions.AsNoTracking()
+            .Where(t => t.AccountId == account.Id && t.Type == TransactionType.TransferOut
+                        && t.Status == TransactionStatus.Posted && t.Date >= today)
+            .Select(t => t.Amount)
+            .ToListAsync();
+        return (limit, amounts.Sum());
+    }
+
     // =====================================================================
     // Moving money
     // =====================================================================
@@ -135,6 +163,7 @@ public class BankService : IBankService
         {
             var account = await GetAccountAsync(accountId, userId);
             if (account == null) return new BankResult(false, "Account not found.");
+            if (CanReceive(account) is { } blocked) return blocked;   // closed accounts can't take deposits
 
             // Change tracking: EF notices the Balance change on this tracked entity and
             // writes an UPDATE for it when SaveChangesAsync runs.
@@ -153,6 +182,7 @@ public class BankService : IBankService
         {
             var account = await GetAccountAsync(accountId, userId);
             if (account == null) return new BankResult(false, "Account not found.");
+            if (CanSend(account) is { } blocked) return blocked;      // frozen / closed
 
             // No overdrafts: you can't take out more than you have.
             if (amount > account.Balance)
@@ -168,6 +198,7 @@ public class BankService : IBankService
     /// <summary>
     /// Moves money between two of the user's own accounts. Wrapped in a database
     /// transaction so BOTH sides succeed or NEITHER does — money is never lost or duplicated.
+    /// The two rows are linked to each other (LinkedTransactionId) so an admin can reverse both legs.
     /// </summary>
     public Task<BankResult> TransferAsync(string userId, int fromId, int toId, decimal amount, string? memo)
     {
@@ -179,6 +210,9 @@ public class BankService : IBankService
             var from = await GetAccountAsync(fromId, userId);
             var to = await GetAccountAsync(toId, userId);
             if (from == null || to == null) return new BankResult(false, "Account not found.");
+            if (CanSend(from) is { } cantSend) return cantSend;
+            if (CanReceive(to) is { } cantReceive) return cantReceive;
+            if (await CheckDailyLimitAsync(from, amount) is { } overLimit) return overLimit;
 
             if (amount > from.Balance)
                 return new BankResult(false, $"Insufficient funds. {from.DisplayName} has {from.Balance:C} available.");
@@ -186,58 +220,18 @@ public class BankService : IBankService
             from.Balance -= amount;
             to.Balance += amount;
 
-            var note = string.IsNullOrWhiteSpace(memo) ? "" : $" - {memo.Trim()}";
-            AddTransaction(from, TransactionType.TransferOut, amount, $"Transfer to {to.DisplayName}{note}");
-            AddTransaction(to, TransactionType.TransferIn, amount, $"Transfer from {from.DisplayName}{note}");
+            var cleanMemo = Clean(memo);
+            var note = cleanMemo == null ? "" : $" - {cleanMemo}";
+            var outLeg = AddTransaction(from, TransactionType.TransferOut, amount, $"Transfer to {to.DisplayName}{note}", cleanMemo, to.Id);
+            var inLeg = AddTransaction(to, TransactionType.TransferIn, amount, $"Transfer from {from.DisplayName}{note}", cleanMemo, from.Id);
+            await _db.SaveChangesAsync();
+            LinkLegs(outLeg, inLeg);
 
+            _audit.Add("Transfer", $"Transferred {amount:C} from ••{from.Last4} to ••{to.Last4}",
+                       "Account", from.Id.ToString(), after: new { from = from.Id, to = to.Id, amount, memo = cleanMemo });
             await _db.SaveChangesAsync();
             return new BankResult(true, $"Transferred {amount:C} from {from.DisplayName} to {to.DisplayName}.");
         });
-    }
-
-    // ---------- Shared safety rules for every money movement ----------
-
-    /// <summary>Amount rules enforced HERE (not only in view models), so the API path can't skip them.</summary>
-    private static BankResult? CheckAmount(decimal amount)
-    {
-        if (amount <= 0) return new(false, "Amount must be greater than zero.");
-        if (amount > MaxAmount) return new(false, "Amount can't be more than $1,000,000.");
-        if (decimal.Round(amount, 2) != amount) return new(false, "Amount can have at most 2 decimal places.");
-        return null;
-    }
-
-    private const string ConcurrencyMessage =
-        "Your balance changed while we were processing this request. Nothing was moved. Please try again.";
-
-    /// <summary>
-    /// Runs a money movement inside ONE database transaction:
-    ///  • commits only if the step reports success, otherwise rolls back (nothing half-done);
-    ///  • Account.Balance is a concurrency token ([ConcurrencyCheck]), so if two requests change the
-    ///    same balance at once, the second SaveChanges fails instead of overwriting the first.
-    ///    That prevents "lost update" overdrafts. We roll back and ask the user to retry.
-    /// </summary>
-    private async Task<BankResult> InTransactionAsync(Func<Task<BankResult>> work)
-    {
-        await using var dbTransaction = await _db.Database.BeginTransactionAsync();
-        try
-        {
-            var result = await work();
-            if (result.Success) await dbTransaction.CommitAsync();
-            else await dbTransaction.RollbackAsync();
-            return result;
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            await dbTransaction.RollbackAsync();
-            _db.ChangeTracker.Clear();   // forget the stale balances we loaded
-            return new BankResult(false, ConcurrencyMessage);
-        }
-        catch
-        {
-            await dbTransaction.RollbackAsync(); // undo everything if anything failed
-            _db.ChangeTracker.Clear();
-            throw;
-        }
     }
 
     // =====================================================================
@@ -258,57 +252,95 @@ public class BankService : IBankService
     }
 
     /// <summary>
-    /// Submits an approved application: opens the account, moves the opening deposit,
-    /// saves the application record, and updates the customer's saved profile —
-    /// all inside ONE database transaction (all-or-nothing).
+    /// Opens an account inside a transaction that the CALLER already started (used by IAdminService
+    /// when an admin approves a pending application, so approval + account + deposit + audit are one unit).
+    /// </summary>
+    public Task<(BankResult Result, Account? Account)> OpenAccountInCurrentTransactionAsync(string userId, OpenAccountRequest request)
+    {
+        if (_db.Database.CurrentTransaction == null)
+            throw new InvalidOperationException("OpenAccountInCurrentTransactionAsync must be called inside a database transaction.");
+        return OpenAccountCoreAsync(userId, request);
+    }
+
+    /// <summary>
+    /// Submits an application. With "Auto-approve applications" ON it is approved at once: the account
+    /// is opened, the opening deposit moved, the application saved, and the profile updated, all in
+    /// ONE database transaction. With it OFF the application is saved as Pending for an admin to review.
     /// </summary>
     public async Task<(BankResult Result, AccountApplication? Application)> SubmitApplicationAsync(
         string userId, AccountApplication application, OpenAccountRequest request)
     {
+        var settings = await _db.GetSettingsAsync();
+
         var result = await InTransactionAsync(async () =>
         {
-            var (r, account) = await OpenAccountCoreAsync(userId, request);
-            if (!r.Success || account == null) return r;
-
             application.UserId = userId;
-            application.AccountId = account.Id;
-            application.Status = ApplicationStatus.Approved;
+            application.CardDesign = request.CardDesign;
+            application.FundingAccountId = request.InitialDeposit > 0 ? request.FundingAccountId : null;
+
+            BankResult r;
+            if (settings.AutoApproveApplications)
+            {
+                var (opened, account) = await OpenAccountCoreAsync(userId, request);
+                if (!opened.Success || account == null) return opened;
+                application.AccountId = account.Id;
+                application.Status = ApplicationStatus.Approved;
+                application.ReviewedAt = DateTime.UtcNow;
+                application.ReviewedBy = "Auto-approved";
+                r = opened;
+            }
+            else
+            {
+                application.Status = ApplicationStatus.Pending;
+                r = new BankResult(true, "Thanks! Your application was submitted and is being reviewed.");
+            }
             _db.AccountApplications.Add(application);
+            await SaveProfileAsync(userId, application);
+            await _db.SaveChangesAsync();
 
-            // Remember the applicant's details so the next application can prefill them.
-            var user = await _db.Users.FirstAsync(u => u.Id == userId);
-            user.FirstName = application.FirstName;
-            user.LastName = application.LastName;
-            user.MiddleInitial = application.MiddleInitial;
-            user.DateOfBirth = application.DateOfBirth;
-            user.PhoneNumber = application.Phone;
-            user.Street = application.Street;
-            user.Apt = application.Apt;
-            user.City = application.City;
-            user.State = application.State;
-            user.Zip = application.Zip;
-
+            _audit.Add("Application.Submit",
+                $"{application.FirstName} {application.LastName} applied for {application.AccountType} ({application.Status})",
+                "Application", application.Id.ToString(), after: new { status = application.Status.ToString(), application.AccountType, application.OpeningDeposit });
             await _db.SaveChangesAsync();
             return r;
         });
         return (result, result.Success ? application : null);
     }
 
+    // Remember the applicant's details so the next application can prefill them.
+    private async Task SaveProfileAsync(string userId, AccountApplication app)
+    {
+        var user = _db.Users.Local.FirstOrDefault(u => u.Id == userId) ?? await _db.Users.FirstAsync(u => u.Id == userId);
+        user.FirstName = app.FirstName;
+        user.LastName = app.LastName;
+        user.MiddleInitial = app.MiddleInitial;
+        user.DateOfBirth = app.DateOfBirth;
+        user.PhoneNumber = app.Phone;
+        user.Street = app.Street;
+        user.Apt = app.Apt;
+        user.City = app.City;
+        user.State = app.State;
+        user.Zip = app.Zip;
+    }
+
     /// <summary>
-    /// Shared account-opening logic. Must be called inside a database transaction
-    /// (both public methods above start one).
+    /// Shared account-opening logic. Must be called inside a database transaction.
+    /// Checking accounts automatically get a virtual debit card.
     /// </summary>
     private async Task<(BankResult, Account?)> OpenAccountCoreAsync(string userId, OpenAccountRequest request)
     {
         if (request.InitialDeposit < 0) return (new(false, "Opening deposit can't be negative."), null);
-        if (request.InitialDeposit > MaxAmount) return (new(false, "Opening deposit can't be more than $1,000,000."), null);
+        if (request.InitialDeposit > 0 && CheckAmount(request.InitialDeposit) is { } invalid) return (invalid, null);
 
-        // If the money comes from an existing account, it must be the user's own and have enough funds.
+        // If the money comes from an existing account it must be the user's own, able to send money
+        // (not frozen/closed), within its daily transfer limit, and have enough funds.
         Account? source = null;
         if (request.InitialDeposit > 0 && request.FundingAccountId is int sourceId)
         {
             source = await GetAccountAsync(sourceId, userId);
             if (source == null) return (new(false, "Funding account not found."), null);
+            if (CanSend(source) is { } blocked) return (blocked, null);
+            if (await CheckDailyLimitAsync(source, request.InitialDeposit) is { } overLimit) return (overLimit, null);
             if (request.InitialDeposit > source.Balance)
                 return (new(false, $"Insufficient funds. {source.DisplayName} has {source.Balance:C} available."), null);
         }
@@ -321,6 +353,7 @@ public class BankService : IBankService
             AccountNumber = await GenerateAccountNumberAsync(),
             Nickname = Clean(request.Nickname),
             OpenedAt = DateTime.UtcNow,
+            Status = AccountStatus.Active,
             // Card design only applies to checking; goals only apply to savings.
             CardDesign = isChecking ? (CardDesigns.All.Contains(request.CardDesign) ? request.CardDesign : CardDesigns.Aurora) : null,
             GoalAmount = isChecking ? null : request.GoalAmount,
@@ -328,6 +361,12 @@ public class BankService : IBankService
         };
         _db.Accounts.Add(account);
         await _db.SaveChangesAsync(); // saves the account so it gets an Id for its transactions
+
+        if (isChecking)
+        {
+            var user = _db.Users.Local.FirstOrDefault(u => u.Id == userId) ?? await _db.Users.FirstAsync(u => u.Id == userId);
+            await _cards.IssueAsync(account, $"{user.FirstName} {user.LastName}", account.CardDesign);
+        }
 
         if (request.InitialDeposit > 0)
         {
@@ -344,17 +383,24 @@ public class BankService : IBankService
             {
                 // Internal transfer: record BOTH sides so each account's history is complete.
                 source.Balance -= amount;
-                AddTransaction(source, TransactionType.TransferOut, amount, "Opening deposit");
-                AddTransaction(account, TransactionType.TransferIn, amount, "Opening deposit");
+                var outLeg = AddTransaction(source, TransactionType.TransferOut, amount, "Opening deposit", counterpartyId: account.Id);
+                var inLeg = AddTransaction(account, TransactionType.TransferIn, amount, "Opening deposit", counterpartyId: source.Id);
+                await _db.SaveChangesAsync();
+                LinkLegs(outLeg, inLeg);
             }
-            await _db.SaveChangesAsync();
         }
+        await _db.SaveChangesAsync();
+
+        _audit.Add("Account.Open", $"Opened {account.AccountType} ••{account.Last4} with {request.InitialDeposit:C}",
+                   "Account", account.Id.ToString(),
+                   after: new { account.AccountType, account.Nickname, opening = request.InitialDeposit, fundingAccountId = source?.Id });
+        await _db.SaveChangesAsync();
 
         return (new(true, $"Your new {account.AccountType} account ending in {account.Last4} is open."), account);
     }
 
     // =====================================================================
-    // Applications
+    // Applications (customer's own)
     // =====================================================================
 
     public Task<List<AccountApplication>> GetApplicationsAsync(string userId) =>
@@ -378,76 +424,101 @@ public class BankService : IBankService
             .FirstOrDefaultAsync();
 
     // =====================================================================
-    // Admin
+    // Shared rules (also used by IAdminService through the static helpers)
     // =====================================================================
 
-    /// <summary>Totals for the admin dashboard (served as JSON by /api/stats).</summary>
-    public async Task<StatsDto> GetStatsAsync(int days)
+    /// <summary>Amount rules enforced HERE (not only in view models), so the API path can't skip them.</summary>
+    public static BankResult? CheckAmount(decimal amount)
     {
-        // Customers = users who are NOT in the Admin role.
-        var adminRoleId = await _db.Roles.Where(r => r.Name == "Admin").Select(r => r.Id).FirstOrDefaultAsync();
-        var adminIds = await _db.UserRoles.Where(ur => ur.RoleId == adminRoleId).Select(ur => ur.UserId).ToListAsync();
-        var customers = await _db.Users.CountAsync(u => !adminIds.Contains(u.Id));
-
-        // SQLite can't SUM decimal columns in SQL, so balances are added up in memory.
-        var accounts = await _db.Accounts.AsNoTracking()
-            .Select(a => new { a.AccountType, a.Balance })
-            .ToListAsync();
-
-        // Transactions per day for the last N days (grouped in memory by local date).
-        var since = DateTime.UtcNow.Date.AddDays(-(days - 1));
-        var recent = await _db.Transactions.AsNoTracking()
-            .Where(t => t.Date >= since)
-            .Select(t => new { t.Date, t.Amount })
-            .ToListAsync();
-        var byDay = recent
-            .GroupBy(t => DateOnly.FromDateTime(t.Date))
-            .ToDictionary(g => g.Key, g => (Count: g.Count(), Volume: g.Sum(x => x.Amount)));
-        var perDay = Enumerable.Range(0, days)
-            .Select(i => DateOnly.FromDateTime(since.AddDays(i)))
-            .Select(d => new DailyActivityDto(d, byDay.GetValueOrDefault(d).Count, byDay.GetValueOrDefault(d).Volume))
-            .ToList();
-
-        return new StatsDto(
-            TotalCustomers: customers,
-            TotalAccounts: accounts.Count,
-            TotalDeposits: accounts.Sum(a => a.Balance),
-            AccountsByType: accounts.GroupBy(a => a.AccountType.ToString())
-                                    .ToDictionary(g => g.Key, g => g.Count()),
-            BalancesByType: accounts.GroupBy(a => a.AccountType.ToString())
-                                    .ToDictionary(g => g.Key, g => g.Sum(x => x.Balance)),
-            ApplicationsLast30Days: await _db.AccountApplications.CountAsync(a => a.SubmittedAt >= since),
-            TransactionsPerDay: perDay);
+        if (amount <= 0) return new(false, "Amount must be greater than zero.");
+        if (amount > MaxAmount) return new(false, "Amount can't be more than $1,000,000.");
+        if (decimal.Round(amount, 2) != amount) return new(false, "Amount can have at most 2 decimal places.");
+        return null;
     }
 
-    /// <summary>Latest applications across all customers, with the user and account eagerly loaded.</summary>
-    public Task<List<AccountApplication>> GetRecentApplicationsAsync(int count) =>
-        _db.AccountApplications
-            .AsNoTracking()
-            .Include(a => a.User)
-            .Include(a => a.Account)
-            .OrderByDescending(a => a.SubmittedAt)
-            .Take(count)
-            .ToListAsync();
+    /// <summary>Can money LEAVE this account? (withdrawals, outgoing transfers, opening-deposit source)</summary>
+    public static BankResult? CanSend(Account account) => account.Status switch
+    {
+        AccountStatus.Frozen => new(false, $"{account.DisplayName} is frozen, so withdrawals and transfers out are blocked. Deposits are still allowed. Please contact support."),
+        AccountStatus.Closed => new(false, $"{account.DisplayName} is closed, so money can't be moved out of it."),
+        _ => null
+    };
 
-    // =====================================================================
-    // Helpers
-    // =====================================================================
+    /// <summary>Can money come IN to this account? (deposits, incoming transfers) Frozen accounts can still receive.</summary>
+    public static BankResult? CanReceive(Account account) =>
+        account.Status == AccountStatus.Closed
+            ? new(false, $"{account.DisplayName} is closed, so it can't receive money.")
+            : null;
+
+    private async Task<BankResult?> CheckDailyLimitAsync(Account from, decimal amount)
+    {
+        var (limit, used) = await GetDailyTransferUsageAsync(from);
+        var left = Math.Max(0, limit - used);
+        return amount > left
+            ? new(false, $"This would go over the {limit:C} daily transfer limit for {from.DisplayName}. You can transfer up to {left:C} more today.")
+            : null;
+    }
+
+    private const string ConcurrencyMessage =
+        "Your balance changed while we were processing this request. Nothing was moved. Please try again.";
+
+    /// <summary>
+    /// Runs a money movement inside ONE database transaction:
+    ///  • commits only if the step reports success, otherwise rolls back (nothing half-done);
+    ///  • Account.Balance is a concurrency token ([ConcurrencyCheck]), so if two requests change the
+    ///    same balance at once, the second SaveChanges fails instead of overwriting the first.
+    ///    That prevents "lost update" overdrafts. We roll back and ask the user to retry.
+    /// </summary>
+    private async Task<BankResult> InTransactionAsync(Func<Task<BankResult>> work)
+    {
+        await using var dbTransaction = await _db.Database.BeginTransactionAsync();
+        try
+        {
+            var result = await work();
+            if (result.Success) await dbTransaction.CommitAsync();
+            else { await dbTransaction.RollbackAsync(); _db.ChangeTracker.Clear(); }
+            return result;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await dbTransaction.RollbackAsync();
+            _db.ChangeTracker.Clear();   // forget the stale balances we loaded
+            return new BankResult(false, ConcurrencyMessage);
+        }
+        catch
+        {
+            await dbTransaction.RollbackAsync(); // undo everything if anything failed
+            _db.ChangeTracker.Clear();
+            throw;
+        }
+    }
 
     private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
     // Records a transaction row with the account's new balance as the running balance.
-    private void AddTransaction(Account account, TransactionType type, decimal amount, string description)
+    private Transaction AddTransaction(Account account, TransactionType type, decimal amount, string description,
+                                       string? memo = null, int? counterpartyId = null)
     {
-        _db.Transactions.Add(new Transaction
+        var t = new Transaction
         {
             AccountId = account.Id,
             Type = type,
             Amount = amount,
             Description = description.Length > 100 ? description[..100] : description,
             BalanceAfter = account.Balance,
+            Memo = memo,
+            CounterpartyAccountId = counterpartyId,
             Date = DateTime.UtcNow
-        });
+        };
+        _db.Transactions.Add(t);
+        return t;
+    }
+
+    // Point the two legs of a transfer at each other (needs their Ids, so call after SaveChanges).
+    private static void LinkLegs(Transaction outLeg, Transaction inLeg)
+    {
+        outLeg.LinkedTransactionId = inLeg.Id;
+        inLeg.LinkedTransactionId = outLeg.Id;
     }
 
     // Random 10-digit account number (never starts with 0), re-rolled until it's unique.

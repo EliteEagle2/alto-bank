@@ -23,10 +23,18 @@ public class ApplicationUser : IdentityUser
     [StringLength(2)] public string? State { get; set; }
     [StringLength(5)] public string? Zip { get; set; }
 
+    // When the customer joined (null only for very old rows; the AdminPortal migration backfills it).
+    public DateTime? CreatedAt { get; set; }
+
+    // Set when an admin creates the customer or resets their password: they must pick a new
+    // password right after their next login (enforced by Filters/ForcePasswordChangeFilter).
+    public bool MustChangePassword { get; set; }
+
     // True once we have enough saved info to offer the "Is this still correct?" shortcut.
     public bool HasApplicationProfile => DateOfBirth != null && !string.IsNullOrEmpty(Street) && !string.IsNullOrEmpty(PhoneNumber);
 
     // Navigation properties
     public ICollection<Account> Accounts { get; set; } = new List<Account>();
     public ICollection<AccountApplication> Applications { get; set; } = new List<AccountApplication>();
+    public ICollection<CustomerNote> Notes { get; set; } = new List<CustomerNote>();
 }

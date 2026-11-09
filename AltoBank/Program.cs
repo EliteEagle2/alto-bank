@@ -1,5 +1,7 @@
 using System.Globalization;
+using AltoBank.Areas.Admin.Services;
 using AltoBank.Data;
+using AltoBank.Filters;
 using AltoBank.Middleware;
 using AltoBank.Models;
 using AltoBank.Services;
@@ -53,8 +55,13 @@ builder.Services.ConfigureApplicationCookie(options =>
 // 3) Our banking logic. Controllers ask for IBankService; DI hands them a BankService.
 //    Scoped = one instance per web request (same lifetime as the DbContext it uses).
 builder.Services.AddScoped<IBankService, BankService>();
+builder.Services.AddScoped<ICardService, CardService>();     // virtual debit cards
+builder.Services.AddScoped<IAuditLogger, AuditLogger>();     // writes AuditLog rows
+builder.Services.AddScoped<IAdminService, AdminService>();   // everything the admin portal does
+builder.Services.AddHttpContextAccessor();                   // lets services see who's logged in (for the audit log)
 
-builder.Services.AddControllersWithViews();
+// The global filter sends users who must change their password (admin reset / new account) to that page first.
+builder.Services.AddControllersWithViews(options => options.Filters.Add<ForcePasswordChangeFilter>());
 
 // Generate lowercase URLs everywhere (/admin, /dashboard, /accounts/5) instead of /Admin, /Dashboard.
 builder.Services.AddRouting(options => options.LowercaseUrls = true);

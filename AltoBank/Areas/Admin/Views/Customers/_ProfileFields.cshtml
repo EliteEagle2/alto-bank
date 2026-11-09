@@ -1,0 +1,58 @@
+@model CustomerProfileInput
+@* Shared customer profile inputs, used by "Create customer" and the Profile tab.
+   (On the Profile tab the parent passes a field prefix so the names become "Profile.FirstName", etc.) *@
+@{
+    var states = new Microsoft.AspNetCore.Mvc.Rendering.SelectList(ApplicationOptions.States, "Key", "Value");
+}
+<div class="row g-3">
+    <div class="col-sm-5">
+        <label asp-for="FirstName" class="form-label"></label>
+        <input asp-for="FirstName" class="form-control" />
+        <span asp-validation-for="FirstName" class="field-validation-error"></span>
+    </div>
+    <div class="col-sm-2">
+        <label asp-for="MiddleInitial" class="form-label"></label>
+        <input asp-for="MiddleInitial" class="form-control" maxlength="1" />
+    </div>
+    <div class="col-sm-5">
+        <label asp-for="LastName" class="form-label"></label>
+        <input asp-for="LastName" class="form-control" />
+        <span asp-validation-for="LastName" class="field-validation-error"></span>
+    </div>
+    <div class="col-md-6">
+        <label asp-for="Email" class="form-label"></label>
+        <input asp-for="Email" class="form-control" />
+        <span asp-validation-for="Email" class="field-validation-error"></span>
+    </div>
+    <div class="col-md-3">
+        <label asp-for="Phone" class="form-label"></label>
+        <input asp-for="Phone" class="form-control" placeholder="(555) 555-5555" />
+        <span asp-validation-for="Phone" class="field-validation-error"></span>
+    </div>
+    <div class="col-md-3">
+        <label asp-for="DateOfBirth" class="form-label"></label>
+        <input asp-for="DateOfBirth" type="date" class="form-control" />
+        <span asp-validation-for="DateOfBirth" class="field-validation-error"></span>
+    </div>
+    <div class="col-md-8">
+        <label asp-for="Street" class="form-label">Street address</label>
+        <input asp-for="Street" class="form-control" />
+    </div>
+    <div class="col-md-4">
+        <label asp-for="Apt" class="form-label">Apt / unit</label>
+        <input asp-for="Apt" class="form-control" />
+    </div>
+    <div class="col-sm-5">
+        <label asp-for="City" class="form-label"></label>
+        <input asp-for="City" class="form-control" />
+    </div>
+    <div class="col-sm-4">
+        <label asp-for="State" class="form-label"></label>
+        <select asp-for="State" asp-items="states" class="form-select"><option value="">—</option></select>
+    </div>
+    <div class="col-sm-3">
+        <label asp-for="Zip" class="form-label">ZIP</label>
+        <input asp-for="Zip" class="form-control" maxlength="5" />
+        <span asp-validation-for="Zip" class="field-validation-error"></span>
+    </div>
+</div>

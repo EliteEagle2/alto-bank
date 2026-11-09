@@ -3,11 +3,16 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace AltoBank.Models;
 
-/// <summary>Outcome of an application. In this demo every valid application is approved.</summary>
+/// <summary>
+/// Where an application is in review. With "Auto-approve applications" ON (the default) valid
+/// applications are Approved instantly; with it OFF they wait as Pending until an admin approves or denies.
+/// (Older data used "Declined"; the AdminPortal migration converts it to "Denied".)
+/// </summary>
 public enum ApplicationStatus
 {
+    Pending,
     Approved,
-    Declined
+    Denied
 }
 
 /// <summary>
@@ -31,9 +36,17 @@ public class AccountApplication
     public ApplicationStatus Status { get; set; }
     public DateTime SubmittedAt { get; set; } = DateTime.UtcNow;
 
+    // ----- Review (admin) -----
+    public DateTime? ReviewedAt { get; set; }
+    [StringLength(256)] public string? ReviewedBy { get; set; }
+    // Shown to the customer when an application is denied.
+    [StringLength(500)] public string? DenialReason { get; set; }
+
     // ----- Step 1: product -----
     public AccountType AccountType { get; set; }
     [StringLength(30)] public string? Nickname { get; set; }
+    // Debit card design chosen in step 1 (checking). Stored so a pending application can be approved later.
+    [StringLength(20)] public string? CardDesign { get; set; }
 
     // ----- Step 2: about you -----
     [Required, StringLength(50)] public string FirstName { get; set; } = string.Empty;
@@ -69,6 +82,9 @@ public class AccountApplication
     // ----- Step 6: funding -----
     [Column(TypeName = "decimal(18,2)")] public decimal OpeningDeposit { get; set; }
     [StringLength(100)] public string? FundingSource { get; set; }
+    // Which Alto account funds the opening deposit (null = external bank, simulated).
+    // Kept so an admin can approve a pending application later; funds are re-checked at approval time.
+    public int? FundingAccountId { get; set; }
 
     // ----- Step 7: electronic signature -----
     [Required, StringLength(110)] public string ESignName { get; set; } = string.Empty;

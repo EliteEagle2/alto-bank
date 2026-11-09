@@ -70,9 +70,21 @@
                                     </td>
                                     <td class="d-none d-sm-table-cell"><money amount="@app.OpeningDeposit" /></td>
                                     <td>
-                                        <span class="type-badge @(app.Status == ApplicationStatus.Approved ? "credit" : "debit")">
-                                            <i class="bi @(app.Status == ApplicationStatus.Approved ? "bi-check-circle" : "bi-x-circle") me-1"></i>@app.Status
-                                        </span>
+                                        @{
+                                            var (css, icon) = app.Status switch
+                                            {
+                                                ApplicationStatus.Approved => ("credit", "bi-check-circle"),
+                                                ApplicationStatus.Pending => ("pending", "bi-hourglass-split"),
+                                                _ => ("debit", "bi-x-circle")
+                                            };
+                                        }
+                                        <a class="type-badge @css text-decoration-none" asp-controller="Accounts" asp-action="Decision" asp-route-id="@app.Id">
+                                            <i class="bi @icon me-1"></i>@(app.Status == ApplicationStatus.Pending ? "In review" : app.Status.ToString())
+                                        </a>
+                                        @if (app.Status == ApplicationStatus.Denied && !string.IsNullOrWhiteSpace(app.DenialReason))
+                                        {
+                                            <div class="small text-muted-alto mt-1">Reason: @app.DenialReason</div>
+                                        }
                                     </td>
                                 </tr>
                             }

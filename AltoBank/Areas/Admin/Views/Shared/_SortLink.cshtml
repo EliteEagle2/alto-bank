@@ -1,0 +1,19 @@
+@model (string Column, string Label)
+@* Sortable column header: clicking toggles ascending/descending, keeping the search box value. *@
+@{
+    // Same defaults as CustomerListQuery: sort by "joined", newest first.
+    var current = Context.Request.Query["sort"].ToString();
+    if (string.IsNullOrEmpty(current)) current = "joined";
+    var desc = Context.Request.Query.ContainsKey("desc") ? Context.Request.Query["desc"].ToString() == "true" : true;
+    var active = current == Model.Column;
+    var nextDesc = active ? !desc : false;
+    var query = new Dictionary<string, string?>
+    {
+        ["search"] = Context.Request.Query["search"].ToString(),
+        ["sort"] = Model.Column,
+        ["desc"] = nextDesc ? "true" : "false"
+    };
+}
+<a class="sort-link @(active ? "active" : "")" href="@(Context.Request.Path + QueryString.Create(query).ToUriComponent())">
+    @Model.Label @if (active) { <i class="bi @(desc ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i> }
+</a>

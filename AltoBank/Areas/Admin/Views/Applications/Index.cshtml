@@ -1,0 +1,39 @@
+@model PagedList<AccountApplication>
+@{
+    var q = (ApplicationListQuery)ViewBag.Query;
+    var counts = (Dictionary<ApplicationStatus, int>)ViewBag.Counts;
+    var total = counts.Values.Sum();
+}
+<ul class="nav admin-tabs mb-3">
+    <li class="nav-item"><a class="nav-link @(q.Status == null ? "active" : "")" asp-action="Index">All (@total)</a></li>
+    @foreach (var s in new[] { ApplicationStatus.Pending, ApplicationStatus.Approved, ApplicationStatus.Denied })
+    {
+        <li class="nav-item">
+            <a class="nav-link @(q.Status == s ? "active" : "")" asp-action="Index" asp-route-status="@s">@s (@counts.GetValueOrDefault(s))</a>
+        </li>
+    }
+</ul>
+
+<div class="admin-card p-0">
+    <div class="table-responsive">
+        <table class="table admin-table table-hover mb-0">
+            <thead><tr><th>#</th><th>Submitted</th><th>Applicant</th><th>Product</th><th class="text-end">Opening deposit</th><th>Status</th><th>Reviewed</th></tr></thead>
+            <tbody>
+                @if (!Model.Items.Any()) { <tr><td colspan="7" class="text-center text-muted-alto py-4">No applications here.</td></tr> }
+                @foreach (var app in Model.Items)
+                {
+                    <tr>
+                        <td><a asp-action="Details" asp-route-id="@app.Id" class="font-monospace">ALTO-@app.Id.ToString("D6")</a></td>
+                        <td class="text-nowrap">@DateTime.SpecifyKind(app.SubmittedAt, DateTimeKind.Utc).ToLocalTime().ToString("MMM d, yyyy h:mm tt")</td>
+                        <td>@app.FirstName @app.LastName<div class="small text-muted-alto">@app.User?.Email</div></td>
+                        <td>@app.AccountType @if (app.Nickname != null) { <div class="small text-muted-alto">"@app.Nickname"</div> }</td>
+                        <td class="text-end"><money amount="@app.OpeningDeposit" /></td>
+                        <td><partial name="_StatusPill" model="app.Status.ToString()" /></td>
+                        <td class="small text-muted-alto">@(app.ReviewedBy ?? "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <partial name="_Pager" model="Model.Pager" />
+</div>

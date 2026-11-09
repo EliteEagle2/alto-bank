@@ -36,11 +36,34 @@ public record DailyActivityDto(DateOnly Date, int Count, decimal Volume);
 /// <summary>Money in vs. money out for one day (customer dashboard chart).</summary>
 public record DailyFlowDto(DateOnly Date, decimal In, decimal Out);
 
-public record StatsDto(
+public record WeeklyCountDto(DateOnly WeekStart, int Count);
+
+/// <summary>GET /api/admin/stats — KPIs and chart series for the admin overview.</summary>
+public record AdminStatsDto(
     int TotalCustomers,
     int TotalAccounts,
     decimal TotalDeposits,
     Dictionary<string, int> AccountsByType,
-    Dictionary<string, decimal> BalancesByType,
-    int ApplicationsLast30Days,
-    List<DailyActivityDto> TransactionsPerDay);
+    Dictionary<string, decimal> DepositsByType,
+    int TransactionsToday,
+    int PendingApplications,
+    int FrozenAccounts,
+    List<DailyActivityDto> TransactionsPerDay,
+    List<WeeklyCountDto> NewAccountsPerWeek);
+
+/// <summary>GET /api/admin/customers?search= — one row per customer.</summary>
+public record AdminCustomerDto(string Id, string Name, string Email, int AccountCount, decimal TotalBalance, bool IsLocked, DateTime? Joined);
+
+/// <summary>GET /api/admin/accounts/{id} — full admin view of one account.</summary>
+public record AdminAccountDto(
+    int Id, string AccountNumber, string Type, string? Nickname, string Status, string? StatusReason,
+    decimal Balance, decimal DailyTransferLimit, DateTime OpenedAt, DateTime? ClosedAt,
+    string OwnerId, string OwnerName, string OwnerEmail, int TransactionCount);
+
+/// <summary>Body for POST /api/admin/accounts/{id}/freeze and /unfreeze.</summary>
+public class AdminReasonDto
+{
+    [Required, StringLength(500, MinimumLength = 5)] public string Reason { get; set; } = "";
+}
+
+public record AdminActionResultDto(bool Success, string Message, AdminAccountDto? Account);

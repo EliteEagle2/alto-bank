@@ -181,7 +181,8 @@ public class AccountsController : Controller
         }
 
         // TempData survives exactly one redirect (Post/Redirect/Get).
-        TempData["Success"] = result.Message;
+        // (A Pending application shows its own "We're reviewing" page, so no success banner there.)
+        if (saved.Status == ApplicationStatus.Approved) TempData["Success"] = result.Message;
         TempData["AnimateDecision"] = true;
         return RedirectToAction(nameof(Decision), new { id = saved.Id });
     }
@@ -192,12 +193,17 @@ public class AccountsController : Controller
     [HttpGet]
     public async Task<IActionResult> Decision(int id)
     {
+        // Ownership check: only the applicant's own application is found (IDOR protection).
         var app = await _bank.GetApplicationAsync(id, UserId);
-        if (app?.Account == null)
+        if (app == null)
         {
             TempData["Error"] = "We couldn't find that application.";
             return RedirectToAction(nameof(Index));
         }
+
+        // Waiting for an admin (auto-approve is OFF) or denied: show the status page instead.
+        if (app.Status != ApplicationStatus.Approved || app.Account == null)
+            return View("ApplicationStatus", app);
 
         return View(new ApplicationDecisionViewModel
         {
@@ -332,7 +338,8 @@ public class AccountsController : Controller
     /// <summary>Loads what the form needs. Dropdown lists go in ViewBag (they're not part of the posted data).</summary>
     private async Task PrepareFormAsync(AccountApplicationViewModel model, ApplicationUser user)
     {
-        model.FundingAccounts = await _bank.GetAccountsAsync(user.Id);
+        // Only ACTIVE accounts can fund a new account (frozen/closed ones can't send money).
+        model.FundingAccounts = (await _bank.GetAccountsAsync(user.Id)).Where(a => a.Status == AccountStatus.Active).ToList();
         model.Email = user.Email ?? "";
         model.IsReturning = user.HasApplicationProfile;
         model.UserKey = user.Id;

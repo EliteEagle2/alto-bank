@@ -94,6 +94,78 @@ public static class SeedData
             if (!await userManager.IsInRoleAsync(user, AdminRole) && !await userManager.IsInRoleAsync(user, CustomerRole))
                 await userManager.AddToRoleAsync(user, CustomerRole);
         }
+
+        await EnsureDebitCardsAsync(db, services.GetRequiredService<AltoBank.Services.ICardService>());
+        await EnsureReviewDemoDataAsync(db, userManager);
+    }
+
+    /// <summary>Every open checking account has a usable virtual debit card (also backfills older databases).</summary>
+    private static async Task EnsureDebitCardsAsync(ApplicationDbContext db, AltoBank.Services.ICardService cards)
+    {
+        var needCard = await db.Accounts.Include(a => a.User)
+            .Where(a => a.AccountType == AccountType.Checking && a.Status != AccountStatus.Closed
+                        && !a.Cards.Any(c => c.Status != CardStatus.Cancelled))
+            .ToListAsync();
+        foreach (var account in needCard)
+        {
+            var card = await cards.IssueAsync(account, $"{account.User!.FirstName} {account.User.LastName}", account.CardDesign);
+            card.IssuedAt = account.OpenedAt;
+        }
+        if (needCard.Count > 0) await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Gives the admin portal something to review: Sam has a PENDING savings application,
+    /// Maya has a DENIED one, and Jordan has an internal note. Added once (checked by marker).
+    /// </summary>
+    private static async Task EnsureReviewDemoDataAsync(ApplicationDbContext db, UserManager<ApplicationUser> userManager)
+    {
+        var admin = await userManager.FindByEmailAsync(AdminEmail);
+        if (admin != null && admin.CreatedAt == null) { admin.CreatedAt = DateTime.UtcNow.Date.AddDays(-HistoryDays - 30); await userManager.UpdateAsync(admin); }
+
+        async Task AddApplicationOnce(string email, string nickname, AccountType type, ApplicationStatus status,
+                                      decimal deposit, int daysAgo, string? denial)
+        {
+            var c = Customers.First(x => x.Email == email);
+            var user = await userManager.FindByEmailAsync(email);
+            if (user == null || await db.AccountApplications.AnyAsync(a => a.UserId == user.Id && a.Nickname == nickname)) return;
+            var source = deposit > 0
+                ? await db.Accounts.Where(a => a.UserId == user.Id && a.AccountType == AccountType.Checking).OrderBy(a => a.Id).FirstOrDefaultAsync()
+                : null;
+            var when = DateTime.UtcNow.AddDays(-daysAgo).AddHours(-3);
+            db.AccountApplications.Add(new AccountApplication
+            {
+                UserId = user.Id, Status = status, SubmittedAt = when,
+                ReviewedAt = status == ApplicationStatus.Pending ? null : when.AddHours(5),
+                ReviewedBy = status == ApplicationStatus.Pending ? null : AdminEmail,
+                DenialReason = denial,
+                AccountType = type, Nickname = nickname, CardDesign = type == AccountType.Checking ? CardDesigns.Violet : null,
+                FirstName = c.First, MiddleInitial = c.Middle, LastName = c.Last, DateOfBirth = c.Dob, Citizenship = "US",
+                Email = c.Email, Phone = c.Phone, Street = c.Street, Apt = c.Apt, City = c.City, State = c.State, Zip = c.Zip,
+                LivedAtAddressTwoYears = true, EmploymentStatus = "Employed", Employer = c.Employer, Occupation = c.Occupation,
+                IncomeRange = c.Income, SourceOfFunds = "Employment", SsnLast4 = new Random(c.RandomSeed + 7).Next(0, 10000).ToString("D4"),
+                OpeningDeposit = deposit, FundingAccountId = source?.Id,
+                FundingSource = source == null ? null : $"{source.DisplayName} ••{source.Last4}",
+                ESignName = $"{c.First} {c.Last}", ESignedAt = when
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await AddApplicationOnce("sam@altobank.com", "Emergency Fund", AccountType.Savings, ApplicationStatus.Pending, 200m, 1, null);
+        await AddApplicationOnce("maya@altobank.com", "Travel Card", AccountType.Checking, ApplicationStatus.Denied, 0m, 12,
+            "You already have two open checking accounts, which is our current limit. You're welcome to apply for savings instead.");
+
+        var jordan = await userManager.FindByEmailAsync(DemoEmail);
+        if (jordan != null && admin != null && !await db.CustomerNotes.AnyAsync(n => n.CustomerUserId == jordan.Id))
+        {
+            db.CustomerNotes.Add(new CustomerNote
+            {
+                CustomerUserId = jordan.Id, AuthorUserId = admin.Id, AuthorName = "Alex Morgan",
+                Text = "Called about how to set up direct deposit. Walked them through the Direct Deposit tab. No further action needed.",
+                CreatedAt = DateTime.UtcNow.AddDays(-6)
+            });
+            await db.SaveChangesAsync();
+        }
     }
 
     /// <summary>One-line-per-table summary printed by "dotnet run -- --seed".</summary>
@@ -161,9 +233,16 @@ public static class SeedData
                 CardDesign = a.CardDesign, GoalName = a.GoalName, GoalAmount = a.GoalAmount,
                 OpenedAt = DateTime.UtcNow.Date.AddDays(-HistoryDays).AddHours(9)
             }).ToList();
-            GenerateHistory(c, accounts);
+            var transfers = GenerateHistory(c, accounts);
             db.Accounts.AddRange(accounts);
             await db.SaveChangesAsync();
+            LinkTransfers(transfers);   // now that the rows have Ids
+            await db.SaveChangesAsync();
+        }
+        if (user.CreatedAt == null)
+        {
+            user.CreatedAt = DateTime.UtcNow.Date.AddDays(-HistoryDays);
+            await userManager.UpdateAsync(user);
         }
 
         // One approved application behind every account the user has (if not already recorded).
@@ -178,6 +257,8 @@ public static class SeedData
             {
                 UserId = user.Id, AccountId = account.Id, Status = ApplicationStatus.Approved,
                 SubmittedAt = account.OpenedAt.AddMinutes(-12),
+                ReviewedAt = account.OpenedAt.AddMinutes(-12), ReviewedBy = "Auto-approved",
+                CardDesign = account.CardDesign,
                 AccountType = account.AccountType, Nickname = account.Nickname,
                 FirstName = c.First, MiddleInitial = c.Middle, LastName = c.Last, DateOfBirth = c.Dob, Citizenship = "US",
                 Email = c.Email, Phone = c.Phone, Street = c.Street, Apt = c.Apt, City = c.City, State = c.State, Zip = c.Zip,
@@ -205,9 +286,10 @@ public static class SeedData
     /// Walks day by day through the last ~90 days and creates realistic activity.
     /// Debits that would overdraw an account are skipped, so balances never go negative.
     /// </summary>
-    private static void GenerateHistory(SeedCustomer c, List<Account> accounts)
+    private static List<(Transaction Out, Transaction In)> GenerateHistory(SeedCustomer c, List<Account> accounts)
     {
         var rng = new Random(c.RandomSeed);
+        var transfers = new List<(Transaction Out, Transaction In)>();   // linked after saving (they need Ids)
         var checking = accounts.First(a => a.AccountType == AccountType.Checking);
         var billsChecking = accounts.Where(a => a.AccountType == AccountType.Checking).Skip(1).FirstOrDefault();
         var savings = accounts.Where(a => a.AccountType == AccountType.Savings).ToList();
@@ -250,7 +332,7 @@ public static class SeedData
             // Savings earn interest on the last day of each month (4.10% APY ≈ 0.335%/month).
             if (date.AddDays(1).Day == 1)
                 foreach (var s in savings.Where(s => s.Balance > 0))
-                    Post(s, TransactionType.Deposit, Math.Round(s.Balance * 0.041m / 12m, 2), "Interest earned", date.AddHours(23));
+                    Post(s, TransactionType.Interest, Math.Round(s.Balance * 0.041m / 12m, 2), "Interest earned", date.AddHours(23));
 
             // Everyday spending.
             if (day % 6 == 0 || rng.NextDouble() < 0.08) Post(checking, TransactionType.Withdrawal, Money(38, 165), Pick(rng, "Summit Grocers", "FreshWay Market", "Hilltop Foods"), Next());
@@ -263,24 +345,39 @@ public static class SeedData
             if (rng.NextDouble() < 0.03) Post(checking, TransactionType.Deposit, Money(20, 300), Pick(rng, "Mobile check deposit", "Refund - ShopNest", "Venmo cash-out"), Next());
         }
 
+        return transfers;
+
         // Records one transaction and updates the running balance. Debits that would overdraw are skipped.
-        static void Post(Account account, TransactionType type, decimal amount, string description, DateTime when)
+        static Transaction? Post(Account account, TransactionType type, decimal amount, string description, DateTime when)
         {
-            if (amount <= 0) return;
-            bool credit = type is TransactionType.Deposit or TransactionType.TransferIn;
-            if (!credit && amount > account.Balance) return;
+            if (amount <= 0) return null;
+            bool credit = Transaction.IsCreditType(type);
+            if (!credit && amount > account.Balance) return null;
             account.Balance += credit ? amount : -amount;
-            account.Transactions.Add(new Transaction
+            var t = new Transaction
             {
                 Date = when, Type = type, Amount = amount, Description = description, BalanceAfter = account.Balance
-            });
+            };
+            account.Transactions.Add(t);
+            return t;
         }
 
-        static void Transfer(Account from, Account to, decimal amount, DateTime when)
+        void Transfer(Account from, Account to, decimal amount, DateTime when)
         {
             if (amount <= 0 || amount > from.Balance) return;
-            Post(from, TransactionType.TransferOut, amount, $"Transfer to {to.Nickname}", when);
-            Post(to, TransactionType.TransferIn, amount, $"Transfer from {from.Nickname}", when);
+            var o = Post(from, TransactionType.TransferOut, amount, $"Transfer to {to.Nickname}", when);
+            var i = Post(to, TransactionType.TransferIn, amount, $"Transfer from {from.Nickname}", when);
+            if (o != null && i != null) transfers.Add((o, i));
+        }
+    }
+
+    /// <summary>Links the two legs of each seeded transfer (counterparty account + matching row).</summary>
+    private static void LinkTransfers(List<(Transaction Out, Transaction In)> transfers)
+    {
+        foreach (var (o, i) in transfers)
+        {
+            o.LinkedTransactionId = i.Id; o.CounterpartyAccountId = i.AccountId;
+            i.LinkedTransactionId = o.Id; i.CounterpartyAccountId = o.AccountId;
         }
     }
 

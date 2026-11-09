@@ -1,71 +1,124 @@
-@model List<AccountApplication>
-@* ADMIN OVERVIEW (/admin). KPI tiles + charts are filled from GET /api/admin/stats by
-   wwwroot/js/admin-overview.js. Recent applications are rendered on the server. *@
-
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-    <p class="text-muted-alto mb-0">Bank-wide snapshot. Numbers refresh from the admin API.</p>
-    <select id="statsDays" class="form-select form-select-sm w-auto" aria-label="Activity window">
-        <option value="30" selected>Last 30 days</option>
-        <option value="60">Last 60 days</option>
-        <option value="90">Last 90 days</option>
-    </select>
-</div>
+@model OverviewViewModel
+@* ADMIN OVERVIEW (/admin). KPI tiles are rendered on the server; the charts load from GET /api/admin/stats
+   (wwwroot/js/admin-overview.js). "Needs attention" lists pending applications, frozen accounts and large transactions. *@
+@{
+    string Fmt(decimal v) => v.ToString("C0");
+    var byType = string.Join(" · ", Model.AccountsByType.Select(kv => $"{kv.Value} {kv.Key.ToLowerInvariant()}"));
+    var tiles = new[]
+    {
+        new KpiTileViewModel("customers", "Customers", "bi-people", Model.Customers.ToString("N0"), LinkController: "Customers"),
+        new KpiTileViewModel("deposits", "Total deposits", "bi-bank", Fmt(Model.TotalDeposits), "open accounts only"),
+        new KpiTileViewModel("accounts", "Accounts by type", "bi-wallet2", Model.AccountsByType.Values.Sum().ToString("N0"), byType, LinkController: "Accounts"),
+        new KpiTileViewModel("today", "Transactions today", "bi-activity", Model.TransactionsToday.ToString("N0"), LinkController: "Transactions"),
+        new KpiTileViewModel("pending", "Pending applications", "bi-hourglass-split", Model.PendingApplications.ToString("N0"),
+            Tone: Model.PendingApplications > 0 ? "warn" : "good", LinkController: "Applications",
+            LinkQuery: new Dictionary<string, string> { ["status"] = "Pending" }),
+        new KpiTileViewModel("frozen", "Frozen accounts", "bi-snow", Model.FrozenAccounts.ToString("N0"),
+            Tone: Model.FrozenAccounts > 0 ? "danger" : "good", LinkController: "Accounts",
+            LinkQuery: new Dictionary<string, string> { ["status"] = "Frozen" }),
+    };
+}
 
 <div class="row g-3 mb-3">
-    @foreach (var tile in new[]
+    @foreach (var tile in tiles)
     {
-        new KpiTileViewModel("customers", "Customers", "bi-people"),
-        new KpiTileViewModel("deposits", "Total deposits", "bi-bank"),
-        new KpiTileViewModel("accounts", "Open accounts", "bi-wallet2"),
-        new KpiTileViewModel("applications", "Applications (window)", "bi-file-earmark-check"),
-    })
-    {
-        <div class="col-6 col-xl-3"><partial name="_KpiTile" model="tile" /></div>
+        <div class="col-6 col-md-4 col-xxl-2"><partial name="_KpiTile" model="tile" /></div>
     }
 </div>
 
 <div class="row g-3 mb-3">
-    <div class="col-lg-8">
+    <div class="col-xl-8">
         <div class="admin-card h-100">
-            <div class="admin-card-head"><h2>Transactions per day</h2><span class="text-muted-alto small" data-range-label></span></div>
+            <div class="admin-card-head">
+                <h2>Transactions per day</h2>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="text-muted-alto small" data-range-label></span>
+                    <select id="statsDays" class="form-select form-select-sm w-auto" aria-label="Chart window">
+                        <option value="30" selected>30 days</option>
+                        <option value="60">60 days</option>
+                        <option value="90">90 days</option>
+                    </select>
+                </div>
+            </div>
             <div class="chart-box"><canvas id="txChart" role="img" aria-label="Transactions per day"></canvas></div>
         </div>
     </div>
-    <div class="col-lg-4">
+    <div class="col-md-6 col-xl-4">
         <div class="admin-card h-100">
-            <div class="admin-card-head"><h2>Accounts by type</h2></div>
-            <div class="chart-box chart-box--sm"><canvas id="typeChart" role="img" aria-label="Accounts by type"></canvas></div>
+            <div class="admin-card-head"><h2>Deposits by account type</h2></div>
+            <div class="chart-box chart-box--sm"><canvas id="typeChart" role="img" aria-label="Deposits by account type"></canvas></div>
+        </div>
+    </div>
+    <div class="col-md-6 col-xl-5">
+        <div class="admin-card h-100">
+            <div class="admin-card-head"><h2>New accounts per week</h2><span class="text-muted-alto small">last 12 weeks</span></div>
+            <div class="chart-box chart-box--sm"><canvas id="weekChart" role="img" aria-label="New accounts per week"></canvas></div>
+        </div>
+    </div>
+
+    @* ----- Needs attention ----- *@
+    <div class="col-xl-7">
+        <div class="admin-card h-100">
+            <div class="admin-card-head"><h2><i class="bi bi-exclamation-triangle text-warning me-1"></i>Needs attention</h2></div>
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <div class="kpi-label mb-1">Pending applications</div>
+                    @if (!Model.PendingList.Any()) { <p class="small text-muted-alto">None waiting.</p> }
+                    <ul class="attention-list">
+                        @foreach (var app in Model.PendingList)
+                        {
+                            <li><a asp-controller="Applications" asp-action="Details" asp-route-id="@app.Id">@app.FirstName @app.LastName</a>
+                                <span class="small text-muted-alto">@app.AccountType</span></li>
+                        }
+                    </ul>
+                </div>
+                <div class="col-md-4">
+                    <div class="kpi-label mb-1">Frozen accounts</div>
+                    @if (!Model.FrozenList.Any()) { <p class="small text-muted-alto">No frozen accounts.</p> }
+                    <ul class="attention-list">
+                        @foreach (var a in Model.FrozenList)
+                        {
+                            <li><a asp-controller="Accounts" asp-action="Details" asp-route-id="@a.Id">••@a.Last4</a>
+                                <span class="small text-muted-alto">@a.User?.FirstName @a.User?.LastName</span></li>
+                        }
+                    </ul>
+                </div>
+                <div class="col-md-4">
+                    <div class="kpi-label mb-1">Large (≥ @Fmt(Model.LargeThreshold), 30 days)</div>
+                    @if (!Model.LargeTransactions.Any()) { <p class="small text-muted-alto">None.</p> }
+                    <ul class="attention-list">
+                        @foreach (var t in Model.LargeTransactions)
+                        {
+                            <li><a asp-controller="Transactions" asp-action="Details" asp-route-id="@t.Id"><money amount="@t.SignedAmount" colorize="true" show-sign="true" /></a>
+                                <span class="small text-muted-alto">@t.Account?.User?.FirstName</span></li>
+                        }
+                    </ul>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 <div class="alert alert-alto-error d-none" id="statsError" role="alert"></div>
 
 <div class="admin-card p-0">
-    <div class="admin-card-head px-3 pt-3"><h2>Recent applications</h2></div>
-    @if (!Model.Any())
-    {
-        <partial name="_EmptyState" model='new EmptyStateViewModel("bi-inbox", "No applications yet.")' />
-    }
-    else
-    {
-        <div class="table-responsive">
-            <table class="table admin-table mb-0">
-                <thead><tr><th>Submitted</th><th>Applicant</th><th>Product</th><th>Deposit</th><th>Status</th></tr></thead>
-                <tbody>
-                    @foreach (var app in Model)
-                    {
-                        <tr>
-                            <td class="text-nowrap">@DateTime.SpecifyKind(app.SubmittedAt, DateTimeKind.Utc).ToLocalTime().ToString("MMM d, h:mm tt")</td>
-                            <td>@app.FirstName @app.LastName<div class="small text-muted-alto">@app.User?.Email</div></td>
-                            <td>@app.AccountType</td>
-                            <td><money amount="@app.OpeningDeposit" /></td>
-                            <td><span class="status-pill status-@app.Status.ToString().ToLowerInvariant()">@app.Status</span></td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-    }
+    <div class="admin-card-head px-3 pt-3"><h2>Recent applications</h2><a class="small" asp-controller="Applications" asp-action="Index">View all</a></div>
+    <div class="table-responsive">
+        <table class="table admin-table mb-0">
+            <thead><tr><th>Submitted</th><th>Applicant</th><th>Product</th><th class="text-end">Deposit</th><th>Status</th></tr></thead>
+            <tbody>
+                @foreach (var app in Model.RecentApplications)
+                {
+                    <tr>
+                        <td class="text-nowrap">@DateTime.SpecifyKind(app.SubmittedAt, DateTimeKind.Utc).ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                        <td><a asp-controller="Applications" asp-action="Details" asp-route-id="@app.Id">@app.FirstName @app.LastName</a><div class="small text-muted-alto">@app.User?.Email</div></td>
+                        <td>@app.AccountType</td>
+                        <td class="text-end"><money amount="@app.OpeningDeposit" /></td>
+                        <td><partial name="_StatusPill" model="app.Status.ToString()" /></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
 </div>
 
 @section Scripts {

@@ -1,0 +1,52 @@
+@model PagedList<CustomerRow>
+@{
+    var q = (CustomerListQuery)ViewBag.Query;
+}
+<div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-3">
+    <form method="get" class="filter-bar mb-0" role="search">
+        <div>
+            <label for="search">Search name or email</label>
+            <input id="search" name="search" class="form-control" value="@q.Search" placeholder="e.g. jordan" />
+        </div>
+        <input type="hidden" name="sort" value="@q.Sort" />
+        <input type="hidden" name="desc" value="@(q.Desc ? "true" : "false")" />
+        <button type="submit" class="btn btn-admin"><i class="bi bi-search"></i> Search</button>
+        @if (!string.IsNullOrEmpty(q.Search)) { <a class="btn btn-admin-ghost" asp-action="Index">Clear</a> }
+    </form>
+    <a class="btn btn-admin" asp-action="Create"><i class="bi bi-person-plus me-1"></i>Create customer</a>
+</div>
+
+<div class="admin-card p-0">
+    <div class="table-responsive">
+        <table class="table admin-table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th><partial name="_SortLink" model='("name", "Name")' /></th>
+                    <th><partial name="_SortLink" model='("email", "Email")' /></th>
+                    <th class="text-end"><partial name="_SortLink" model='("accounts", "Accounts")' /></th>
+                    <th class="text-end"><partial name="_SortLink" model='("balance", "Total balance")' /></th>
+                    <th><partial name="_SortLink" model='("status", "Status")' /></th>
+                    <th><partial name="_SortLink" model='("joined", "Joined")' /></th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Items.Any())
+                {
+                    <tr><td colspan="6" class="text-center text-muted-alto py-4">No customers match "@q.Search".</td></tr>
+                }
+                @foreach (var c in Model.Items)
+                {
+                    <tr>
+                        <td><a asp-action="Details" asp-route-id="@c.Id" class="fw-semibold">@c.Name</a></td>
+                        <td>@c.Email</td>
+                        <td class="text-end">@c.AccountCount</td>
+                        <td class="text-end"><money amount="@c.TotalBalance" /></td>
+                        <td><partial name="_StatusPill" model='c.IsLocked ? "Locked" : "Active"' /></td>
+                        <td class="text-nowrap">@(c.Joined?.ToString("MMM d, yyyy") ?? "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <partial name="_Pager" model="Model.Pager" />
+</div>

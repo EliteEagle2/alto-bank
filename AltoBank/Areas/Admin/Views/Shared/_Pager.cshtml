@@ -1,0 +1,26 @@
+@model PagerInfo
+@* Paging links for admin lists. Keeps every current filter in the query string and only changes "page". *@
+@{
+    string PageUrl(int page)
+    {
+        var query = Context.Request.Query
+            .Where(q => !string.Equals(q.Key, "page", StringComparison.OrdinalIgnoreCase))
+            .Select(q => new KeyValuePair<string, string?>(q.Key, q.Value.ToString()))
+            .Append(new KeyValuePair<string, string?>("page", page.ToString()));
+        return Context.Request.Path + QueryString.Create(query).ToUriComponent();
+    }
+}
+<div class="pager">
+    <span>@(Model.TotalCount == 0 ? "No results" : $"Showing {Model.FirstRow:N0}–{Model.LastRow:N0} of {Model.TotalCount:N0}")</span>
+    <nav class="d-flex align-items-center gap-2" aria-label="Pages">
+        @if (Model.Page > 1)
+        {
+            <a class="btn btn-admin-ghost btn-sm" href="@PageUrl(Model.Page - 1)" rel="prev"><i class="bi bi-chevron-left"></i> Prev</a>
+        }
+        <span>Page @Model.Page of @Model.TotalPages</span>
+        @if (Model.Page < Model.TotalPages)
+        {
+            <a class="btn btn-admin-ghost btn-sm" href="@PageUrl(Model.Page + 1)" rel="next">Next <i class="bi bi-chevron-right"></i></a>
+        }
+    </nav>
+</div>

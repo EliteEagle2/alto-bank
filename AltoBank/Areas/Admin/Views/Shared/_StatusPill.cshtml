@@ -1,0 +1,17 @@
+@model string
+@* Colored status badge (Active, Frozen, Closed, Pending, Approved, Denied, Posted, Reversed, Locked, Cancelled). *@
+@{
+    var icon = Model switch
+    {
+        "Active" or "Approved" or "Posted" => "bi-check-circle",
+        "Frozen" => "bi-snow",
+        "Pending" => "bi-hourglass-split",
+        "Locked" => "bi-lock",
+        "Closed" or "Cancelled" => "bi-slash-circle",
+        "Denied" => "bi-x-circle",
+        "Reversed" => "bi-arrow-counterclockwise",
+        _ => "bi-dot"
+    };
+    var css = Model == "Cancelled" ? "closed" : Model.ToLowerInvariant();
+}
+<span class="status-pill status-@css"><i class="bi @icon"></i>@Model</span>

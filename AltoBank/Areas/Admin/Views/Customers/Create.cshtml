@@ -1,0 +1,17 @@
+@model CustomerProfileInput
+<div class="admin-card" style="max-width: 880px">
+    <p class="text-muted-alto">
+        Creates a customer login with a <strong>temporary password</strong> (shown once on the next page).
+        They'll be asked to choose their own password the first time they log in.
+    </p>
+    <form asp-action="Create" method="post">
+        <div asp-validation-summary="ModelOnly" class="text-danger-alto mb-3"></div>
+        <partial name="_ProfileFields" model="Model" />
+        <div class="d-flex gap-2 mt-4">
+            <button type="submit" class="btn btn-admin"><i class="bi bi-person-plus me-1"></i>Create customer</button>
+            <a class="btn btn-admin-ghost" asp-action="Index">Cancel</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

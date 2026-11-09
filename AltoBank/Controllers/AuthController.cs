@@ -18,14 +18,16 @@ public class AuthController : Controller
     private readonly SignInManager<ApplicationUser> _signInManager; // handles the login cookie
     private readonly IBankService _bank;
     private readonly IWebHostEnvironment _env;
+    private readonly IAuditLogger _audit;
 
     public AuthController(UserManager<ApplicationUser> userManager, SignInManager<ApplicationUser> signInManager,
-                          IBankService bank, IWebHostEnvironment env)
+                          IBankService bank, IWebHostEnvironment env, IAuditLogger audit)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _bank = bank;
         _env = env;
+        _audit = audit;
     }
 
     [HttpGet]
@@ -45,7 +47,8 @@ public class AuthController : Controller
             UserName = model.Email,
             Email = model.Email,
             FirstName = model.FirstName.Trim(),
-            LastName = model.LastName.Trim()
+            LastName = model.LastName.Trim(),
+            CreatedAt = DateTime.UtcNow
         };
 
         // Identity hashes the password for us — we never store plain text.
@@ -87,18 +90,65 @@ public class AuthController : Controller
         var result = await _signInManager.PasswordSignInAsync(
             model.Email, model.Password, model.RememberMe, lockoutOnFailure: true);
 
-        if (result.Succeeded)
+        var user = await _userManager.FindByEmailAsync(model.Email);
+        if (result.Succeeded && user != null)
         {
+            await _audit.WriteAsync("Auth.Login", $"{user.Email} logged in", "User", user.Id, actor: await ActorFor(user));
+
+            // An admin created this account or reset the password: pick a new one first.
+            if (user.MustChangePassword) return RedirectToAction(nameof(ChangePassword));
+
             // Only follow local return URLs (prevents "open redirect" attacks).
             if (!string.IsNullOrEmpty(model.ReturnUrl) && Url.IsLocalUrl(model.ReturnUrl) && model.ReturnUrl != "/")
                 return Redirect(model.ReturnUrl);
             return await HomeFor(model.Email);
         }
 
+        // Record failed logins (the audit log never stores the password that was typed).
+        await _audit.WriteAsync("Auth.LoginFailed",
+            result.IsLockedOut ? $"Login blocked: {model.Email} is locked" : $"Failed login for {model.Email}",
+            "User", user?.Id, actor: new AuditActor(user?.Id, model.Email, "Anonymous"));
+
         ModelState.AddModelError(string.Empty,
-            result.IsLockedOut ? "Account locked after too many attempts. Try again later." : "Invalid email or password.");
+            result.IsLockedOut ? "This login is locked. Try again later or contact support." : "Invalid email or password.");
         return View(model);
     }
+
+    // ---------- Change password (forced after an admin reset, or by choice) ----------
+
+    [HttpGet, Authorize]
+    public async Task<IActionResult> ChangePassword()
+    {
+        var user = await _userManager.GetUserAsync(User);
+        ViewData["Forced"] = user?.MustChangePassword == true;
+        return View(new ChangePasswordViewModel());
+    }
+
+    [HttpPost, ValidateAntiForgeryToken, Authorize]
+    public async Task<IActionResult> ChangePassword(ChangePasswordViewModel model)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user == null) return Challenge();
+        ViewData["Forced"] = user.MustChangePassword;
+        if (!ModelState.IsValid) return View(model);
+
+        var result = await _userManager.ChangePasswordAsync(user, model.CurrentPassword, model.NewPassword);
+        if (!result.Succeeded)
+        {
+            foreach (var e in result.Errors) ModelState.AddModelError(string.Empty, e.Description);
+            return View(model);
+        }
+        user.MustChangePassword = false;
+        await _userManager.UpdateAsync(user);
+        await _signInManager.RefreshSignInAsync(user);
+        await _audit.WriteAsync("Auth.ChangePassword", $"{user.Email} changed their password", "User", user.Id);
+
+        TempData["Success"] = "Your password was changed.";
+        return await HomeFor(user.Email!);
+    }
+
+    private async Task<AuditActor> ActorFor(ApplicationUser user) =>
+        new(user.Id, user.Email, await _userManager.IsInRoleAsync(user, SeedData.AdminRole) ? "Admin" : "Customer");
 
     /// <summary>
     /// DEMO MODE: one-click login as a seeded user. Only works in the Development environment,
@@ -118,6 +168,7 @@ public class AuthController : Controller
         }
 
         await _signInManager.SignInAsync(user, isPersistent: false);
+        await _audit.WriteAsync("Auth.Login", $"{user.Email} logged in (demo button)", "User", user.Id, actor: await ActorFor(user));
         TempData["Success"] = $"You're signed in as the demo {(who == "admin" ? "admin" : "customer")}, {user.FirstName}.";
         return await HomeFor(email);
     }

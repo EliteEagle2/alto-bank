@@ -1,0 +1,202 @@
+@model CustomerDetailViewModel
+@{
+    var u = Model.User;
+    var tab = (string)(ViewBag.Tab ?? "profile");
+    var temp = ViewBag.TempPassword as string;
+    string Active(string t) => t == tab ? "active" : "";
+    string Show(string t) => t == tab ? "show active" : "";
+    var accountTypes = new[] { new KeyValuePair<string, string>("Checking", "Checking"), new KeyValuePair<string, string>("Savings", "Savings") };
+    var name = $"{u.FirstName} {u.LastName}";
+
+    // Confirmation modals: each one says exactly what will happen; all require a reason.
+    var openModal = new ConfirmModalViewModel("openAccountModal", $"Open an account for {u.FirstName}",
+        $"A new account will be opened in {name}'s name. Checking accounts get a virtual debit card. If you enter an opening deposit, it is credited from Alto Bank and recorded as a transaction.",
+        Url.Action("OpenAccount", new { id = u.Id })!, "Open account", "primary",
+        new[] {
+            new ConfirmField("type", "Account type", Options: accountTypes, Value: "Checking"),
+            new ConfirmField("nickname", "Nickname", Required: false, Placeholder: "e.g. Bills"),
+            new ConfirmField("openingDeposit", "Opening deposit ($)", "number", Required: false, Min: "0", Step: "0.01", Placeholder: "0.00")
+        });
+    var lockModal = new ConfirmModalViewModel("lockModal", $"Lock {u.FirstName}'s login",
+        $"{name} ({u.Email}) will be signed out and won't be able to log in until an admin unlocks them. Their accounts and money are not changed.",
+        Url.Action("Lock", new { id = u.Id })!, "Lock login");
+    var unlockModal = new ConfirmModalViewModel("unlockModal", "Unlock login",
+        $"{name} will be able to log in again with their current password.",
+        Url.Action("Unlock", new { id = u.Id })!, "Unlock login", "warn");
+    var resetModal = new ConfirmModalViewModel("resetModal", "Reset password",
+        "Their current password stops working immediately. A new temporary password will be shown to you once, and they must change it at their next login.",
+        Url.Action("ResetPassword", new { id = u.Id })!, "Reset password", "warn");
+    var forceModal = new ConfirmModalViewModel("forceModal",
+        u.MustChangePassword ? "Remove password-change requirement" : "Require a password change",
+        u.MustChangePassword ? "They will no longer be forced to change their password at next login."
+                             : "Next time they log in, they must choose a new password before they can use the site.",
+        Url.Action("ForcePasswordChange", new { id = u.Id, required = !u.MustChangePassword })!, "Confirm", "warn");
+}
+
+@* Header *@
+<div class="detail-head">
+    <div>
+        <a asp-action="Index" class="small text-decoration-none"><i class="bi bi-chevron-left"></i> Customers</a>
+        <h2 class="mt-1">@u.FirstName @u.LastName <partial name="_StatusPill" model='Model.IsLocked ? "Locked" : "Active"' /></h2>
+        <div class="text-muted-alto small">@u.Email · joined @(u.CreatedAt?.ToString("MMM d, yyyy") ?? "—") · @Model.Accounts.Count(a => a.Status != AccountStatus.Closed) open accounts · <money amount="@Model.TotalBalance" /></div>
+    </div>
+    <div class="detail-actions">
+        <a class="btn btn-admin-ghost" asp-action="ViewAs" asp-route-id="@u.Id"><i class="bi bi-eye me-1"></i>View as customer</a>
+    </div>
+</div>
+
+@if (temp != null)
+{
+    @* Shown ONCE: the value lives only in TempData for this single page view. *@
+    <div class="admin-card mb-3" style="border-color: rgba(255,181,71,.5)">
+        <div class="fw-semibold mb-2"><i class="bi bi-key me-1 text-warning"></i>Temporary password (shown only once)</div>
+        <span class="temp-password" data-temp-password>@temp</span>
+        <p class="small text-muted-alto mt-2 mb-0">Give this to the customer securely. They must change it when they next log in.</p>
+    </div>
+}
+
+<ul class="nav admin-tabs mb-3" role="tablist">
+    <li class="nav-item"><button class="nav-link @Active("profile")" data-bs-toggle="tab" data-bs-target="#tab-profile" type="button" role="tab">Profile</button></li>
+    <li class="nav-item"><button class="nav-link @Active("accounts")" data-bs-toggle="tab" data-bs-target="#tab-accounts" type="button" role="tab">Accounts (@Model.Accounts.Count)</button></li>
+    <li class="nav-item"><button class="nav-link @Active("activity")" data-bs-toggle="tab" data-bs-target="#tab-activity" type="button" role="tab">Activity</button></li>
+    <li class="nav-item"><button class="nav-link @Active("notes")" data-bs-toggle="tab" data-bs-target="#tab-notes" type="button" role="tab">Notes (@Model.Notes.Count)</button></li>
+    <li class="nav-item"><button class="nav-link @Active("security")" data-bs-toggle="tab" data-bs-target="#tab-security" type="button" role="tab">Security</button></li>
+</ul>
+
+<div class="tab-content">
+    @* ----- PROFILE ----- *@
+    <div class="tab-pane fade @Show("profile")" id="tab-profile" role="tabpanel">
+        <div class="admin-card" style="max-width: 880px">
+            <form asp-action="UpdateProfile" asp-route-id="@u.Id" method="post">
+                @* "for" makes the partial's input names "Profile.FirstName" etc., matching [Bind(Prefix = "Profile")] *@
+                <partial name="_ProfileFields" for="Profile" />
+                <button type="submit" class="btn btn-admin mt-3"><i class="bi bi-save me-1"></i>Save profile</button>
+                <span class="small text-muted-alto ms-2">Changes are recorded in the audit log with before/after values.</span>
+            </form>
+        </div>
+    </div>
+
+    @* ----- ACCOUNTS ----- *@
+    <div class="tab-pane fade @Show("accounts")" id="tab-accounts" role="tabpanel">
+        <div class="admin-card p-0">
+            <div class="admin-card-head px-3 pt-3">
+                <h2>Accounts</h2>
+                <button class="btn btn-admin btn-sm" data-bs-toggle="modal" data-bs-target="#openAccountModal"><i class="bi bi-plus-lg me-1"></i>Open account for customer</button>
+            </div>
+            <div class="table-responsive">
+                <table class="table admin-table table-hover mb-0">
+                    <thead><tr><th>Account</th><th>Type</th><th>Status</th><th>Card</th><th>Opened</th><th class="text-end">Balance</th></tr></thead>
+                    <tbody>
+                        @foreach (var a in Model.Accounts)
+                        {
+                            var card = a.Cards.OrderByDescending(c => c.IssuedAt).FirstOrDefault();
+                            <tr class="@(a.Status == AccountStatus.Closed ? "is-muted" : "")">
+                                <td><a asp-controller="Accounts" asp-action="Details" asp-route-id="@a.Id">@a.DisplayName ••@a.Last4</a></td>
+                                <td>@a.AccountType</td>
+                                <td><partial name="_StatusPill" model="a.Status.ToString()" /></td>
+                                <td>@(card == null ? "—" : $"••{card.Last4} ({card.Status})")</td>
+                                <td>@a.OpenedAt.ToString("MMM d, yyyy")</td>
+                                <td class="text-end"><money amount="@a.Balance" /></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <partial name="_ConfirmModal" model="openModal" />
+    </div>
+
+    @* ----- ACTIVITY ----- *@
+    <div class="tab-pane fade @Show("activity")" id="tab-activity" role="tabpanel">
+        <div class="admin-card p-0">
+            <div class="admin-card-head px-3 pt-3">
+                <h2>Recent transactions (50)</h2>
+                <a class="small" asp-controller="Transactions" asp-action="Index" asp-route-customer="@u.Email">Open in Transactions</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table admin-table table-hover mb-0">
+                    <thead><tr><th>Date</th><th>Account</th><th>Description</th><th>Type</th><th class="text-end">Amount</th></tr></thead>
+                    <tbody>
+                        @foreach (var t in Model.Activity)
+                        {
+                            <tr class="@(t.Status == TransactionStatus.Reversed ? "is-muted" : "")">
+                                <td class="text-nowrap">@t.LocalDate.ToString("MMM d, h:mm tt")</td>
+                                <td>••@t.Account?.Last4</td>
+                                <td><a asp-controller="Transactions" asp-action="Details" asp-route-id="@t.Id">@t.Description</a></td>
+                                <td>@t.TypeLabel @if (t.Status == TransactionStatus.Reversed) { <partial name="_StatusPill" model='"Reversed"' /> }</td>
+                                <td class="text-end"><money amount="@t.SignedAmount" colorize="true" show-sign="true" /></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    @* ----- NOTES ----- *@
+    <div class="tab-pane fade @Show("notes")" id="tab-notes" role="tabpanel">
+        <div class="row g-3">
+            <div class="col-lg-5">
+                <div class="admin-card">
+                    <h2 class="h6">Add an internal note</h2>
+                    <p class="small text-muted-alto">Only admins can see notes. They can't be edited or deleted.</p>
+                    <form asp-action="AddNote" asp-route-id="@u.Id" method="post">
+                        <textarea name="text" class="form-control mb-2" rows="4" required minlength="2" maxlength="2000" placeholder="e.g. Customer called about…"></textarea>
+                        <button type="submit" class="btn btn-admin"><i class="bi bi-journal-plus me-1"></i>Add note</button>
+                    </form>
+                </div>
+            </div>
+            <div class="col-lg-7">
+                @if (!Model.Notes.Any()) { <p class="text-muted-alto">No notes yet.</p> }
+                @foreach (var n in Model.Notes)
+                {
+                    <div class="note">
+                        <div class="note-meta mb-1"><i class="bi bi-person-badge me-1"></i>@n.AuthorName · @DateTime.SpecifyKind(n.CreatedAt, DateTimeKind.Utc).ToLocalTime().ToString("MMM d, yyyy h:mm tt")</div>
+                        <div style="white-space: pre-wrap">@n.Text</div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    @* ----- SECURITY ----- *@
+    <div class="tab-pane fade @Show("security")" id="tab-security" role="tabpanel">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="admin-card h-100">
+                    <h2 class="h6"><i class="bi bi-lock me-1"></i>Login access</h2>
+                    <p class="small text-muted-alto">Currently <strong class="text-light">@(Model.IsLocked ? "locked" : "unlocked")</strong>. Locking uses Identity lockout and signs them out.</p>
+                    @if (Model.IsLocked)
+                    {
+                        <button class="btn btn-admin-warn" data-bs-toggle="modal" data-bs-target="#unlockModal">Unlock login</button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-admin-danger" data-bs-toggle="modal" data-bs-target="#lockModal">Lock login</button>
+                    }
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="admin-card h-100">
+                    <h2 class="h6"><i class="bi bi-key me-1"></i>Reset password</h2>
+                    <p class="small text-muted-alto">Generates a temporary password that is shown to you once. The customer must change it at next login.</p>
+                    <button class="btn btn-admin-warn" data-bs-toggle="modal" data-bs-target="#resetModal">Reset password</button>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="admin-card h-100">
+                    <h2 class="h6"><i class="bi bi-arrow-repeat me-1"></i>Force password change</h2>
+                    <p class="small text-muted-alto">Currently <strong class="text-light">@(u.MustChangePassword ? "required at next login" : "not required")</strong>.</p>
+                    <button class="btn btn-admin-ghost" data-bs-toggle="modal" data-bs-target="#forceModal">@(u.MustChangePassword ? "Remove requirement" : "Require at next login")</button>
+                </div>
+            </div>
+        </div>
+
+        <partial name="_ConfirmModal" model="lockModal" />
+        <partial name="_ConfirmModal" model="unlockModal" />
+        <partial name="_ConfirmModal" model="resetModal" />
+        <partial name="_ConfirmModal" model="forceModal" />
+    </div>
+</div>
+
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

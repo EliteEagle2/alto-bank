@@ -1,0 +1,82 @@
+@model AccountApplication
+@{
+    var app = Model;
+    var name = $"{app.FirstName} {app.LastName}";
+    var product = app.AccountType == AccountType.Checking ? "Alto Checking" : "Summit Savings";
+    var depositText = app.OpeningDeposit > 0
+        ? $"{app.OpeningDeposit:C} will be moved in from {(app.FundingSource ?? "an external bank (simulated)")}; funds and limits are re-checked now."
+        : "There is no opening deposit.";
+    var approve = new ConfirmModalViewModel("approveModal", $"Approve application ALTO-{app.Id:D6}",
+        $"A new {product} account will be opened for {name}" + (app.AccountType == AccountType.Checking ? " with a virtual debit card" : "") + $". {depositText} The customer sees the approval right away.",
+        Url.Action("Approve", new { id = app.Id })!, "Approve & open account", "primary");
+    var deny = new ConfirmModalViewModel("denyModal", $"Deny application ALTO-{app.Id:D6}",
+        $"No account will be opened and no money moves. {name} will see the application as Denied, together with the reason you type below, so write it for the customer.",
+        Url.Action("Deny", new { id = app.Id })!, "Deny application", "danger");
+    string Local(DateTime? d) => d == null ? "—" : DateTime.SpecifyKind(d.Value, DateTimeKind.Utc).ToLocalTime().ToString("MMM d, yyyy h:mm tt");
+}
+
+<div class="detail-head">
+    <div>
+        <a asp-action="Index" class="small text-decoration-none"><i class="bi bi-chevron-left"></i> Applications</a>
+        <h2 class="mt-1">@name · @product <partial name="_StatusPill" model="app.Status.ToString()" /></h2>
+        <div class="text-muted-alto small">Submitted @Local(app.SubmittedAt) · <a asp-controller="Customers" asp-action="Details" asp-route-id="@app.UserId">customer profile</a></div>
+    </div>
+    @if (app.Status == ApplicationStatus.Pending)
+    {
+        <div class="detail-actions">
+            <button class="btn btn-admin" data-bs-toggle="modal" data-bs-target="#approveModal"><i class="bi bi-check2-circle me-1"></i>Approve</button>
+            <button class="btn btn-admin-danger" data-bs-toggle="modal" data-bs-target="#denyModal"><i class="bi bi-x-circle me-1"></i>Deny</button>
+        </div>
+    }
+</div>
+
+@if (app.Status != ApplicationStatus.Pending)
+{
+    <div class="admin-card mb-3">
+        <dl class="kv mb-0">
+            <dt>Decision</dt><dd>@app.Status by @(app.ReviewedBy ?? "—") on @Local(app.ReviewedAt)</dd>
+            @if (app.DenialReason != null) { <dt>Reason shown to customer</dt><dd>@app.DenialReason</dd> }
+            @if (app.Account != null) { <dt>Account opened</dt><dd><a asp-controller="Accounts" asp-action="Details" asp-route-id="@app.Account.Id">@app.Account.DisplayName ••@app.Account.Last4</a></dd> }
+        </dl>
+    </div>
+}
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="admin-card h-100">
+            <h2 class="h6 mb-3">Applicant</h2>
+            <dl class="kv">
+                <dt>Name</dt><dd>@app.FirstName @(app.MiddleInitial == null ? "" : app.MiddleInitial + ".") @app.LastName</dd>
+                <dt>Date of birth</dt><dd>@app.DateOfBirth.ToString("MMM d, yyyy")</dd>
+                <dt>Citizenship</dt><dd>@(ApplicationOptions.Citizenship.GetValueOrDefault(app.Citizenship) ?? app.Citizenship)</dd>
+                <dt>Email</dt><dd>@app.Email</dd>
+                <dt>Phone</dt><dd>@app.Phone</dd>
+                <dt>Address</dt><dd>@app.Street@(app.Apt == null ? "" : ", " + app.Apt), @app.City, @app.State @app.Zip</dd>
+                <dt>At address 2+ yrs</dt><dd>@(app.LivedAtAddressTwoYears ? "Yes" : $"No (previous: {app.PrevStreet}, {app.PrevCity}, {app.PrevState} {app.PrevZip})")</dd>
+                <dt>Identity check</dt><dd>Verified (simulated) · SSN on file ***-**-@app.SsnLast4</dd>
+            </dl>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="admin-card h-100">
+            <h2 class="h6 mb-3">Product &amp; finances</h2>
+            <dl class="kv">
+                <dt>Product</dt><dd>@product</dd>
+                <dt>Nickname</dt><dd>@(app.Nickname ?? "—")</dd>
+                @if (app.AccountType == AccountType.Checking) { <dt>Card design</dt><dd>@CardDesigns.DisplayName(app.CardDesign)</dd> }
+                <dt>Employment</dt><dd>@app.EmploymentStatus@(app.Employer == null ? "" : $" · {app.Occupation} at {app.Employer}")</dd>
+                <dt>Income</dt><dd>@app.IncomeRange</dd>
+                <dt>Source of funds</dt><dd>@app.SourceOfFunds</dd>
+                <dt>Opening deposit</dt><dd><money amount="@app.OpeningDeposit" /></dd>
+                <dt>Funded from</dt><dd>@(app.FundingSource ?? "—")</dd>
+                <dt>E-signature</dt><dd>@app.ESignName · @Local(app.ESignedAt)</dd>
+            </dl>
+        </div>
+    </div>
+</div>
+
+@if (app.Status == ApplicationStatus.Pending)
+{
+    <partial name="_ConfirmModal" model="approve" />
+    <partial name="_ConfirmModal" model="deny" />
+}

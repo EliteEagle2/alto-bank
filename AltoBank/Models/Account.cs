@@ -11,6 +11,19 @@ public enum AccountType
 }
 
 /// <summary>
+/// Lifecycle of an account. Accounts are NEVER deleted; they're closed instead, so history is kept.
+///   Active — normal use.
+///   Frozen — set by an admin: deposits still allowed, withdrawals/outgoing transfers blocked.
+///   Closed — no money movement at all (balance must be $0 first). An admin can reopen it.
+/// </summary>
+public enum AccountStatus
+{
+    Active,
+    Frozen,
+    Closed
+}
+
+/// <summary>
 /// A bank account (checking or savings) belonging to one user.
 /// </summary>
 public class Account
@@ -48,12 +61,26 @@ public class Account
     [StringLength(40)]
     public string? GoalName { get; set; }
 
+    // ----- Status (enforced by BankService, changed only by admins through IAdminService) -----
+    public AccountStatus Status { get; set; } = AccountStatus.Active;
+
+    // Why the account is frozen/closed — shown to the customer in a banner.
+    [StringLength(300)]
+    public string? StatusReason { get; set; }
+    public DateTime? StatusChangedAt { get; set; }
+    public DateTime? ClosedAt { get; set; }
+
+    // Max total of outgoing transfers per day. null = use the bank-wide default (BankSetting).
+    [Column(TypeName = "decimal(18,2)")]
+    public decimal? DailyTransferLimit { get; set; }
+
     // Foreign key to the owner (Identity user ids are strings).
     [Required]
     public string UserId { get; set; } = string.Empty;
     public ApplicationUser? User { get; set; }
 
     public ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();
+    public ICollection<Card> Cards { get; set; } = new List<Card>();
 
     // Computed helpers (not stored in the database).
     [NotMapped]

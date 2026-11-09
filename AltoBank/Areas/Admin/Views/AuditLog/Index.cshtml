@@ -1,0 +1,53 @@
+@model PagedList<AuditLog>
+@{
+    var q = (AuditListQuery)ViewBag.Query;
+    var actions = (List<string>)ViewBag.Actions;
+    var exportQuery = Context.Request.Query.Where(kv => kv.Key != "page").ToDictionary(kv => kv.Key, kv => kv.Value.ToString());
+}
+<form method="get" class="filter-bar" role="search">
+    <div><label for="user">User (email)</label><input id="user" name="user" class="form-control" value="@q.User" placeholder="e.g. admin@@altobank" /></div>
+    <div>
+        <label for="action">Action</label>
+        <select id="action" name="action" class="form-select">
+            <option value="">All actions</option>
+            @foreach (var a in actions) { <option value="@a" selected="@(q.Action == a)">@a</option> }
+        </select>
+    </div>
+    <div><label for="from">From</label><input id="from" name="from" type="date" class="form-control" value="@q.From?.ToString("yyyy-MM-dd")" /></div>
+    <div><label for="to">To</label><input id="to" name="to" type="date" class="form-control" value="@q.To?.ToString("yyyy-MM-dd")" /></div>
+    <button type="submit" class="btn btn-admin"><i class="bi bi-funnel"></i> Filter</button>
+    <a class="btn btn-admin-ghost" asp-action="Index">Reset</a>
+    <a class="btn btn-admin-ghost" asp-action="Export" asp-all-route-data="exportQuery"><i class="bi bi-download"></i> CSV</a>
+</form>
+
+<div class="admin-card p-0">
+    <div class="table-responsive">
+        <table class="table admin-table mb-0">
+            <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Summary</th><th>Reason</th><th>Before → After</th></tr></thead>
+            <tbody>
+                @if (!Model.Items.Any()) { <tr><td colspan="6" class="text-center text-muted-alto py-4">No audit entries match.</td></tr> }
+                @foreach (var l in Model.Items)
+                {
+                    <tr>
+                        <td class="text-nowrap">@DateTime.SpecifyKind(l.Timestamp, DateTimeKind.Utc).ToLocalTime().ToString("MMM d, h:mm:ss tt")</td>
+                        <td>@(l.ActorEmail ?? "—")<div class="small text-muted-alto">@l.ActorRole</div></td>
+                        <td><code>@l.Action</code>@if (l.TargetType != null) { <div class="small text-muted-alto">@l.TargetType @l.TargetId</div> }</td>
+                        <td>@l.Summary</td>
+                        <td>@(l.Reason ?? "—")</td>
+                        <td>
+                            @if (l.BeforeJson != null || l.AfterJson != null)
+                            {
+                                <details>
+                                    <summary class="small">changes</summary>
+                                    @if (l.BeforeJson != null) { <div class="audit-json"><strong>before</strong> @l.BeforeJson</div> }
+                                    @if (l.AfterJson != null) { <div class="audit-json"><strong>after</strong> @l.AfterJson</div> }
+                                </details>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <partial name="_Pager" model="Model.Pager" />
+</div>

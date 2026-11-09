@@ -1,0 +1,57 @@
+@model PagedList<Account>
+@{
+    var q = (AccountListQuery)ViewBag.Query;
+}
+<form method="get" class="filter-bar" role="search">
+    <div>
+        <label for="owner">Owner, email, nickname or number</label>
+        <input id="owner" name="owner" class="form-control" value="@q.Owner" placeholder="Search…" />
+    </div>
+    <div>
+        <label for="type">Type</label>
+        <select id="type" name="type" class="form-select">
+            <option value="">All</option>
+            @foreach (var t in Enum.GetValues<AccountType>()) { <option value="@t" selected="@(q.Type == t)">@t</option> }
+        </select>
+    </div>
+    <div>
+        <label for="status">Status</label>
+        <select id="status" name="status" class="form-select">
+            <option value="">All</option>
+            @foreach (var s in Enum.GetValues<AccountStatus>()) { <option value="@s" selected="@(q.Status == s)">@s</option> }
+        </select>
+    </div>
+    <div>
+        <label for="minBalance">Min balance</label>
+        <input id="minBalance" name="minBalance" type="number" step="0.01" min="0" class="form-control" style="width:120px" value="@q.MinBalance" />
+    </div>
+    <div>
+        <label for="maxBalance">Max balance</label>
+        <input id="maxBalance" name="maxBalance" type="number" step="0.01" min="0" class="form-control" style="width:120px" value="@q.MaxBalance" />
+    </div>
+    <button type="submit" class="btn btn-admin"><i class="bi bi-funnel"></i> Filter</button>
+    <a class="btn btn-admin-ghost" asp-action="Index">Reset</a>
+</form>
+
+<div class="admin-card p-0">
+    <div class="table-responsive">
+        <table class="table admin-table table-hover mb-0">
+            <thead><tr><th>Account</th><th>Owner</th><th>Type</th><th>Status</th><th>Opened</th><th class="text-end">Balance</th></tr></thead>
+            <tbody>
+                @if (!Model.Items.Any()) { <tr><td colspan="6" class="text-center text-muted-alto py-4">No accounts match these filters.</td></tr> }
+                @foreach (var a in Model.Items)
+                {
+                    <tr class="@(a.Status == AccountStatus.Closed ? "is-muted" : "")">
+                        <td><a asp-action="Details" asp-route-id="@a.Id" class="fw-semibold">@a.DisplayName</a><div class="small text-muted-alto font-monospace">••@a.Last4</div></td>
+                        <td><a asp-controller="Customers" asp-action="Details" asp-route-id="@a.UserId">@a.User?.FirstName @a.User?.LastName</a><div class="small text-muted-alto">@a.User?.Email</div></td>
+                        <td>@a.AccountType</td>
+                        <td><partial name="_StatusPill" model="a.Status.ToString()" /></td>
+                        <td class="text-nowrap">@a.OpenedAt.ToString("MMM d, yyyy")</td>
+                        <td class="text-end"><money amount="@a.Balance" /></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <partial name="_Pager" model="Model.Pager" />
+</div>

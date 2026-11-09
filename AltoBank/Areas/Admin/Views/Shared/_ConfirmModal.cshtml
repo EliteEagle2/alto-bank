@@ -1,0 +1,55 @@
+@model ConfirmModalViewModel
+@* CONFIRMATION MODAL used for every destructive or money-moving admin action.
+   - "What will happen" spells out the exact effect.
+   - The reason box is REQUIRED here (HTML) and again on the server (IAdminService) — it's saved in the audit log.
+   - The form tag helper adds the anti-forgery token automatically. *@
+@{
+    var tone = Model.Tone == "warn" ? "warn" : Model.Tone == "primary" ? "" : "danger";
+    var submitClass = Model.Tone switch { "warn" => "btn-admin-warn", "primary" => "btn-admin", _ => "btn-admin-danger" };
+}
+<div class="modal fade alto-modal" id="@Model.Id" tabindex="-1" aria-labelledby="@(Model.Id)-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content" method="post" action="@Model.FormUrl">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="@(Model.Id)-title">@Model.Title</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="confirm-what @tone mb-3">
+                    <div class="small text-uppercase fw-semibold mb-1" style="letter-spacing:.08em">What will happen</div>
+                    @Model.Description
+                </div>
+
+                @foreach (var f in Model.Fields ?? Enumerable.Empty<ConfirmField>())
+                {
+                    var fieldId = $"{Model.Id}-{f.Name}";
+                    <div class="mb-3">
+                        <label class="form-label" for="@fieldId">@f.Label@(f.Required ? " *" : "")</label>
+                        @if (f.Options != null)
+                        {
+                            <select class="form-select" id="@fieldId" name="@f.Name" required="@f.Required">
+                                @foreach (var o in f.Options)
+                                {
+                                    <option value="@o.Key" selected="@(o.Key == f.Value)">@o.Value</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <input class="form-control" id="@fieldId" name="@f.Name" type="@f.Type" value="@f.Value"
+                                   placeholder="@f.Placeholder" min="@f.Min" step="@f.Step" required="@f.Required" />
+                        }
+                    </div>
+                }
+
+                <label class="form-label" for="@(Model.Id)-reason">Reason *</label>
+                <textarea class="form-control" id="@(Model.Id)-reason" name="reason" rows="3" required minlength="5" maxlength="500"
+                          placeholder="Why are you doing this? It's saved in the audit log."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-admin-ghost" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn @submitClass">@Model.ButtonText</button>
+            </div>
+        </form>
+    </div>
+</div>
