@@ -26,10 +26,12 @@ public static class SeedData
     public const string AdminEmail = "admin@altobank.com";
     public const string AdminPassword = "Admin123!";
 
-    private const int HistoryDays = 90;
+    // Accounts open on different days across the last ~11 weeks (so the admin "New accounts per week" chart,
+    // which covers 12 weeks, has data). History starts on each account's own open date.
+    private const int HistoryDays = 76;
 
     // ---------- Who we seed ----------
-    private record SeedAccount(string Number, AccountType Type, string Nickname, decimal OpeningDeposit,
+    private record SeedAccount(string Number, AccountType Type, string Nickname, decimal OpeningDeposit, int OpenedDaysAgo,
         string? CardDesign = null, string? GoalName = null, decimal? GoalAmount = null);
 
     private record SeedCustomer(
@@ -46,9 +48,9 @@ public static class SeedData
             Paycheck: 1850.75m, Rent: 1200m, RandomSeed: 11,
             Accounts: new SeedAccount[]
             {
-                new("4410274821", AccountType.Checking, "Everyday Checking", 2500m, CardDesign: CardDesigns.Aurora),
-                new("4410279356", AccountType.Savings, "Summit Savings", 5000m, GoalName: "Emergency Fund", GoalAmount: 10000m),
-                new("4410271188", AccountType.Savings, "Vacation Fund", 800m, GoalName: "Trip to Japan", GoalAmount: 4000m),
+                new("4410274821", AccountType.Checking, "Everyday Checking", 2500m, 76, CardDesign: CardDesigns.Aurora),
+                new("4410279356", AccountType.Savings, "Summit Savings", 5000m, 70, GoalName: "Emergency Fund", GoalAmount: 10000m),
+                new("4410271188", AccountType.Savings, "Vacation Fund", 800m, 30, GoalName: "Trip to Japan", GoalAmount: 4000m),
             }),
         new("maya@altobank.com", "Maya", "L", "Chen", new DateOnly(1988, 9, 30), "(215) 555-0187",
             "1700 Walnut St", "Unit 12", "Philadelphia", "PA", "19103",
@@ -56,9 +58,9 @@ public static class SeedData
             Paycheck: 2420m, Rent: 1650m, RandomSeed: 22,
             Accounts: new SeedAccount[]
             {
-                new("5520831402", AccountType.Checking, "Main Checking", 3200m, CardDesign: CardDesigns.Violet),
-                new("5520836617", AccountType.Checking, "Bills", 600m, CardDesign: CardDesigns.Onyx),
-                new("5520839920", AccountType.Savings, "House Fund", 12000m, GoalName: "House Down Payment", GoalAmount: 40000m),
+                new("5520831402", AccountType.Checking, "Main Checking", 3200m, 63, CardDesign: CardDesigns.Violet),
+                new("5520836617", AccountType.Checking, "Bills", 600m, 55, CardDesign: CardDesigns.Onyx),
+                new("5520839920", AccountType.Savings, "House Fund", 12000m, 41, GoalName: "House Down Payment", GoalAmount: 40000m),
             }),
         new("sam@altobank.com", "Samuel", null, "Okafor", new DateOnly(2001, 2, 18), "(717) 555-0119",
             "215 Market St", null, "Harrisburg", "PA", "17101",
@@ -66,8 +68,8 @@ public static class SeedData
             Paycheck: 1580m, Rent: 980m, RandomSeed: 33,
             Accounts: new SeedAccount[]
             {
-                new("6630412257", AccountType.Checking, "Everyday Checking", 900m, CardDesign: CardDesigns.Aurora),
-                new("6630418834", AccountType.Savings, "Summit Savings", 1500m),
+                new("6630412257", AccountType.Checking, "Everyday Checking", 900m, 48, CardDesign: CardDesigns.Aurora),
+                new("6630418834", AccountType.Savings, "Summit Savings", 1500m, 19),
             }),
     };
 
@@ -235,7 +237,7 @@ public static class SeedData
             {
                 UserId = user.Id, AccountNumber = a.Number, AccountType = a.Type, Nickname = a.Nickname,
                 CardDesign = a.CardDesign, GoalName = a.GoalName, GoalAmount = a.GoalAmount,
-                OpenedAt = DateTime.UtcNow.Date.AddDays(-HistoryDays).AddHours(9)
+                OpenedAt = DateTime.UtcNow.Date.AddDays(-a.OpenedDaysAgo).AddHours(8)
             }).ToList();
             var transfers = GenerateHistory(c, accounts);
             db.Accounts.AddRange(accounts);
@@ -245,7 +247,7 @@ public static class SeedData
         }
         if (user.CreatedAt == null)
         {
-            user.CreatedAt = DateTime.UtcNow.Date.AddDays(-HistoryDays);
+            user.CreatedAt = DateTime.UtcNow.Date.AddDays(-c.Accounts.Max(a => a.OpenedDaysAgo)).AddHours(8);
             await userManager.UpdateAsync(user);
         }
 
@@ -287,7 +289,8 @@ public static class SeedData
     // ---------- Transaction generator ----------
 
     /// <summary>
-    /// Walks day by day through the last ~90 days and creates realistic activity.
+    /// Walks day by day from the customer's first account opening to yesterday and creates realistic activity.
+    /// Each account gets its opening deposit on its own open date, and nothing touches an account before that.
     /// Debits that would overdraw an account are skipped, so balances never go negative.
     /// </summary>
     private static List<(Transaction Out, Transaction In)> GenerateHistory(SeedCustomer c, List<Account> accounts)
@@ -297,17 +300,21 @@ public static class SeedData
         var checking = accounts.First(a => a.AccountType == AccountType.Checking);
         var billsChecking = accounts.Where(a => a.AccountType == AccountType.Checking).Skip(1).FirstOrDefault();
         var savings = accounts.Where(a => a.AccountType == AccountType.Savings).ToList();
-        var start = DateTime.UtcNow.Date.AddDays(-HistoryDays);
+        var firstOpen = c.Accounts.Max(a => a.OpenedDaysAgo);
+        var start = DateTime.UtcNow.Date.AddDays(-firstOpen);
+
+        // Bills come out of the separate "Bills" checking once it exists, otherwise the main checking.
+        Account BillsFrom(DateTime d) => billsChecking != null && d.Date >= billsChecking.OpenedAt.Date ? billsChecking : checking;
 
         decimal Money(double min, double max) => Math.Round((decimal)(min + rng.NextDouble() * (max - min)), 2);
 
-        // Opening deposits on day 0.
-        foreach (var (account, seed) in accounts.Zip(c.Accounts))
-            Post(account, TransactionType.Deposit, seed.OpeningDeposit, "Opening deposit", start.AddHours(9));
-
-        for (int day = 1; day < HistoryDays; day++)   // stops at yesterday, so nothing is future-dated
+        for (int day = 0; day < firstOpen; day++)   // stops at yesterday, so nothing is future-dated
         {
             var date = start.AddDays(day);
+            // Accounts that open today get their opening deposit first.
+            foreach (var (account, seed) in accounts.Zip(c.Accounts).Where(p => p.First.OpenedAt.Date == date))
+                Post(account, TransactionType.Deposit, seed.OpeningDeposit, "Opening deposit", date.AddHours(8));   // before any other activity that day
+            if (day == 0) continue;
             var at = date.AddHours(8);                 // each event this day gets a later timestamp
             DateTime Next() => at = at.AddMinutes(rng.Next(25, 140));
 
@@ -318,7 +325,7 @@ public static class SeedData
             switch (date.Day)
             {
                 case 1:
-                    Post(billsChecking ?? checking, TransactionType.Withdrawal, c.Rent, "Rent payment", Next());
+                    Post(BillsFrom(date), TransactionType.Withdrawal, c.Rent, "Rent payment", Next());
                     break;
                 case 2:
                     // Monthly savings transfers from checking.
@@ -326,9 +333,9 @@ public static class SeedData
                         Transfer(checking, s, s == savings[0] ? Money(250, 450) : Money(100, 200), Next());
                     if (billsChecking != null) Transfer(checking, billsChecking, c.Rent + 400m, Next());
                     break;
-                case 8: Post(billsChecking ?? checking, TransactionType.Withdrawal, Money(45, 95), "Mobile phone bill", Next()); break;
-                case 12: Post(billsChecking ?? checking, TransactionType.Withdrawal, Money(65, 70), "Internet service", Next()); break;
-                case 15: Post(billsChecking ?? checking, TransactionType.Withdrawal, Money(58, 145), "Electric bill", Next()); break;
+                case 8: Post(BillsFrom(date), TransactionType.Withdrawal, Money(45, 95), "Mobile phone bill", Next()); break;
+                case 12: Post(BillsFrom(date), TransactionType.Withdrawal, Money(65, 70), "Internet service", Next()); break;
+                case 15: Post(BillsFrom(date), TransactionType.Withdrawal, Money(58, 145), "Electric bill", Next()); break;
                 case 21: Post(checking, TransactionType.Withdrawal, 15.99m, "Streamly subscription", Next()); break;
                 case 24: Post(checking, TransactionType.Withdrawal, Money(110, 160), "Car insurance", Next()); break;
             }
@@ -354,7 +361,7 @@ public static class SeedData
         // Records one transaction and updates the running balance. Debits that would overdraw are skipped.
         static Transaction? Post(Account account, TransactionType type, decimal amount, string description, DateTime when)
         {
-            if (amount <= 0) return null;
+            if (amount <= 0 || when.Date < account.OpenedAt.Date) return null;   // not open yet
             bool credit = Transaction.IsCreditType(type);
             if (!credit && amount > account.Balance) return null;
             account.Balance += credit ? amount : -amount;
@@ -368,7 +375,7 @@ public static class SeedData
 
         void Transfer(Account from, Account to, decimal amount, DateTime when)
         {
-            if (amount <= 0 || amount > from.Balance) return;
+            if (amount <= 0 || amount > from.Balance || when.Date < from.OpenedAt.Date || when.Date < to.OpenedAt.Date) return;
             var o = Post(from, TransactionType.TransferOut, amount, $"Transfer to {to.Nickname}", when);
             var i = Post(to, TransactionType.TransferIn, amount, $"Transfer from {from.Nickname}", when);
             if (o != null && i != null) transfers.Add((o, i));

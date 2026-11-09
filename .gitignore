@@ -17,3 +17,9 @@ Thumbs.db
 
 # Generated deliverables (zips of screenshots / work)
 deliverables/
+
+# Test output (tests/run_all.sh writes here; included in the work zip)
+test-logs/
+
+# Uploaded check images / dispute attachments (stored outside wwwroot)
+AltoBank/App_Data/
