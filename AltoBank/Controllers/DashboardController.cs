@@ -1,3 +1,4 @@
+using AltoBank.Data;
 using AltoBank.Models;
 using AltoBank.Services;
 using AltoBank.ViewModels;
@@ -8,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace AltoBank.Controllers;
 
 /// <summary>The signed-in home screen. [Authorize] means you must be logged in.</summary>
-[Authorize]
+[Authorize(Roles = SeedData.CustomerRole)] // customers only; admins use /admin
 public class DashboardController : Controller
 {
     private readonly IBankService _bank;
@@ -44,7 +45,8 @@ public class DashboardController : Controller
             Greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening",
             Accounts = accounts,
             TotalBalance = accounts.Sum(a => a.Balance), // summed in memory (SQLite can't SUM decimals)
-            RecentTransactions = recent
+            RecentTransactions = recent,
+            Flows = await _bank.GetDailyFlowsAsync(user.Id, days: 30)
         });
     }
 }

@@ -1,0 +1,40 @@
+@* Shown when a signed-in user opens a page their role can't use (e.g. a customer opening /admin).
+   AuthController.AccessDenied returns it with HTTP status 403. *@
+@{
+    var adminArea = ViewData["IsAdminArea"] is true;
+    var isAdmin = User.IsInRole("Admin");
+}
+<div class="auth-wrap">
+    <div class="glass auth-card text-center denied-card">
+        <div class="denied-icon" aria-hidden="true"><i class="bi bi-shield-lock"></i></div>
+        <p class="eyebrow mb-2">Error 403</p>
+        <h1 class="h2 mb-2">Access denied</h1>
+        <p class="text-muted-alto mb-4">
+            @if (adminArea)
+            {
+                <text>The Alto Bank Admin portal is only available to bank staff. Your account doesn't have admin access.</text>
+            }
+            else
+            {
+                <text>This page isn't available for your account type.</text>
+            }
+        </p>
+        <div class="d-flex flex-wrap gap-2 justify-content-center">
+            @if (isAdmin)
+            {
+                <a class="btn btn-alto" asp-area="Admin" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-speedometer2 me-1"></i>Go to Admin portal</a>
+            }
+            else if (User.Identity?.IsAuthenticated == true)
+            {
+                <a class="btn btn-alto" asp-area="" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-grid-1x2 me-1"></i>Go to my dashboard</a>
+            }
+            <a class="btn btn-alto-ghost" asp-area="" asp-controller="Home" asp-action="Index">Alto home page</a>
+        </div>
+        @if (User.Identity?.IsAuthenticated == true)
+        {
+            <form asp-area="" asp-controller="Auth" asp-action="Logout" method="post" class="mt-3">
+                <button type="submit" class="btn btn-link btn-sm text-muted-alto">Sign in with a different account</button>
+            </form>
+        }
+    </div>
+</div>

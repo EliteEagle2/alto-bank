@@ -1,0 +1,66 @@
+@* ADMIN PORTAL layout (everything under /admin). Separate from the customer site:
+   "Alto Bank Admin" branding, violet accents, denser data-focused design.
+   On phones the sidebar becomes a slide-out drawer opened by the hamburger button. *@
+@inject UserManager<ApplicationUser> UserManager
+@{
+    var me = await UserManager.GetUserAsync(User);
+}
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <title>@ViewData["Title"] · Alto Bank Admin</title>
+    <partial name="_HeadAssets" />
+    <link rel="stylesheet" href="~/css/admin.css" asp-append-version="true" />
+</head>
+<body class="admin-body">
+    <div class="admin-shell">
+        <partial name="_AdminSidebar" />
+
+        <div class="admin-main">
+            <header class="admin-topbar">
+                <button class="btn admin-icon-btn d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#adminSidebar" aria-controls="adminSidebar" aria-label="Open admin menu">
+                    <i class="bi bi-list"></i>
+                </button>
+                <div class="min-w-0">
+                    <div class="admin-crumb">Alto Bank Admin</div>
+                    <h1 class="admin-title text-truncate">@ViewData["Title"]</h1>
+                </div>
+                <div class="ms-auto d-flex align-items-center gap-2">
+                    <span class="admin-env d-none d-md-inline-flex"><i class="bi bi-shield-lock-fill"></i>Staff only</span>
+                    <div class="dropdown">
+                        <button class="btn admin-user-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                            <span class="admin-avatar">@(me?.FirstName.FirstOrDefault())</span>
+                            <span class="d-none d-sm-inline">@me?.FirstName @me?.LastName</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end alto-dropdown">
+                            <li class="px-3 py-2"><div class="fw-semibold">@me?.Email</div><div class="small text-muted-alto">Administrator</div></li>
+                            <li><hr class="dropdown-divider" /></li>
+                            <li><a class="dropdown-item" asp-area="" asp-controller="Home" asp-action="Index" target="_blank"><i class="bi bi-box-arrow-up-right me-2"></i>Customer website</a></li>
+                            <li><a class="dropdown-item" href="/swagger" target="_blank" rel="noopener"><i class="bi bi-braces me-2"></i>API docs (Swagger)</a></li>
+                            <li><hr class="dropdown-divider" /></li>
+                            <li>
+                                <form asp-area="" asp-controller="Auth" asp-action="Logout" method="post">
+                                    <button type="submit" class="dropdown-item text-danger-alto"><i class="bi bi-box-arrow-right me-2"></i>Log out</button>
+                                </form>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </header>
+
+            <main class="admin-content">
+                <partial name="_StatusAlert" />
+                @RenderBody()
+            </main>
+
+            <footer class="admin-footer">
+                Alto Bank Admin · internal use only · every action is recorded in the audit log · demo environment
+            </footer>
+        </div>
+    </div>
+
+    <partial name="_ScriptAssets" />
+    <script src="~/js/admin-common.js" asp-append-version="true"></script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

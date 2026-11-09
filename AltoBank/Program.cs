@@ -35,7 +35,7 @@ builder.Services.ConfigureApplicationCookie(options =>
 {
     options.LoginPath = "/Auth/Login";
     options.LogoutPath = "/Auth/Logout";
-    options.AccessDeniedPath = "/Auth/Login";
+    options.AccessDeniedPath = "/Auth/AccessDenied";   // signed in, but wrong role (e.g. customer -> /admin)
     options.Events.OnRedirectToLogin = ctx =>
     {
         if (ctx.Request.Path.StartsWithSegments("/api")) ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -56,6 +56,9 @@ builder.Services.AddScoped<IBankService, BankService>();
 
 builder.Services.AddControllersWithViews();
 
+// Generate lowercase URLs everywhere (/admin, /dashboard, /accounts/5) instead of /Admin, /Dashboard.
+builder.Services.AddRouting(options => options.LowercaseUrls = true);
+
 // 4) Swagger / OpenAPI docs for the JSON API (only turned on in Development, below).
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -66,7 +69,25 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-// Create/upgrade the database (migrations) and add the demo users on startup.
+// ===================== DATABASE SEEDING =====================
+// Command-line seeding (the app seeds and then EXITS instead of starting the web server):
+//   dotnet run -- --seed        apply migrations + add any missing demo data (safe to repeat)
+//   dotnet run -- --reset-db    DELETE the database, rebuild it from migrations, seed fresh demo data
+if (args.Contains("--seed") || args.Contains("--reset-db"))
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    if (args.Contains("--reset-db"))
+    {
+        await db.Database.EnsureDeletedAsync();
+        Console.WriteLine("Database deleted.");
+    }
+    await SeedData.InitializeAsync(scope.ServiceProvider);   // runs MigrateAsync() first, then seeds
+    Console.WriteLine(await SeedData.SummaryAsync(scope.ServiceProvider));
+    return; // don't start the web server
+}
+
+// Normal startup: create/upgrade the database (migrations) and add any missing demo data.
 using (var scope = app.Services.CreateScope())
 {
     await SeedData.InitializeAsync(scope.ServiceProvider);
@@ -94,8 +115,14 @@ app.UseRouting();
 app.UseAuthentication(); // who are you?
 app.UseAuthorization();  // are you allowed here?
 
-// Conventional route: /{controller}/{action}/{id?}. Attribute routes ([Route], [HttpGet("...")])
-// on individual controllers/actions are mapped by this call too.
+// AREA route (must come first): /admin/... goes to controllers marked [Area("Admin")]
+// in Areas/Admin/Controllers. "area:exists" only matches names of real areas.
+app.MapControllerRoute(
+    name: "areas",
+    pattern: "{area:exists}/{controller=Dashboard}/{action=Index}/{id?}");
+
+// Customer + public site: /{controller}/{action}/{id?}. Attribute routes ([Route], [HttpGet("...")])
+// on individual controllers/actions are mapped by these calls too.
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");

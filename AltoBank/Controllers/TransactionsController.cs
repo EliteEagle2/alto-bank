@@ -1,3 +1,4 @@
+using AltoBank.Data;
 using AltoBank.Models;
 using AltoBank.Services;
 using AltoBank.ViewModels;
@@ -9,7 +10,7 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 namespace AltoBank.Controllers;
 
 /// <summary>Deposit, withdraw, transfer, and view history. Login required.</summary>
-[Authorize]
+[Authorize(Roles = SeedData.CustomerRole)] // customers only; admins use /admin
 [ApiExplorerSettings(IgnoreApi = true)] // HTML pages — keep them out of the Swagger API docs
 public class TransactionsController : Controller
 {

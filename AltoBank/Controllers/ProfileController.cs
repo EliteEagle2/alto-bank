@@ -1,3 +1,4 @@
+using AltoBank.Data;
 using AltoBank.Models;
 using AltoBank.Services;
 using AltoBank.ViewModels;
@@ -8,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace AltoBank.Controllers;
 
 /// <summary>View and update the user's name and email, and see past account applications.</summary>
-[Authorize]
+[Authorize(Roles = SeedData.CustomerRole)] // customers only; admins use /admin
 public class ProfileController : Controller
 {
     private readonly UserManager<ApplicationUser> _userManager;

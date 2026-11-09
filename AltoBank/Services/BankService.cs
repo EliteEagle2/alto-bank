@@ -86,6 +86,32 @@ public class BankService : IBankService
             .OrderByDescending(t => t.Date).ThenByDescending(t => t.Id)
             .ToListAsync();
 
+    /// <summary>
+    /// Money in vs. money out per day across ALL of a user's accounts (dashboard chart).
+    /// Transfers between the user's own accounts are left out, since they aren't new money in or out.
+    /// </summary>
+    public async Task<List<DailyFlowDto>> GetDailyFlowsAsync(string userId, int days)
+    {
+        var since = DateTime.UtcNow.Date.AddDays(-(days - 1));
+        var rows = await _db.Transactions.AsNoTracking()
+            .Where(t => t.Account!.UserId == userId && t.Date >= since
+                        && t.Type != TransactionType.TransferIn && t.Type != TransactionType.TransferOut)
+            .Select(t => new { t.Date, t.Type, t.Amount })
+            .ToListAsync();
+
+        var byDay = rows.GroupBy(r => DateOnly.FromDateTime(r.Date)).ToDictionary(g => g.Key, g => g.ToList());
+        return Enumerable.Range(0, days)
+            .Select(i => DateOnly.FromDateTime(since.AddDays(i)))
+            .Select(d =>
+            {
+                var list = byDay.GetValueOrDefault(d) ?? new();
+                return new DailyFlowDto(d,
+                    In: list.Where(r => Transaction.IsCreditType(r.Type)).Sum(r => r.Amount),
+                    Out: list.Where(r => !Transaction.IsCreditType(r.Type)).Sum(r => r.Amount));
+            })
+            .ToList();
+    }
+
     /// <summary>One page of an account's transactions (used by the JSON API).</summary>
     public async Task<(List<Transaction> Items, int TotalCount)> GetTransactionsPageAsync(int accountId, int page, int pageSize)
     {

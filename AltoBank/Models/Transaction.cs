@@ -39,7 +39,11 @@ public class Transaction
 
     // True when money came INTO the account (shown in green).
     [NotMapped]
-    public bool IsCredit => Type is TransactionType.Deposit or TransactionType.TransferIn;
+    public bool IsCredit => IsCreditType(Type);
+
+    /// <summary>Does this kind of transaction ADD money to the account?</summary>
+    public static bool IsCreditType(TransactionType type) =>
+        type is TransactionType.Deposit or TransactionType.TransferIn;
 
     // Amount with a sign: +50.00 for credits, -50.00 for debits.
     [NotMapped]

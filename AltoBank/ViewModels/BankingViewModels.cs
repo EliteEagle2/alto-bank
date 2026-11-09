@@ -13,6 +13,7 @@ public class DashboardViewModel
     public List<Account> Accounts { get; set; } = new();
     public decimal TotalBalance { get; set; }
     public List<Transaction> RecentTransactions { get; set; } = new();
+    public List<AltoBank.Dtos.DailyFlowDto> Flows { get; set; } = new();   // 30-day in/out chart
 }
 
 /// <summary>Shared form for Deposit and Withdraw (same fields, different action).</summary>

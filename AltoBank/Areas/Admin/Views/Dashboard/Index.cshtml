@@ -1,0 +1,74 @@
+@model List<AccountApplication>
+@* ADMIN OVERVIEW (/admin). KPI tiles + charts are filled from GET /api/admin/stats by
+   wwwroot/js/admin-overview.js. Recent applications are rendered on the server. *@
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <p class="text-muted-alto mb-0">Bank-wide snapshot. Numbers refresh from the admin API.</p>
+    <select id="statsDays" class="form-select form-select-sm w-auto" aria-label="Activity window">
+        <option value="30" selected>Last 30 days</option>
+        <option value="60">Last 60 days</option>
+        <option value="90">Last 90 days</option>
+    </select>
+</div>
+
+<div class="row g-3 mb-3">
+    @foreach (var tile in new[]
+    {
+        new KpiTileViewModel("customers", "Customers", "bi-people"),
+        new KpiTileViewModel("deposits", "Total deposits", "bi-bank"),
+        new KpiTileViewModel("accounts", "Open accounts", "bi-wallet2"),
+        new KpiTileViewModel("applications", "Applications (window)", "bi-file-earmark-check"),
+    })
+    {
+        <div class="col-6 col-xl-3"><partial name="_KpiTile" model="tile" /></div>
+    }
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-lg-8">
+        <div class="admin-card h-100">
+            <div class="admin-card-head"><h2>Transactions per day</h2><span class="text-muted-alto small" data-range-label></span></div>
+            <div class="chart-box"><canvas id="txChart" role="img" aria-label="Transactions per day"></canvas></div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="admin-card h-100">
+            <div class="admin-card-head"><h2>Accounts by type</h2></div>
+            <div class="chart-box chart-box--sm"><canvas id="typeChart" role="img" aria-label="Accounts by type"></canvas></div>
+        </div>
+    </div>
+</div>
+<div class="alert alert-alto-error d-none" id="statsError" role="alert"></div>
+
+<div class="admin-card p-0">
+    <div class="admin-card-head px-3 pt-3"><h2>Recent applications</h2></div>
+    @if (!Model.Any())
+    {
+        <partial name="_EmptyState" model='new EmptyStateViewModel("bi-inbox", "No applications yet.")' />
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table admin-table mb-0">
+                <thead><tr><th>Submitted</th><th>Applicant</th><th>Product</th><th>Deposit</th><th>Status</th></tr></thead>
+                <tbody>
+                    @foreach (var app in Model)
+                    {
+                        <tr>
+                            <td class="text-nowrap">@DateTime.SpecifyKind(app.SubmittedAt, DateTimeKind.Utc).ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                            <td>@app.FirstName @app.LastName<div class="small text-muted-alto">@app.User?.Email</div></td>
+                            <td>@app.AccountType</td>
+                            <td><money amount="@app.OpeningDeposit" /></td>
+                            <td><span class="status-pill status-@app.Status.ToString().ToLowerInvariant()">@app.Status</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="~/js/admin-overview.js" asp-append-version="true"></script>
+}

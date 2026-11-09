@@ -28,14 +28,6 @@
             <a class="side-link @Active("Transactions", "Deposit")" asp-controller="Transactions" asp-action="Deposit"><i class="bi bi-arrow-down-circle"></i>Deposit</a>
             <a class="side-link @Active("Transactions", "Withdraw")" asp-controller="Transactions" asp-action="Withdraw"><i class="bi bi-arrow-up-circle"></i>Withdraw</a>
 
-            @* Only admins see this section (role check against the Identity cookie). *@
-            @if (User.IsInRole("Admin"))
-            {
-                <div class="sidebar-label">Administration</div>
-                <a class="side-link @Active("Admin")" asp-controller="Admin" asp-action="Index"><i class="bi bi-speedometer2"></i>Admin Dashboard</a>
-                <a class="side-link" href="/swagger" target="_blank" rel="noopener"><i class="bi bi-braces"></i>API (Swagger)</a>
-            }
-
             <div class="sidebar-label">Settings &amp; help</div>
             <a class="side-link @Active("Profile")" asp-controller="Profile" asp-action="Index"><i class="bi bi-person"></i>Profile</a>
             <a class="side-link" asp-controller="Support" asp-action="Help"><i class="bi bi-question-circle"></i>Help Center</a>

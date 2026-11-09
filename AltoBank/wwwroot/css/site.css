@@ -975,3 +975,16 @@ h1, h2, h3, h4, h5, h6, .display-font {
     .success-circle, .success-tick { animation: none; stroke-dashoffset: 0; }
     .id-verify.scanning .id-ring, .id-verify.scanning .id-ring--2, .id-verify.scanning .id-icon, .orbit span { animation: none; }
 }
+
+/* =========================================================
+   Part 1 additions: dashboard chart, account links, access denied
+   ========================================================= */
+.account-link { display: inline-flex; align-items: center; gap: .3rem; color: var(--text); text-decoration: none; }
+.account-link:hover { color: var(--primary); text-shadow: var(--glow); }
+.flow-chart { position: relative; height: 240px; }
+.denied-card { max-width: 520px; }
+.denied-icon {
+    width: 72px; height: 72px; margin: 0 auto 1rem; border-radius: 50%; display: grid; place-items: center;
+    font-size: 2rem; color: var(--danger); border: 1px solid rgba(255, 77, 109, 0.45);
+    background: rgba(255, 77, 109, 0.08); box-shadow: 0 0 24px rgba(255, 77, 109, 0.25);
+}

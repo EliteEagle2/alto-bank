@@ -1,0 +1,43 @@
+@* Admin navigation. Always visible on large screens; a slide-out drawer (Bootstrap offcanvas-lg) on phones. *@
+@{
+    var controller = ViewContext.RouteData.Values["controller"]?.ToString();
+    string Active(string c) => string.Equals(controller, c, StringComparison.OrdinalIgnoreCase) ? "active" : "";
+    var links = new[]
+    {
+        (Controller: "Dashboard", Icon: "bi-speedometer2", Text: "Overview"),
+        (Controller: "Customers", Icon: "bi-people", Text: "Customers"),
+        (Controller: "Accounts", Icon: "bi-wallet2", Text: "Accounts"),
+        (Controller: "Transactions", Icon: "bi-arrow-left-right", Text: "Transactions"),
+        (Controller: "Applications", Icon: "bi-file-earmark-check", Text: "Applications"),
+        (Controller: "Settings", Icon: "bi-sliders", Text: "Settings"),
+        (Controller: "AuditLog", Icon: "bi-journal-text", Text: "Audit Log"),
+    };
+}
+<div class="admin-sidebar-wrap">
+    <aside class="admin-sidebar offcanvas-lg offcanvas-start" tabindex="-1" id="adminSidebar" aria-label="Admin navigation">
+        <div class="offcanvas-header">
+            <span class="admin-brand"><partial name="_Logo" /><span class="admin-brand-tag">Admin</span></span>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#adminSidebar" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body d-flex flex-column">
+            <a class="admin-brand d-none d-lg-flex" asp-area="Admin" asp-controller="Dashboard" asp-action="Index">
+                <partial name="_Logo" /><span class="admin-brand-tag">Admin</span>
+            </a>
+
+            <nav class="admin-nav">
+                @foreach (var l in links)
+                {
+                    <a class="admin-link @Active(l.Controller)" asp-area="Admin" asp-controller="@l.Controller" asp-action="Index"
+                       aria-current="@(Active(l.Controller) == "active" ? "page" : null)">
+                        <i class="bi @l.Icon"></i><span>@l.Text</span>
+                    </a>
+                }
+            </nav>
+
+            <div class="mt-auto admin-sidebar-foot">
+                <a class="admin-link" href="/swagger" target="_blank" rel="noopener"><i class="bi bi-braces"></i><span>API docs</span></a>
+                <a class="admin-link" asp-area="" asp-controller="Home" asp-action="Index" target="_blank"><i class="bi bi-box-arrow-up-right"></i><span>Customer website</span></a>
+            </div>
+        </div>
+    </aside>
+</div>

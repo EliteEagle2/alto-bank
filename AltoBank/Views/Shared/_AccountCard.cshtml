@@ -6,7 +6,8 @@
         <span class="account-type">@Model.AccountType</span>
         <span class="account-digits">•••• @Model.Last4</span>
     </div>
-    <div class="account-name">@Model.DisplayName</div>
+    @* The account name links to the Account Details page at /accounts/{id}. *@
+    <a class="account-name account-link" asp-controller="Accounts" asp-action="Details" asp-route-id="@Model.Id">@Model.DisplayName <i class="bi bi-chevron-right small"></i></a>
     <div class="account-balance"><money amount="@Model.Balance" /></div>
     <div class="text-muted-alto small mb-3">Available balance</div>
 
@@ -25,7 +26,7 @@
     }
 
     <div class="card-actions d-flex flex-wrap gap-2">
-        <a class="btn btn-alto-outline btn-sm" asp-controller="Transactions" asp-action="History" asp-route-id="@Model.Id">History</a>
+        <a class="btn btn-alto-outline btn-sm" asp-controller="Accounts" asp-action="Details" asp-route-id="@Model.Id">Details</a>
         <a class="btn btn-alto-ghost btn-sm" asp-controller="Transactions" asp-action="Deposit" asp-route-accountId="@Model.Id">Deposit</a>
         <a class="btn btn-alto-ghost btn-sm" asp-controller="Transactions" asp-action="Withdraw" asp-route-accountId="@Model.Id">Withdraw</a>
         <a class="btn btn-alto-ghost btn-sm" asp-controller="Transactions" asp-action="Transfer" asp-route-fromAccountId="@Model.Id">Transfer</a>

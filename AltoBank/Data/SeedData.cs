@@ -20,6 +20,7 @@ namespace AltoBank.Data;
 public static class SeedData
 {
     public const string AdminRole = "Admin";
+    public const string CustomerRole = "Customer";
     public const string DemoEmail = "demo@altobank.com";
     public const string DemoPassword = "Demo123!";
     public const string AdminEmail = "admin@altobank.com";
@@ -81,9 +82,36 @@ public static class SeedData
         await db.Database.MigrateAsync();
 
         await EnsureAdminAsync(userManager, roleManager);
+        if (!await roleManager.RoleExistsAsync(CustomerRole))
+            await roleManager.CreateAsync(new IdentityRole(CustomerRole));
 
         foreach (var customer in Customers)
             await EnsureCustomerAsync(db, userManager, customer);
+
+        // Every non-admin user is a Customer (covers people who registered before roles existed).
+        foreach (var user in await userManager.Users.ToListAsync())
+        {
+            if (!await userManager.IsInRoleAsync(user, AdminRole) && !await userManager.IsInRoleAsync(user, CustomerRole))
+                await userManager.AddToRoleAsync(user, CustomerRole);
+        }
+    }
+
+    /// <summary>One-line-per-table summary printed by "dotnet run -- --seed".</summary>
+    public static async Task<string> SummaryAsync(IServiceProvider services)
+    {
+        var db = services.GetRequiredService<ApplicationDbContext>();
+        var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+        var admins = await userManager.GetUsersInRoleAsync(AdminRole);
+        var customers = await userManager.GetUsersInRoleAsync(CustomerRole);
+        var oldest = await db.Transactions.OrderBy(t => t.Date).Select(t => (DateTime?)t.Date).FirstOrDefaultAsync();
+        return string.Join(Environment.NewLine,
+            "Seed complete:",
+            $"  Admins:        {admins.Count}  ({string.Join(", ", admins.Select(a => a.Email))})",
+            $"  Customers:     {customers.Count}",
+            $"  Accounts:      {await db.Accounts.CountAsync()}",
+            $"  Transactions:  {await db.Transactions.CountAsync()}" + (oldest is DateTime d ? $"  (since {d:yyyy-MM-dd})" : ""),
+            $"  Applications:  {await db.AccountApplications.CountAsync()}",
+            $"  Logins: {DemoEmail} / {DemoPassword}   {AdminEmail} / {AdminPassword}");
     }
 
     private static async Task EnsureAdminAsync(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager)

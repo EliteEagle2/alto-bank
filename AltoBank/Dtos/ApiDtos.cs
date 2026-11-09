@@ -33,6 +33,9 @@ public record TransferResultDto(string Message, AccountDto From, AccountDto To);
 
 public record DailyActivityDto(DateOnly Date, int Count, decimal Volume);
 
+/// <summary>Money in vs. money out for one day (customer dashboard chart).</summary>
+public record DailyFlowDto(DateOnly Date, decimal In, decimal Out);
+
 public record StatsDto(
     int TotalCustomers,
     int TotalAccounts,

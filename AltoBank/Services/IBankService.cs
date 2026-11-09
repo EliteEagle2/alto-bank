@@ -29,6 +29,7 @@ public interface IBankService
     Task<Account?> GetAccountWithHistoryAsync(int accountId, string userId);       // explicit loading
     Task<ApplicationUser?> GetDashboardDataAsync(string userId, int recentPerAccount); // eager loading
     Task<List<Transaction>> GetHistoryAsync(int accountId);
+    Task<List<DailyFlowDto>> GetDailyFlowsAsync(string userId, int days);              // dashboard chart
     Task<(List<Transaction> Items, int TotalCount)> GetTransactionsPageAsync(int accountId, int page, int pageSize);
 
     // ----- Moving money -----

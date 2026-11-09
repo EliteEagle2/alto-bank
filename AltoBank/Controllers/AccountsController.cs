@@ -1,3 +1,4 @@
+using AltoBank.Data;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using AltoBank.Models;
@@ -18,7 +19,8 @@ namespace AltoBank.Controllers;
 ///   POST /Accounts/Apply            → ONE submit with every answer; re-validated here
 ///   GET  /Accounts/Decision/{id}    → "Approved!" screen (Post/Redirect/Get)
 /// </summary>
-[Authorize]
+[Authorize(Roles = SeedData.CustomerRole)] // customers only; admins use /admin
+[ApiExplorerSettings(IgnoreApi = true)]     // HTML pages — keep them out of the Swagger API docs
 public class AccountsController : Controller
 {
     private readonly IBankService _bank;
@@ -37,6 +39,10 @@ public class AccountsController : Controller
 
     // GET /Accounts
     public async Task<IActionResult> Index() => View(await _bank.GetAccountsAsync(UserId));
+
+    // GET /accounts/5 — account details page. (Part 1: forwards to the history view; Part 3 builds the full page.)
+    [HttpGet("accounts/{id:int}")]
+    public IActionResult Details(int id) => RedirectToAction("History", "Transactions", new { id });
 
     // Old URL from earlier versions — send people to the new application.
     [HttpGet]

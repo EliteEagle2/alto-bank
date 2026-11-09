@@ -27,7 +27,7 @@ namespace AltoBank.Controllers.Api;
 /// </summary>
 [ApiController]
 [Route("api/accounts")]
-[Authorize]
+[Authorize(Roles = SeedData.CustomerRole)] // customers only; admins use /admin
 [Produces("application/json")]
 public class AccountsApiController : ControllerBase
 {
@@ -97,17 +97,6 @@ public class AccountsApiController : ControllerBase
         var from = await _bank.GetAccountAsync(request.FromAccountId, UserId);
         var to = await _bank.GetAccountAsync(request.ToAccountId, UserId);
         return new TransferResultDto(result.Message, ToDto(from!), ToDto(to!));
-    }
-
-    /// <summary>GET /api/stats — bank-wide totals for the admin dashboard. Admins only (403 otherwise).</summary>
-    [HttpGet("/api/stats")]
-    [Authorize(Roles = SeedData.AdminRole)]
-    [ProducesResponseType(typeof(StatsDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<StatsDto>> Stats([FromQuery] int days = 30)
-    {
-        days = Math.Clamp(days, 7, 90);
-        return await _bank.GetStatsAsync(days);
     }
 
     // ---------- Entity -> DTO mapping ----------

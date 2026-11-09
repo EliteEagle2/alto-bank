@@ -1,0 +1,18 @@
+@model KpiTileViewModel
+@* One KPI tile on the admin overview. Value can be filled on the server or later by JavaScript
+   (data-kpi="Key" is the hook admin-overview.js uses). *@
+<div class="admin-card kpi-tile @(Model.Tone is null ? "" : "kpi-" + Model.Tone)">
+    <div class="d-flex justify-content-between align-items-start">
+        <div class="kpi-label">@Model.Label</div>
+        <i class="bi @Model.Icon kpi-icon" aria-hidden="true"></i>
+    </div>
+    <div class="kpi-value" data-kpi="@Model.Key">@(Model.Value ?? "—")</div>
+    @if (Model.Hint != null)
+    {
+        <div class="kpi-hint" data-kpi-hint="@Model.Key">@Model.Hint</div>
+    }
+    @if (Model.LinkController != null)
+    {
+        <a class="stretched-link" asp-area="Admin" asp-controller="@Model.LinkController" asp-action="Index" asp-all-route-data="@(Model.LinkQuery ?? new Dictionary<string, string>())" aria-label="@Model.Label details"></a>
+    }
+</div>

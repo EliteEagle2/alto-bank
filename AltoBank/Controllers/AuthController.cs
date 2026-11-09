@@ -57,6 +57,9 @@ public class AuthController : Controller
             return View(model);
         }
 
+        // New sign-ups are customers. Add the role BEFORE signing in so it's inside the login cookie.
+        await _userManager.AddToRoleAsync(user, SeedData.CustomerRole);
+
         // Every new customer starts with an empty checking account.
         await _bank.OpenAccountAsync(user.Id, new OpenAccountRequest(
             AccountType.Checking, "Everyday Checking", CardDesigns.Aurora, null, null, 0m, null));
@@ -87,7 +90,7 @@ public class AuthController : Controller
         if (result.Succeeded)
         {
             // Only follow local return URLs (prevents "open redirect" attacks).
-            if (!string.IsNullOrEmpty(model.ReturnUrl) && Url.IsLocalUrl(model.ReturnUrl))
+            if (!string.IsNullOrEmpty(model.ReturnUrl) && Url.IsLocalUrl(model.ReturnUrl) && model.ReturnUrl != "/")
                 return Redirect(model.ReturnUrl);
             return await HomeFor(model.Email);
         }
@@ -126,12 +129,25 @@ public class AuthController : Controller
         return RedirectToAction("Index", "Home");
     }
 
-    // Admins land on the admin dashboard; customers on their own dashboard.
+    /// <summary>
+    /// Styled "Access denied" page. Program.cs points the cookie's AccessDeniedPath here, so a
+    /// customer who opens /admin (or an admin who opens /dashboard) lands on this page.
+    /// </summary>
+    [HttpGet]
+    public IActionResult AccessDenied(string? returnUrl = null)
+    {
+        Response.StatusCode = StatusCodes.Status403Forbidden;
+        ViewData["Title"] = "Access denied";
+        ViewData["IsAdminArea"] = returnUrl?.StartsWith("/admin", StringComparison.OrdinalIgnoreCase) == true;
+        return View();
+    }
+
+    // Admins land on the admin portal (/admin); customers on their own dashboard (/dashboard).
     private async Task<IActionResult> HomeFor(string email)
     {
         var user = await _userManager.FindByEmailAsync(email);
         if (user != null && await _userManager.IsInRoleAsync(user, SeedData.AdminRole))
-            return RedirectToAction("Index", "Admin");
-        return RedirectToAction("Index", "Dashboard");
+            return RedirectToAction("Index", "Dashboard", new { area = "Admin" });
+        return RedirectToAction("Index", "Dashboard", new { area = "" });
     }
 }
