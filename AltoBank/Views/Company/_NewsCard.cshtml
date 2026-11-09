@@ -1,0 +1,10 @@
+@model NewsArticle
+@* Summary card for one press release on the Newsroom page. *@
+<a class="glass glass-hover news-card text-decoration-none" asp-controller="Company" asp-action="Article" asp-route-id="@Model.Slug">
+    <div class="news-meta mb-2">
+        <span class="type-badge credit me-2">@Model.Category</span>@Model.Date.ToString("MMMM d, yyyy")
+    </div>
+    <h5 class="text-light">@Model.Title</h5>
+    <p class="text-muted-alto flex-grow-1">@Model.Summary</p>
+    <span class="tile-link">Read more <i class="bi bi-arrow-right"></i></span>
+</a>

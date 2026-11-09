@@ -1,0 +1,62 @@
+@model AccountApplicationViewModel
+@* STEP 5 — SIMULATED identity verification. No SSN is ever asked for or stored.
+   "Verify my identity" calls POST /Accounts/VerifyIdentity, which returns 4 random digits plus a
+   signed token (saved in the hidden IdentityToken field). Then a 2-question security check. *@
+<section class="step-pane" data-step="5" aria-labelledby="s5-title">
+    <p class="step-kicker">Step 5 of 7</p>
+    <h1 class="step-title" id="s5-title">Let's make sure it's really you</h1>
+    <p class="step-lead">This protects you from someone opening an account in your name.</p>
+
+    <div class="notice notice-info mb-4">
+        <i class="bi bi-info-circle"></i>
+        <div>
+            <strong>Demo mode:</strong> we never ask for your Social Security number. In this demo your identity
+            is verified automatically. No SSN is collected or stored.
+        </div>
+    </div>
+
+    <input asp-for="IdentityToken" type="hidden" />
+    <input type="hidden" id="VerifiedLast4" value="@Model.VerifiedLast4" />
+
+    <div class="field" data-field="Identity">
+        <div class="id-verify" data-id-verify>
+            <div class="id-scanner" aria-hidden="true">
+                <div class="id-ring"></div>
+                <div class="id-ring id-ring--2"></div>
+                <i class="bi bi-fingerprint id-icon"></i>
+                <i class="bi bi-check-lg id-done-icon"></i>
+            </div>
+
+            <ol class="id-checklist" aria-live="polite">
+                <li data-check="1"><span class="id-dot"></span>Confirming name and date of birth</li>
+                <li data-check="2"><span class="id-dot"></span>Checking address</li>
+                <li data-check="3"><span class="id-dot"></span>Verifying identity (SSN on file: ***-**-<span data-ssn-last4>XXXX</span>)</li>
+                <li data-check="4"><span class="id-dot"></span>Identity verified</li>
+            </ol>
+
+            <button type="button" class="btn btn-alto btn-lg js-only" data-verify-btn>
+                <i class="bi bi-fingerprint me-2"></i>Verify my identity
+            </button>
+            <div class="id-verified-badge" data-verified-badge hidden>
+                <i class="bi bi-patch-check-fill me-1"></i>Identity verified
+            </div>
+        </div>
+        <div class="field-msg" data-msg="Identity"><span asp-validation-for="IdentityToken"></span></div>
+    </div>
+
+    @* Security questions appear after verification. Options are built by apply.js from your
+       address plus decoys; the server checks the answers against the address you entered. *@
+    <div class="quiz" data-quiz hidden>
+        <h2 class="sub-title">Quick security check</h2>
+        <div class="field" data-field="QuizStreet">
+            <span class="form-label d-block" id="q1-label">1. Which of these streets have you lived on?</span>
+            <div class="quiz-options" role="radiogroup" aria-labelledby="q1-label" data-quiz-options="QuizStreet" data-initial="@Model.QuizStreet"></div>
+            <div class="field-msg" data-msg="QuizStreet"><span asp-validation-for="QuizStreet"></span></div>
+        </div>
+        <div class="field mt-3" data-field="QuizZip">
+            <span class="form-label d-block" id="q2-label">2. Which of these ZIP codes is linked to your address?</span>
+            <div class="quiz-options" role="radiogroup" aria-labelledby="q2-label" data-quiz-options="QuizZip" data-initial="@Model.QuizZip"></div>
+            <div class="field-msg" data-msg="QuizZip"><span asp-validation-for="QuizZip"></span></div>
+        </div>
+    </div>
+</section>

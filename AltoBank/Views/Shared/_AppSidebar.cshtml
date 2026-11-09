@@ -1,0 +1,55 @@
+@* Left sidebar for online banking. On large screens it is always visible;
+   on phones/tablets Bootstrap's "offcanvas-lg" turns it into a slide-out drawer
+   opened by the menu button in the top bar. *@
+@{
+    var controller = ViewContext.RouteData.Values["controller"]?.ToString();
+    var action = ViewContext.RouteData.Values["action"]?.ToString();
+    // Highlight the link for the current page. History pages count as "Accounts".
+    string Active(string c, string? a = null) =>
+        controller == c && (a == null || action == a) ? "active" : "";
+}
+<div class="app-sidebar-wrap">
+    <aside class="app-sidebar offcanvas-lg offcanvas-start" tabindex="-1" id="appSidebar" aria-label="Banking navigation">
+        <div class="offcanvas-header">
+            <partial name="_Logo" />
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#appSidebar" aria-label="Close"></button>
+        </div>
+
+        <div class="offcanvas-body d-flex flex-column">
+            <a class="sidebar-brand d-none d-lg-block" asp-controller="Dashboard" asp-action="Index"><partial name="_Logo" /></a>
+
+            <div class="sidebar-label">Banking</div>
+            <a class="side-link @Active("Dashboard")" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-grid-1x2"></i>Dashboard</a>
+            <a class="side-link @Active("Accounts", "Index") @Active("Transactions", "History")" asp-controller="Accounts" asp-action="Index"><i class="bi bi-wallet2"></i>Accounts</a>
+            <a class="side-link @Active("Accounts", "Apply") @Active("Accounts", "Decision")" asp-controller="Accounts" asp-action="Apply"><i class="bi bi-plus-circle"></i>Open Account</a>
+
+            <div class="sidebar-label">Move money</div>
+            <a class="side-link @Active("Transactions", "Transfer")" asp-controller="Transactions" asp-action="Transfer"><i class="bi bi-arrow-left-right"></i>Transfer</a>
+            <a class="side-link @Active("Transactions", "Deposit")" asp-controller="Transactions" asp-action="Deposit"><i class="bi bi-arrow-down-circle"></i>Deposit</a>
+            <a class="side-link @Active("Transactions", "Withdraw")" asp-controller="Transactions" asp-action="Withdraw"><i class="bi bi-arrow-up-circle"></i>Withdraw</a>
+
+            @* Only admins see this section (role check against the Identity cookie). *@
+            @if (User.IsInRole("Admin"))
+            {
+                <div class="sidebar-label">Administration</div>
+                <a class="side-link @Active("Admin")" asp-controller="Admin" asp-action="Index"><i class="bi bi-speedometer2"></i>Admin Dashboard</a>
+                <a class="side-link" href="/swagger" target="_blank" rel="noopener"><i class="bi bi-braces"></i>API (Swagger)</a>
+            }
+
+            <div class="sidebar-label">Settings &amp; help</div>
+            <a class="side-link @Active("Profile")" asp-controller="Profile" asp-action="Index"><i class="bi bi-person"></i>Profile</a>
+            <a class="side-link" asp-controller="Support" asp-action="Help"><i class="bi bi-question-circle"></i>Help Center</a>
+
+            <div class="mt-auto pt-4">
+                <div class="sidebar-promo mb-3">
+                    <div class="small fw-semibold mb-1"><i class="bi bi-stars me-1"></i>Summit Savings</div>
+                    <div class="small text-muted-alto mb-2">Earn 4.10% APY on a new goal account.</div>
+                    <a class="small" asp-controller="Accounts" asp-action="Apply" asp-route-type="Savings">Open one <i class="bi bi-arrow-right"></i></a>
+                </div>
+                <form asp-controller="Auth" asp-action="Logout" method="post">
+                    <button type="submit" class="side-link w-100 border-0 bg-transparent text-danger-alto"><i class="bi bi-box-arrow-left"></i>Log out</button>
+                </form>
+            </div>
+        </div>
+    </aside>
+</div>

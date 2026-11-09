@@ -1,0 +1,59 @@
+@model ContactViewModel
+@{
+    ViewData["Title"] = "Contact Us";
+
+    var channels = new List<BenefitViewModel>
+    {
+        new("bi-telephone", "Call us", "1-800-555-0142 · 24 hours a day, 7 days a week"),
+        new("bi-envelope", "Email", "support@altobank.example · Replies within one business day"),
+        new("bi-geo-alt", "Headquarters", "1600 Summit Ave, Denver, CO (fictional address)"),
+    };
+}
+
+<partial name="_PageHero" model='new PageHeroViewModel("Contact Us", "We are here for you.",
+    "Send us a message and a real person will get back to you.")' />
+
+<div class="container">
+    <div class="row g-5">
+        <div class="col-lg-7">
+            <div class="glass p-4 p-lg-5">
+                <form asp-action="Contact" method="post">
+                    <div asp-validation-summary="ModelOnly" class="mb-3"></div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label asp-for="Name" class="form-label"></label>
+                            <input asp-for="Name" class="form-control" autocomplete="name" />
+                            <span asp-validation-for="Name" class="field-validation-error"></span>
+                        </div>
+                        <div class="col-sm-6">
+                            <label asp-for="Email" class="form-label"></label>
+                            <input asp-for="Email" class="form-control" autocomplete="email" />
+                            <span asp-validation-for="Email" class="field-validation-error"></span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label asp-for="Topic" class="form-label"></label>
+                        <select asp-for="Topic" asp-items="@(new SelectList(ContactViewModel.Topics))" class="form-select"></select>
+                        <span asp-validation-for="Topic" class="field-validation-error"></span>
+                    </div>
+                    <div class="mb-4">
+                        <label asp-for="Message" class="form-label"></label>
+                        <textarea asp-for="Message" class="form-control" rows="6" placeholder="How can we help?"></textarea>
+                        <span asp-validation-for="Message" class="field-validation-error"></span>
+                    </div>
+                    <button type="submit" class="btn btn-alto">Send message</button>
+                    <p class="footnote mt-3 mb-0">Demo form: messages are validated but not stored or sent anywhere.</p>
+                </form>
+            </div>
+        </div>
+        <div class="col-lg-5 d-flex flex-column gap-4">
+            @foreach (var c in channels)
+            {
+                <partial name="_BenefitCard" model="c" />
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

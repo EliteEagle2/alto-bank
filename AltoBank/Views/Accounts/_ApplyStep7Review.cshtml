@@ -1,0 +1,53 @@
+@model AccountApplicationViewModel
+@* STEP 7 — collapsible review of every answer (built by apply.js), 3 required disclosures,
+   and an electronic signature that must match the applicant's name. *@
+<section class="step-pane" data-step="7" aria-labelledby="s7-title">
+    <p class="step-kicker">Step 7 of 7</p>
+    <h1 class="step-title" id="s7-title">Almost there. Review and sign</h1>
+    <p class="step-lead">Check your answers, read the disclosures, and sign with your name.</p>
+
+    <div class="review-sections js-only" data-review-root></div>
+
+    <h2 class="sub-title">Disclosures</h2>
+    @* Each link opens a modal from _ApplyDisclosures.cshtml. All three boxes are required. *@
+    <div class="disclosures">
+        <div class="field" data-field="AgreeAccountAgreement">
+            <div class="form-check disclosure-check">
+                <input asp-for="AgreeAccountAgreement" class="form-check-input" />
+                <label asp-for="AgreeAccountAgreement" class="form-check-label">
+                    I have read and agree to the <a href="#" data-bs-toggle="modal" data-bs-target="#discAccount">Account Agreement</a>
+                </label>
+            </div>
+            <div class="field-msg" data-msg="AgreeAccountAgreement"><span asp-validation-for="AgreeAccountAgreement"></span></div>
+        </div>
+        <div class="field" data-field="AgreePrivacy">
+            <div class="form-check disclosure-check">
+                <input asp-for="AgreePrivacy" class="form-check-input" />
+                <label asp-for="AgreePrivacy" class="form-check-label">
+                    I have received the <a href="#" data-bs-toggle="modal" data-bs-target="#discPrivacy">Privacy Notice</a>
+                </label>
+            </div>
+            <div class="field-msg" data-msg="AgreePrivacy"><span asp-validation-for="AgreePrivacy"></span></div>
+        </div>
+        <div class="field" data-field="AgreeESign">
+            <div class="form-check disclosure-check">
+                <input asp-for="AgreeESign" class="form-check-input" />
+                <label asp-for="AgreeESign" class="form-check-label">
+                    I agree to the <a href="#" data-bs-toggle="modal" data-bs-target="#discESign">E-Sign Consent</a> and to receive documents electronically
+                </label>
+            </div>
+            <div class="field-msg" data-msg="AgreeESign"><span asp-validation-for="AgreeESign"></span></div>
+        </div>
+    </div>
+
+    <h2 class="sub-title">Electronic signature</h2>
+    <div class="field" data-field="ESignName">
+        <label asp-for="ESignName" class="form-label">Type your full name to sign: <strong class="text-light" data-sign-hint>@Model.FirstName @Model.LastName</strong></label>
+        <input asp-for="ESignName" class="form-control form-control-lg esign-input" autocomplete="off" spellcheck="false" />
+        <div class="field-msg" data-msg="ESignName"><span asp-validation-for="ESignName"></span></div>
+        <div class="esign-preview" data-sign-preview hidden>
+            <span class="esign-script" data-sign-name></span>
+            <span class="esign-meta">Signed electronically · <span data-sign-date></span></span>
+        </div>
+    </div>
+</section>

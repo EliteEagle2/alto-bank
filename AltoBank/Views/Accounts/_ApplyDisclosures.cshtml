@@ -1,0 +1,47 @@
+@* The three disclosure modals for step 7 (short placeholder text for the demo).
+   Each "I agree" button ticks its matching checkbox (see apply.js: data-agree-target). *@
+@{
+    var disclosures = new[]
+    {
+        (Id: "discAccount", Field: "AgreeAccountAgreement", Title: "Alto Bank Account Agreement", Paragraphs: new[]
+        {
+            "This agreement covers Alto Checking and Summit Savings accounts. There are no monthly maintenance fees and no minimum balance.",
+            "Deposits, withdrawals, and transfers must be positive amounts of no more than $1,000,000 each. Any withdrawal or transfer larger than your available balance is declined; Alto never charges overdraft fees.",
+            "Summit Savings advertises 4.10% APY and allows up to 6 withdrawals per month. Rates may change.",
+            "You are responsible for keeping your login private and telling us promptly about any activity you don't recognize."
+        }),
+        (Id: "discPrivacy", Field: "AgreePrivacy", Title: "Privacy Notice", Paragraphs: new[]
+        {
+            "We collect the information in this application (name, date of birth, contact details, address, employment, and income range) to open and service your account and to meet legal requirements.",
+            "We do not sell your personal information. We share it only with service providers who help us run your account, and as required by law.",
+            "This demo never collects a Social Security number."
+        }),
+        (Id: "discESign", Field: "AgreeESign", Title: "E-Sign Consent", Paragraphs: new[]
+        {
+            "By consenting, you agree to receive account documents, disclosures, and notices electronically instead of on paper.",
+            "Typing your name in the signature box has the same effect as a handwritten signature for this application.",
+            "You can withdraw this consent at any time by contacting us."
+        }),
+    };
+}
+@foreach (var d in disclosures)
+{
+    <div class="modal fade alto-modal" id="@d.Id" tabindex="-1" aria-labelledby="@(d.Id)Title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h5" id="@(d.Id)Title">@d.Title</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body prose">
+                    <p class="footnote">Placeholder text for an academic demo. Alto Bank is not a real bank.</p>
+                    @foreach (var p in d.Paragraphs) { <p>@p</p> }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-alto-ghost" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-alto" data-bs-dismiss="modal" data-agree-target="@d.Field">I agree</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}

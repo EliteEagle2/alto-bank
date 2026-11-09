@@ -1,0 +1,46 @@
+@* Top bar for online banking: page title, secure-session badge, quick Transfer button, and user menu. *@
+@inject UserManager<ApplicationUser> UserManager
+@{
+    var me = await UserManager.GetUserAsync(User);
+}
+<header class="app-topbar">
+    @* Menu button only shows on smaller screens, where the sidebar is a drawer *@
+    <button class="btn btn-alto-ghost btn-icon d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#appSidebar" aria-controls="appSidebar" aria-label="Open menu">
+        <i class="bi bi-list"></i>
+    </button>
+
+    <div class="min-w-0">
+        <div class="topbar-kicker d-none d-sm-block">Alto Online Banking</div>
+        <div class="topbar-title text-truncate">@ViewData["Title"]</div>
+    </div>
+
+    <div class="ms-auto d-flex align-items-center gap-2">
+        <span class="secure-pill d-none d-md-inline-flex"><i class="bi bi-shield-lock-fill"></i>Secure session</span>
+        <a class="btn btn-alto btn-sm d-none d-sm-inline-flex align-items-center" asp-controller="Transactions" asp-action="Transfer">
+            <i class="bi bi-arrow-left-right me-1"></i>Transfer
+        </a>
+
+        <div class="dropdown">
+            <button class="btn btn-alto-ghost user-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu">
+                <span class="avatar-sm">@(me?.FirstName.FirstOrDefault())</span>
+                <span class="d-none d-md-inline ms-1">@me?.FirstName</span>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end alto-dropdown">
+                <li class="px-3 py-2">
+                    <div class="fw-semibold">@me?.FirstName @me?.LastName</div>
+                    <div class="small text-muted-alto">@me?.Email</div>
+                </li>
+                <li><hr class="dropdown-divider" /></li>
+                <li><a class="dropdown-item" asp-controller="Profile" asp-action="Index"><i class="bi bi-person me-2"></i>Profile</a></li>
+                <li><a class="dropdown-item" asp-controller="Support" asp-action="Security"><i class="bi bi-shield-check me-2"></i>Security</a></li>
+                <li><a class="dropdown-item" asp-controller="Home" asp-action="Index"><i class="bi bi-house me-2"></i>Alto home page</a></li>
+                <li><hr class="dropdown-divider" /></li>
+                <li>
+                    <form asp-controller="Auth" asp-action="Logout" method="post">
+                        <button type="submit" class="dropdown-item text-danger-alto"><i class="bi bi-box-arrow-right me-2"></i>Log out</button>
+                    </form>
+                </li>
+            </ul>
+        </div>
+    </div>
+</header>

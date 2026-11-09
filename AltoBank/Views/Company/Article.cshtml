@@ -1,0 +1,21 @@
+@model NewsArticle
+@{
+    ViewData["Title"] = Model.Title;
+}
+
+<article class="container py-5" style="max-width: 820px">
+    <a asp-action="Newsroom" class="small text-decoration-none"><i class="bi bi-chevron-left"></i> Newsroom</a>
+    <div class="news-meta mt-4 mb-3">
+        <span class="type-badge credit me-2">@Model.Category</span>@Model.Date.ToString("MMMM d, yyyy")
+    </div>
+    <h1 class="mb-3">@Model.Title</h1>
+    <p class="lead text-muted-alto mb-4">@Model.Summary</p>
+
+    <div class="glass prose p-4 p-lg-5">
+        @foreach (var paragraph in Model.Body)
+        {
+            <p>@paragraph</p>
+        }
+        <p class="footnote mb-0">Alto Bank is a fictional company. This press release is sample content for an academic project.</p>
+    </div>
+</article>

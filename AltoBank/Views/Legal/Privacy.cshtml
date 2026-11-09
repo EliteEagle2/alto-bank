@@ -1,0 +1,34 @@
+@{
+    ViewData["Title"] = "Privacy Policy";
+}
+
+<partial name="_PageHero" model='new PageHeroViewModel("Legal", "Privacy Policy",
+    "What information Alto collects, why, and how it is protected.")' />
+
+<div class="container" style="max-width: 900px">
+    <div class="glass prose p-4 p-lg-5">
+        <p class="footnote">Last updated November 9, 2026 · Alto Bank is a fictional bank built for an academic project.</p>
+
+        <h2>Information we collect</h2>
+        <ul>
+            <li><strong>Profile details:</strong> your first name, last name, and email address.</li>
+            <li><strong>Login credentials:</strong> your password, stored only as a salted hash. We never store or see the actual password.</li>
+            <li><strong>Banking activity:</strong> your accounts, balances, and transactions (deposits, withdrawals, transfers).</li>
+        </ul>
+
+        <h2>How we use it</h2>
+        <p>We use your information only to run your accounts: signing you in, showing your balances and history, and processing the transactions you request.</p>
+
+        <h2>Cookies</h2>
+        <p>Alto uses a small number of essential cookies: one keeps you signed in, and one protects forms against cross-site request forgery. We do not use advertising or tracking cookies.</p>
+
+        <h2>Sharing</h2>
+        <p>We do not sell or share your personal information with third parties.</p>
+
+        <h2>Your choices</h2>
+        <p>You can view and update your name and email at any time on your Profile page. To ask about your data, <a asp-controller="Support" asp-action="Contact">contact us</a>.</p>
+
+        <h2>Demo notice</h2>
+        <p class="mb-0">This site is a class project. Please do not enter real personal or financial information.</p>
+    </div>
+</div>

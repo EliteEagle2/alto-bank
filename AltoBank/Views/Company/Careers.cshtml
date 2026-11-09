@@ -1,0 +1,47 @@
+@model List<JobOpening>
+@{
+    ViewData["Title"] = "Careers";
+
+    var perks = new List<BenefitViewModel>
+    {
+        new("bi-laptop", "Remote-friendly", "Work from anywhere in the US, or join us at our Denver HQ."),
+        new("bi-heart-pulse", "Full health coverage", "Medical, dental, and vision for you and your family, 100% covered."),
+        new("bi-piggy-bank", "401(k) match", "We match 6% of your contributions from day one."),
+        new("bi-book", "Learning budget", "$2,000 a year for courses, conferences, and books."),
+    };
+}
+
+<partial name="_PageHero" model='new PageHeroViewModel("Careers at Alto", "Do the best work of your career.",
+    "Join a small, ambitious team building a bank people actually love to use.")' />
+
+<div class="container">
+    <section class="pb-5">
+        <h2 class="section-title mb-4">Perks &amp; benefits</h2>
+        <div class="row g-4">
+            @foreach (var p in perks)
+            {
+                <div class="col-md-6 col-lg-3"><partial name="_BenefitCard" model="p" /></div>
+            }
+        </div>
+    </section>
+
+    <section class="section pt-0">
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-4">
+            <h2 class="section-title mb-0">Open roles</h2>
+            <span class="text-muted-alto">@Model.Count positions</span>
+        </div>
+
+        @* Group the list by team; each job is rendered by the _JobRow partial *@
+        @foreach (var team in Model.GroupBy(j => j.Team))
+        {
+            <h6 class="eyebrow mt-4 mb-2">@team.Key</h6>
+            <div class="glass overflow-hidden">
+                @foreach (var job in team)
+                {
+                    <partial name="_JobRow" model="job" />
+                }
+            </div>
+        }
+        <p class="footnote mt-4">Alto Bank is a fictional company created for an academic project; these listings are examples only.</p>
+    </section>
+</div>

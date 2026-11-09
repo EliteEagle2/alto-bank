@@ -1,0 +1,13 @@
+@* Bottom tab bar shown only on phones/tablets (like a mobile banking app). *@
+@{
+    var controller = ViewContext.RouteData.Values["controller"]?.ToString();
+    var action = ViewContext.RouteData.Values["action"]?.ToString();
+    string Active(bool on) => on ? "active" : "";
+}
+<nav class="mobile-tabbar d-lg-none" aria-label="Quick navigation">
+    <a class="@Active(controller == "Dashboard")" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-grid-1x2"></i>Home</a>
+    <a class="@Active(controller == "Accounts" || action == "History")" asp-controller="Accounts" asp-action="Index"><i class="bi bi-wallet2"></i>Accounts</a>
+    <a class="@Active(action == "Transfer")" asp-controller="Transactions" asp-action="Transfer"><i class="bi bi-arrow-left-right"></i>Transfer</a>
+    <a class="@Active(action == "Deposit" || action == "Withdraw")" asp-controller="Transactions" asp-action="Deposit"><i class="bi bi-cash-stack"></i>Deposit</a>
+    <a class="@Active(controller == "Profile")" asp-controller="Profile" asp-action="Index"><i class="bi bi-person"></i>Profile</a>
+</nav>

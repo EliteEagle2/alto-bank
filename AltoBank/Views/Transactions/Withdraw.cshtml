@@ -1,0 +1,14 @@
+@model MoneyMovementViewModel
+@{
+    ViewData["Title"] = "Withdraw";
+}
+
+<div class="container py-5">
+    <div class="glass form-card">
+        <h2 class="mb-1"><i class="bi bi-arrow-up-circle text-danger-alto me-2"></i>Withdraw</h2>
+        <p class="text-muted-alto mb-4">Take money out of an account. You can't withdraw more than the available balance.</p>
+        <partial name="_MoneyForm" model="Model" view-data='new ViewDataDictionary(ViewData) { ["Action"] = "Withdraw" }' />
+    </div>
+</div>
+
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

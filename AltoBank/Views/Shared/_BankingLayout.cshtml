@@ -1,0 +1,31 @@
+﻿@* ONLINE BANKING layout (signed-in pages): sidebar navigation, app-style top bar,
+   compact footer, and a bottom tab bar on phones. Used by Dashboard, Accounts,
+   Transactions and Profile through the _ViewStart.cshtml file in each of those folders. *@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <title>@ViewData["Title"] · Alto Online Banking</title>
+    <partial name="_HeadAssets" />
+</head>
+<body class="app-body">
+    <div class="app-shell">
+        <partial name="_AppSidebar" />
+
+        <div class="app-main">
+            <partial name="_AppTopbar" />
+
+            <main class="app-content">
+                <partial name="_StatusAlert" />
+                @RenderBody()
+            </main>
+
+            <partial name="_AppFooter" />
+        </div>
+    </div>
+
+    <partial name="_AppMobileNav" />
+
+    <partial name="_ScriptAssets" />
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

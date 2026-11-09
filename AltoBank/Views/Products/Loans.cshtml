@@ -1,0 +1,99 @@
+@{
+    ViewData["Title"] = "Loans";
+
+    var loanTypes = new List<BenefitViewModel>
+    {
+        new("bi-person-check", "Personal loans", "$2,000 – $50,000 · APR from 7.49%* · 2 to 7 year terms. Consolidate debt or fund what's next."),
+        new("bi-car-front", "Auto loans", "Up to $100,000 · APR from 5.29%* · New, used, or refinance your current car loan."),
+        new("bi-house-gear", "Home improvement", "$5,000 – $75,000 · APR from 7.99%* · Renovate without tapping your home equity."),
+    };
+
+    var steps = new List<StepViewModel>
+    {
+        new("Check your rate", "See your rate in minutes. Checking won't affect your credit score."),
+        new("Pick your terms", "Choose the amount and term that fit your budget. No origination fees."),
+        new("Get your money", "Approved funds land in your Alto checking account as soon as the next business day."),
+    };
+}
+
+<partial name="_PageHero" model='new PageHeroViewModel("Alto Loans · Coming soon", "Borrow with a clear view.",
+    "Fixed rates, no origination fees, and no prepayment penalties. Know exactly what you will pay before you commit.")' />
+
+<div class="container">
+    <div class="row g-4">
+        @foreach (var l in loanTypes)
+        {
+            <div class="col-md-4"><partial name="_BenefitCard" model="l" /></div>
+        }
+    </div>
+
+    @* Loan payment calculator (runs in the browser, see the script below) *@
+    <section class="section">
+        <div class="glass p-4 p-lg-5">
+            <div class="row g-5 align-items-center">
+                <div class="col-lg-6">
+                    <h2 class="section-title mb-2">Payment estimator</h2>
+                    <p class="text-muted-alto mb-4">Estimate your fixed monthly payment.</p>
+
+                    <label class="form-label" for="ln-amount">Loan amount</label>
+                    <div class="input-group mb-3"><span class="input-group-text">$</span>
+                        <input id="ln-amount" class="form-control" type="number" min="0" step="500" value="15000" /></div>
+
+                    <label class="form-label" for="ln-apr">APR</label>
+                    <div class="input-group mb-3">
+                        <input id="ln-apr" class="form-control" type="number" min="0" max="36" step="0.01" value="7.49" />
+                        <span class="input-group-text">%</span></div>
+
+                    <label class="form-label" for="ln-term">Term</label>
+                    <select id="ln-term" class="form-select">
+                        <option value="24">2 years</option>
+                        <option value="36" selected>3 years</option>
+                        <option value="48">4 years</option>
+                        <option value="60">5 years</option>
+                        <option value="84">7 years</option>
+                    </select>
+                </div>
+                <div class="col-lg-6 text-center">
+                    <div class="text-muted-alto small text-uppercase" style="letter-spacing:.14em">Estimated monthly payment</div>
+                    <div id="ln-payment" class="calc-result text-gradient">$0.00</div>
+                    <div class="row mt-3">
+                        <div class="col-6"><div class="text-muted-alto small">Total interest</div><div id="ln-interest" class="fs-5 fw-semibold">$0</div></div>
+                        <div class="col-6"><div class="text-muted-alto small">Total cost</div><div id="ln-total" class="fs-5 fw-semibold">$0</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section pt-0">
+        <h2 class="section-title mb-4">How it works</h2>
+        <partial name="_Steps" model="steps" />
+        <p class="footnote mt-4">*Rates and terms are illustrative for this academic demo. Alto loans are not available and no applications are accepted.</p>
+    </section>
+
+    <partial name="_CtaBand" model='new CtaViewModel("Be first in line", "Create a free Alto account and we will let you know when loans launch.", "Create an account", "Auth", "Register")' />
+</div>
+
+@section Scripts {
+    <script>
+        // Standard amortized payment: M = P * r / (1 - (1 + r)^-n), where r is the monthly rate.
+        (function () {
+            const fmt = v => v.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+            const $ = id => document.getElementById(id);
+
+            function update() {
+                const p = Math.max(0, parseFloat($('ln-amount').value) || 0);
+                const r = Math.max(0, parseFloat($('ln-apr').value) || 0) / 100 / 12;
+                const n = parseInt($('ln-term').value, 10);
+                const payment = r === 0 ? p / n : p * r / (1 - Math.pow(1 + r, -n));
+                const total = payment * n;
+
+                $('ln-payment').textContent = fmt(payment);
+                $('ln-total').textContent = fmt(total);
+                $('ln-interest').textContent = fmt(total - p);
+            }
+            ['ln-amount', 'ln-apr', 'ln-term'].forEach(id => $(id).addEventListener('input', update));
+            update();
+        })();
+    </script>
+}

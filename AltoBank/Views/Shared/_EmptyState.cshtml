@@ -1,0 +1,10 @@
+@model EmptyStateViewModel
+@* Shown when a list has nothing in it (no accounts, no transactions, ...). *@
+<div class="empty-state">
+    <i class="bi @Model.Icon"></i>
+    <p class="mt-2 @(Model.ButtonText == null ? "mb-0" : "")">@Model.Message</p>
+    @if (Model.ButtonText != null)
+    {
+        <a class="btn btn-alto" asp-controller="@Model.Controller" asp-action="@Model.Action">@Model.ButtonText</a>
+    }
+</div>

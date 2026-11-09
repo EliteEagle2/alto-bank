@@ -1,0 +1,50 @@
+@* ACCOUNT APPLICATION layout: a focused, full-page experience (like real bank applications).
+   No banking sidebar or marketing nav — just the logo, a secure badge, and "Save & exit".
+   Used by Views/Accounts/Apply.cshtml and Decision.cshtml (they set Layout = "_ApplyLayout"). *@
+@{
+    var isDecision = ViewData["IsDecision"] is true;
+}
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <title>@ViewData["Title"] · Alto Bank</title>
+    <partial name="_HeadAssets" />
+</head>
+<body class="apply-body">
+    <header class="apply-header">
+        <div class="apply-header-inner">
+            <a asp-controller="Dashboard" asp-action="Index" aria-label="Alto Bank dashboard"><partial name="_Logo" /></a>
+            <span class="apply-header-title d-none d-md-inline">@(isDecision ? "Application decision" : "Account application")</span>
+            <span class="secure-pill d-none d-sm-inline-flex ms-auto"><i class="bi bi-shield-lock-fill"></i>Secure application</span>
+            @if (isDecision)
+            {
+                <a class="save-exit ms-3" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-grid-1x2 me-1"></i>Dashboard</a>
+            }
+            else
+            {
+                @* apply.js saves progress to sessionStorage before this link navigates away *@
+                <a class="save-exit ms-auto ms-sm-3" asp-controller="Dashboard" asp-action="Index" data-save-exit><i class="bi bi-box-arrow-left me-1"></i>Save &amp; exit</a>
+            }
+        </div>
+    </header>
+
+    <main class="apply-content">
+        @if (!isDecision)
+        {
+            <partial name="_StatusAlert" />
+        }
+        @RenderBody()
+    </main>
+
+    <footer class="apply-footer">
+        <span>&copy; @DateTime.Now.Year Alto Bank</span>
+        <a asp-controller="Legal" asp-action="Privacy">Privacy</a>
+        <a asp-controller="Legal" asp-action="Terms">Terms</a>
+        <a asp-controller="Support" asp-action="Help">Help</a>
+        <span class="w-100 app-disclaimer">Demo application for an academic project. No real Social Security numbers are collected. Not a real bank.</span>
+    </footer>
+
+    <partial name="_ScriptAssets" />
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

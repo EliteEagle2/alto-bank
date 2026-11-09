@@ -1,0 +1,22 @@
+﻿@* PUBLIC SITE layout: marketing nav on top, big multi-column footer.
+   (Signed-in banking pages use _BankingLayout instead — see the _ViewStart files in those folders.) *@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <title>@ViewData["Title"] · Alto Bank</title>
+    <partial name="_HeadAssets" />
+</head>
+<body>
+    <partial name="_Navbar" />
+
+    <main>
+        <partial name="_StatusAlert" />
+        @RenderBody()
+    </main>
+
+    <partial name="_Footer" />
+
+    <partial name="_ScriptAssets" />
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

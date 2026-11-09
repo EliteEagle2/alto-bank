@@ -1,0 +1,41 @@
+@* Multi-column site footer with link groups and the disclaimer. Rendered from _Layout. *@
+<footer class="alto-footer">
+    <div class="container">
+        <div class="row g-4">
+            <div class="col-lg-4">
+                <partial name="_Logo" />
+                <p class="text-muted-alto mt-3 mb-0">Banking, elevated.</p>
+            </div>
+            <div class="col-6 col-md-3 col-lg-2">
+                <h6>Products</h6>
+                <a asp-controller="Products" asp-action="Checking">Checking</a>
+                <a asp-controller="Products" asp-action="Savings">Savings</a>
+                <a asp-controller="Products" asp-action="CreditCards">Credit Cards</a>
+                <a asp-controller="Products" asp-action="Loans">Loans</a>
+            </div>
+            <div class="col-6 col-md-3 col-lg-2">
+                <h6>Company</h6>
+                <a asp-controller="Company" asp-action="About">About Alto</a>
+                <a asp-controller="Company" asp-action="Careers">Careers</a>
+                <a asp-controller="Company" asp-action="Newsroom">Newsroom</a>
+            </div>
+            <div class="col-6 col-md-3 col-lg-2">
+                <h6>Support</h6>
+                <a asp-controller="Support" asp-action="Help">Help Center</a>
+                <a asp-controller="Support" asp-action="Contact">Contact Us</a>
+                <a asp-controller="Support" asp-action="Security">Security</a>
+            </div>
+            <div class="col-6 col-md-3 col-lg-2">
+                <h6>Legal</h6>
+                <a asp-controller="Legal" asp-action="Privacy">Privacy</a>
+                <a asp-controller="Legal" asp-action="Terms">Terms of Use</a>
+                <a asp-controller="Legal" asp-action="Accessibility">Accessibility</a>
+            </div>
+        </div>
+        <hr />
+        <p class="disclaimer mb-0">
+            &copy; @DateTime.Now.Year Alto Bank. Alto Bank is a fictional bank created for an academic project.
+            It is not a real financial institution, holds no real money, and is not FDIC insured.
+        </p>
+    </div>
+</footer>

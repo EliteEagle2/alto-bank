@@ -1,0 +1,52 @@
+@model TransactionTableViewModel
+@* One transaction table used by both the Dashboard and the account History page.
+   The flags on the model decide which optional columns appear. *@
+<div class="glass overflow-hidden">
+    @if (!Model.Transactions.Any())
+    {
+        <partial name="_EmptyState" model='new EmptyStateViewModel("bi-receipt", Model.EmptyMessage)' />
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table alto-table table-hover">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                        @if (Model.ShowAccount) { <th class="d-none d-md-table-cell">Account</th> }
+                        @if (Model.ShowType) { <th>Type</th> }
+                        <th class="text-end">Amount</th>
+                        @if (Model.ShowRunningBalance) { <th class="text-end">Balance</th> }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var t in Model.Transactions)
+                    {
+                        <tr>
+                            <td class="text-muted-alto text-nowrap">@t.LocalDate.ToString(Model.DateFormat)</td>
+                            <td>@t.Description</td>
+                            @if (Model.ShowAccount)
+                            {
+                                <td class="d-none d-md-table-cell text-muted-alto">@t.Account?.DisplayName ••@t.Account?.Last4</td>
+                            }
+                            @if (Model.ShowType)
+                            {
+                                <td><span class="type-badge @(t.IsCredit ? "credit" : "debit")">@t.TypeLabel</span></td>
+                            }
+                            @* Custom <money> tag helper: credits green with "+", debits red with "−" *@
+                            <td class="text-end text-nowrap">
+                                <money amount="@t.SignedAmount" colorize="true" show-sign="true" />
+                            </td>
+                            @if (Model.ShowRunningBalance)
+                            {
+                                @* Running balance = balance right after this transaction *@
+                                <td class="text-end text-nowrap"><money amount="@t.BalanceAfter" /></td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

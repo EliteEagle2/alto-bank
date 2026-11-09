@@ -1,0 +1,19 @@
+# Build output
+bin/
+obj/
+
+# Local SQLite databases (recreated + seeded by the app on startup)
+*.db
+*.db-shm
+*.db-wal
+
+# Editor / OS files
+.vs/
+.vscode/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+
+# Generated deliverables (zips of screenshots / work)
+deliverables/

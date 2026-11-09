@@ -1,0 +1,113 @@
+@model AccountApplicationViewModel
+@* STEP 3 — phone (auto-formatted), address with simulated ZIP lookup, previous address if < 2 years. *@
+<section class="step-pane" data-step="3" aria-labelledby="s3-title">
+    <p class="step-kicker">Step 3 of 7</p>
+    <h1 class="step-title" id="s3-title">Where can we reach you?</h1>
+    <p class="step-lead">We'll use this to send account alerts and your debit card.</p>
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="field">
+                <label class="form-label" for="EmailDisplay">Email</label>
+                <input id="EmailDisplay" class="form-control" value="@Model.Email" readonly aria-describedby="email-help" />
+                <div class="form-text text-muted-alto" id="email-help">This is your login email. Change it on your Profile page.</div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="field" data-field="Phone">
+                <label asp-for="Phone" class="form-label"></label>
+                <input asp-for="Phone" type="tel" class="form-control" inputmode="tel" autocomplete="tel-national" placeholder="(555) 555-5555" maxlength="14" />
+                <div class="field-msg" data-msg="Phone"><span asp-validation-for="Phone"></span></div>
+            </div>
+        </div>
+    </div>
+
+    <h2 class="sub-title">Home address</h2>
+    <div class="row g-3">
+        <div class="col-md-8">
+            <div class="field" data-field="Street">
+                <label asp-for="Street" class="form-label"></label>
+                <input asp-for="Street" class="form-control" autocomplete="address-line1" maxlength="100" />
+                <div class="field-msg" data-msg="Street"><span asp-validation-for="Street"></span></div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="field" data-field="Apt">
+                <label asp-for="Apt" class="form-label">Apt / unit <span class="opt">(optional)</span></label>
+                <input asp-for="Apt" class="form-control" autocomplete="address-line2" maxlength="50" />
+                <div class="field-msg" data-msg="Apt"><span asp-validation-for="Apt"></span></div>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="field" data-field="Zip">
+                <label asp-for="Zip" class="form-label"></label>
+                <input asp-for="Zip" class="form-control" inputmode="numeric" maxlength="5" autocomplete="postal-code" data-zip-for="City,State" />
+                <div class="field-msg" data-msg="Zip"><span asp-validation-for="Zip"></span></div>
+                <div class="zip-hint" data-zip-hint="Zip" aria-live="polite"></div>
+            </div>
+        </div>
+        <div class="col-sm-5">
+            <div class="field" data-field="City">
+                <label asp-for="City" class="form-label"></label>
+                <input asp-for="City" class="form-control" autocomplete="address-level2" maxlength="60" />
+                <div class="field-msg" data-msg="City"><span asp-validation-for="City"></span></div>
+            </div>
+        </div>
+        <div class="col-sm-3">
+            <div class="field" data-field="State">
+                <label asp-for="State" class="form-label"></label>
+                <select asp-for="State" asp-items="ViewBag.States" class="form-select" autocomplete="address-level1">
+                    <option value="">Select</option>
+                </select>
+                <div class="field-msg" data-msg="State"><span asp-validation-for="State"></span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="field mt-3" data-field="LivedTwoYears">
+        <span class="form-label d-block" id="lived-label">Have you lived at this address for 2 years or more?</span>
+        <div class="pill-options" role="radiogroup" aria-labelledby="lived-label">
+            <label class="pill-option"><input type="radio" name="LivedTwoYears" value="true" checked="@(Model.LivedTwoYears == true)" /><span>Yes</span></label>
+            <label class="pill-option"><input type="radio" name="LivedTwoYears" value="false" checked="@(Model.LivedTwoYears == false)" /><span>No</span></label>
+        </div>
+        <div class="field-msg" data-msg="LivedTwoYears"><span asp-validation-for="LivedTwoYears"></span></div>
+    </div>
+
+    @* Only shown (and only required) when the answer above is "No". *@
+    <div class="prev-address" data-show-when="LivedTwoYears=false">
+        <h2 class="sub-title">Previous address</h2>
+        <div class="row g-3">
+            <div class="col-12">
+                <div class="field" data-field="PrevStreet">
+                    <label asp-for="PrevStreet" class="form-label">Street address</label>
+                    <input asp-for="PrevStreet" class="form-control" maxlength="100" />
+                    <div class="field-msg" data-msg="PrevStreet"><span asp-validation-for="PrevStreet"></span></div>
+                </div>
+            </div>
+            <div class="col-sm-4">
+                <div class="field" data-field="PrevZip">
+                    <label asp-for="PrevZip" class="form-label">ZIP code</label>
+                    <input asp-for="PrevZip" class="form-control" inputmode="numeric" maxlength="5" data-zip-for="PrevCity,PrevState" />
+                    <div class="field-msg" data-msg="PrevZip"><span asp-validation-for="PrevZip"></span></div>
+                    <div class="zip-hint" data-zip-hint="PrevZip" aria-live="polite"></div>
+                </div>
+            </div>
+            <div class="col-sm-5">
+                <div class="field" data-field="PrevCity">
+                    <label asp-for="PrevCity" class="form-label">City</label>
+                    <input asp-for="PrevCity" class="form-control" maxlength="60" />
+                    <div class="field-msg" data-msg="PrevCity"><span asp-validation-for="PrevCity"></span></div>
+                </div>
+            </div>
+            <div class="col-sm-3">
+                <div class="field" data-field="PrevState">
+                    <label asp-for="PrevState" class="form-label">State</label>
+                    <select asp-for="PrevState" asp-items="ViewBag.States" class="form-select">
+                        <option value="">Select</option>
+                    </select>
+                    <div class="field-msg" data-msg="PrevState"><span asp-validation-for="PrevState"></span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

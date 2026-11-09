@@ -1,0 +1,70 @@
+@{
+    ViewData["Title"] = "Checking";
+
+    var stats = new List<StatViewModel>
+    {
+        new("$0", "Monthly fees"),
+        new("$0", "Minimum to open"),
+        new("$0", "Overdraft fees"),
+        new("24/7", "Instant transfers"),
+    };
+
+    var benefits = new List<BenefitViewModel>
+    {
+        new("bi-cash-coin", "No monthly fees", "No maintenance fees, no minimum balance, no surprise charges. Ever."),
+        new("bi-shield-check", "No overdraft fees", "Alto declines any payment that would overdraw your account, so you never pay an overdraft fee."),
+        new("bi-lightning-charge", "Instant transfers", "Move money to and from your Alto savings in seconds, nights and weekends included."),
+        new("bi-activity", "Real-time history", "Every transaction appears immediately with a running balance next to it."),
+        new("bi-tags", "Nickname your accounts", "Open more than one checking account and name each one: Bills, Spending, Travel."),
+        new("bi-headset", "Real humans, 24/7", "Questions? Our support team is here around the clock."),
+    };
+
+    var steps = new List<StepViewModel>
+    {
+        new("Create your login", "Sign up with your name and email. It takes about two minutes."),
+        new("Get your account", "An Everyday Checking account is opened for you automatically."),
+        new("Start banking", "Make a deposit, set up transfers, and watch your dashboard update live."),
+    };
+}
+
+<partial name="_PageHero" model='new PageHeroViewModel("Alto Checking", "Checking that keeps up with you.",
+    "Everyday spending without the fees. Open Alto Checking in minutes and see every dollar move in real time.",
+    "Open checking", "Auth", "Register")' />
+
+<div class="container">
+    <partial name="_StatStrip" model="stats" />
+
+    <section class="section">
+        <h2 class="section-title mb-4">Why Alto Checking</h2>
+        <div class="row g-4">
+            @foreach (var b in benefits)
+            {
+                <div class="col-md-6 col-lg-4"><partial name="_BenefitCard" model="b" /></div>
+            }
+        </div>
+    </section>
+
+    <section class="section pt-0">
+        <h2 class="section-title mb-4">How it works</h2>
+        <partial name="_Steps" model="steps" />
+    </section>
+
+    <section class="section pt-0">
+        <h2 class="section-title mb-4">At a glance</h2>
+        <div class="glass overflow-hidden">
+            <div class="table-responsive">
+                <table class="table alto-table">
+                    <tbody>
+                        <tr><td class="text-muted-alto">Monthly maintenance fee</td><td class="text-end fw-semibold">$0</td></tr>
+                        <tr><td class="text-muted-alto">Minimum opening deposit</td><td class="text-end fw-semibold">$0</td></tr>
+                        <tr><td class="text-muted-alto">Overdraft fees</td><td class="text-end fw-semibold">$0 (overdrafts are declined)</td></tr>
+                        <tr><td class="text-muted-alto">Transfers between Alto accounts</td><td class="text-end fw-semibold">Instant, free</td></tr>
+                        <tr><td class="text-muted-alto">Max per transaction</td><td class="text-end fw-semibold">$1,000,000</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <partial name="_CtaBand" model='new CtaViewModel("Open Alto Checking today", "No fees, no minimums, no catch.", "Get started", "Auth", "Register")' />
+</div>

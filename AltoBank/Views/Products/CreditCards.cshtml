@@ -1,0 +1,73 @@
+@{
+    ViewData["Title"] = "Credit Cards";
+
+    // (card art, name, tagline, highlights) for each card in the lineup
+    var cards = new[]
+    {
+        (Art: new CardArtViewModel("Peak", "static"), Name: "Alto Peak", Tagline: "Flat 2% cash back on everything",
+            Points: new[] { "2% cash back on every purchase", "$0 annual fee", "0% intro APR for 15 months*" }),
+        (Art: new CardArtViewModel("Summit", "alto-card--violet static"), Name: "Alto Summit", Tagline: "Travel rewards without the fuss",
+            Points: new[] { "3x points on travel & dining", "No foreign transaction fees", "$95 annual fee" }),
+        (Art: new CardArtViewModel("Base", "alto-card--onyx static"), Name: "Alto Base", Tagline: "Build credit, the smart way",
+            Points: new[] { "1% cash back", "$0 annual fee", "Automatic credit-line reviews" }),
+    };
+
+    var benefits = new List<BenefitViewModel>
+    {
+        new("bi-snow", "Freeze in one tap", "Misplaced your card? Lock it instantly from your dashboard, unlock it when you find it."),
+        new("bi-bell", "Real-time alerts", "Get notified the moment your card is used, wherever you are."),
+        new("bi-incognito", "Virtual card numbers", "Shop online with a separate number that keeps your real one private."),
+    };
+}
+
+<partial name="_PageHero" model='new PageHeroViewModel("Alto Credit Cards · Coming soon", "Rewards that rise with you.",
+    "Three cards, zero gimmicks. Create a free Alto account and we will invite you as soon as applications open.",
+    "Get on the list", "Auth", "Register")' />
+
+<div class="container">
+    <div class="row g-4">
+        @foreach (var c in cards)
+        {
+            <div class="col-lg-4">
+                <div class="glass glass-hover p-4 h-100 d-flex flex-column">
+                    <partial name="_CardArt" model="c.Art" />
+                    <h3 class="mt-4 mb-1">@c.Name</h3>
+                    <p class="text-muted-alto">@c.Tagline</p>
+                    <ul class="check-list flex-grow-1">
+                        @foreach (var p in c.Points) { <li>@p</li> }
+                    </ul>
+                    <a class="btn btn-alto-outline mt-2" asp-controller="Auth" asp-action="Register">Join the waitlist</a>
+                </div>
+            </div>
+        }
+    </div>
+
+    <section class="section">
+        <h2 class="section-title mb-4">Compare cards</h2>
+        <div class="glass overflow-hidden">
+            <div class="table-responsive">
+                <table class="table alto-table compare-table">
+                    <thead><tr><th></th><th>Alto Peak</th><th>Alto Summit</th><th>Alto Base</th></tr></thead>
+                    <tbody>
+                        <tr><td class="text-muted-alto">Rewards</td><td>2% cash back</td><td>3x travel &amp; dining, 1x else</td><td>1% cash back</td></tr>
+                        <tr><td class="text-muted-alto">Annual fee</td><td>$0</td><td>$95</td><td>$0</td></tr>
+                        <tr><td class="text-muted-alto">Intro APR</td><td>0% for 15 months*</td><td>—</td><td>—</td></tr>
+                        <tr><td class="text-muted-alto">Foreign transaction fee</td><td>3%</td><td>None</td><td>3%</td></tr>
+                        <tr><td class="text-muted-alto">Best for</td><td>Everyday spending</td><td>Frequent travelers</td><td>Building credit</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section class="section pt-0">
+        <h2 class="section-title mb-4">Every card includes</h2>
+        <div class="row g-4">
+            @foreach (var b in benefits)
+            {
+                <div class="col-md-4"><partial name="_BenefitCard" model="b" /></div>
+            }
+        </div>
+        <p class="footnote mt-4">*Card terms are illustrative for this academic demo. Alto credit cards are not available and no applications are accepted.</p>
+    </section>
+</div>

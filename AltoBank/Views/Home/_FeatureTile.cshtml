@@ -1,0 +1,10 @@
+@model FeatureTileViewModel
+@* One product tile on the home page. The id lets nav links jump to it (e.g. /#checking). *@
+<div class="col-md-6 col-lg-3" id="@Model.AnchorId">
+    <div class="glass glass-hover feature-tile">
+        <div class="feature-icon"><i class="bi @Model.Icon"></i></div>
+        <h4>@Model.Title</h4>
+        <p>@Model.Text</p>
+        <a class="tile-link" asp-controller="@Model.Controller" asp-action="@Model.Action">@Model.LinkText <i class="bi bi-arrow-right"></i></a>
+    </div>
+</div>

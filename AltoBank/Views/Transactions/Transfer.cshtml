@@ -1,0 +1,54 @@
+@model TransferViewModel
+@{
+    ViewData["Title"] = "Transfer";
+}
+
+<div class="container py-5">
+    <div class="glass form-card">
+        <h2 class="mb-1"><i class="bi bi-arrow-left-right text-gradient me-2"></i>Transfer</h2>
+        <p class="text-muted-alto mb-4">Move money between your own Alto accounts instantly.</p>
+
+        @if (Model.AccountOptions.Count < 2)
+        {
+            <partial name="_EmptyState" model='new EmptyStateViewModel("bi-arrow-left-right", "You need at least two accounts to make a transfer.", "Open another account", "Accounts", "Apply")' />
+        }
+        else
+        {
+            <form asp-action="Transfer" method="post">
+                <div asp-validation-summary="ModelOnly" class="mb-3"></div>
+
+                <div class="mb-3">
+                    <label asp-for="FromAccountId" class="form-label"></label>
+                    <select asp-for="FromAccountId" asp-items="Model.AccountOptions" class="form-select"></select>
+                    <span asp-validation-for="FromAccountId" class="field-validation-error"></span>
+                </div>
+                <div class="text-center text-muted-alto mb-2"><i class="bi bi-arrow-down fs-5"></i></div>
+                <div class="mb-3">
+                    <label asp-for="ToAccountId" class="form-label"></label>
+                    <select asp-for="ToAccountId" asp-items="Model.AccountOptions" class="form-select">
+                        <option value="">Select an account</option>
+                    </select>
+                    <span asp-validation-for="ToAccountId" class="field-validation-error"></span>
+                </div>
+                <div class="mb-3">
+                    <label asp-for="Amount" class="form-label"></label>
+                    <div class="input-group">
+                        <span class="input-group-text">$</span>
+                        <input asp-for="Amount" class="form-control" type="number" step="0.01" min="0.01" value="@(Model.Amount > 0 ? Model.Amount.ToString("0.00") : "")" placeholder="0.00" />
+                    </div>
+                    <span asp-validation-for="Amount" class="field-validation-error"></span>
+                </div>
+                <div class="mb-4">
+                    <label asp-for="Memo" class="form-label">Memo (optional)</label>
+                    <input asp-for="Memo" class="form-control" placeholder="e.g. Vacation fund" />
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-alto">Transfer funds</button>
+                    <a class="btn btn-alto-ghost" asp-controller="Dashboard" asp-action="Index">Cancel</a>
+                </div>
+            </form>
+        }
+    </div>
+</div>
+
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

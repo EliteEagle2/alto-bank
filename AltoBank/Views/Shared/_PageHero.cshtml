@@ -1,0 +1,15 @@
+@model PageHeroViewModel
+@* Banner at the top of every inner public page: small label, big title, subtitle, optional button. *@
+<section class="page-hero">
+    <div class="container position-relative">
+        <p class="eyebrow mb-3">@Model.Eyebrow</p>
+        <h1 class="mb-3">@Model.Title</h1>
+        <p class="lead mb-0">@Model.Subtitle</p>
+        @if (Model.CtaText != null)
+        {
+            <a class="btn btn-alto btn-lg mt-4" asp-controller="@Model.CtaController" asp-action="@Model.CtaAction">
+                @Model.CtaText <i class="bi bi-arrow-right ms-1"></i>
+            </a>
+        }
+    </div>
+</section>

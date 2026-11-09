@@ -1,0 +1,15 @@
+@model List<StatViewModel>
+@* A row of big numbers ("$0 monthly fees", "4.10% APY", ...). *@
+<div class="glass stat-strip">
+    <div class="row g-0">
+        @foreach (var stat in Model)
+        {
+            <div class="col-6 col-md">
+                <div class="stat">
+                    <div class="stat-value text-gradient">@stat.Value</div>
+                    <div class="stat-label">@stat.Label</div>
+                </div>
+            </div>
+        }
+    </div>
+</div>

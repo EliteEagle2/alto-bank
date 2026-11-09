@@ -1,0 +1,101 @@
+@model List<AccountApplication>
+@* ADMIN DASHBOARD. The KPI tiles and charts are filled by JavaScript from GET /api/stats
+   (Chart.js from cdnjs). The recent applications table below is rendered on the server. *@
+
+<div class="container py-4">
+    <div class="page-head pt-2 d-flex flex-wrap justify-content-between align-items-end gap-3">
+        <div>
+            <p class="eyebrow mb-1">Administration</p>
+            <h1 class="mb-0">Bank overview</h1>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <label for="statsDays" class="text-muted-alto small mb-0">Activity window</label>
+            <select id="statsDays" class="form-select form-select-sm w-auto">
+                <option value="30" selected>Last 30 days</option>
+                <option value="60">Last 60 days</option>
+                <option value="90">Last 90 days</option>
+            </select>
+        </div>
+    </div>
+
+    @* KPI tiles — values arrive from /api/stats *@
+    <div class="row g-3 mb-4" id="kpis" aria-live="polite">
+        @foreach (var (key, label, icon) in new[]
+        {
+            ("customers", "Total customers", "bi-people"),
+            ("deposits", "Total deposits", "bi-bank"),
+            ("accounts", "Open accounts", "bi-wallet2"),
+            ("applications", "Applications (window)", "bi-file-earmark-check"),
+        })
+        {
+            <div class="col-6 col-xl-3">
+                <div class="glass kpi">
+                    <div class="kpi-icon"><i class="bi @icon"></i></div>
+                    <div class="kpi-label">@label</div>
+                    <div class="kpi-value" data-kpi="@key"><span class="placeholder-glow"><span class="placeholder col-6"></span></span></div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-lg-8">
+            <div class="glass p-4 h-100">
+                <div class="d-flex justify-content-between align-items-baseline mb-3">
+                    <h2 class="h5 mb-0">Transactions per day</h2>
+                    <span class="text-muted-alto small" data-range-label></span>
+                </div>
+                <div class="chart-box"><canvas id="txChart" aria-label="Transactions per day chart" role="img"></canvas></div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="glass p-4 h-100">
+                <h2 class="h5 mb-3">Accounts by type</h2>
+                <div class="chart-box chart-box--sm"><canvas id="typeChart" aria-label="Accounts by type chart" role="img"></canvas></div>
+                <div class="small text-muted-alto mt-3" data-type-legend></div>
+            </div>
+        </div>
+    </div>
+    <div class="alert alert-alto-error d-none" id="statsError" role="alert"></div>
+
+    @* Recent applications (server-rendered; eager loading brings in User + Account) *@
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h4 mb-0">Recent applications</h2>
+        <span class="text-muted-alto small">Latest @Model.Count</span>
+    </div>
+    <div class="glass overflow-hidden">
+        @if (!Model.Any())
+        {
+            <partial name="_EmptyState" model='new EmptyStateViewModel("bi-inbox", "No applications yet.")' />
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table alto-table table-hover">
+                    <thead>
+                        <tr><th>Submitted</th><th>Applicant</th><th>Product</th><th class="d-none d-md-table-cell">Location</th><th class="text-end">Opening deposit</th><th>Status</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var app in Model)
+                        {
+                            <tr>
+                                <td class="text-muted-alto text-nowrap">@DateTime.SpecifyKind(app.SubmittedAt, DateTimeKind.Utc).ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                                <td>@app.FirstName @app.LastName<div class="small text-muted-alto">@app.User?.Email</div></td>
+                                <td>@(app.AccountType == AccountType.Checking ? "Checking" : "Savings")@if (app.Account != null) { <div class="small text-muted-alto">••@app.Account.Last4</div> }</td>
+                                <td class="d-none d-md-table-cell text-muted-alto">@app.City, @app.State</td>
+                                <td class="text-end"><money amount="@app.OpeningDeposit" /></td>
+                                <td><span class="type-badge @(app.Status == ApplicationStatus.Approved ? "credit" : "debit")">@app.Status</span></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    @* Chart.js from cdnjs (exact version) *@
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="~/js/admin.js" asp-append-version="true"></script>
+}

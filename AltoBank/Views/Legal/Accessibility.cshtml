@@ -1,0 +1,26 @@
+@{
+    ViewData["Title"] = "Accessibility";
+}
+
+<partial name="_PageHero" model='new PageHeroViewModel("Legal", "Accessibility",
+    "Alto should work for everyone. Here is how we design for that.")' />
+
+<div class="container" style="max-width: 900px">
+    <div class="glass prose p-4 p-lg-5">
+        <h2>Our commitment</h2>
+        <p>We aim to meet the Web Content Accessibility Guidelines (WCAG) 2.1 Level AA so that every customer can manage their money independently.</p>
+
+        <h2>What we do</h2>
+        <ul>
+            <li><strong>Keyboard friendly:</strong> every page, menu, and form can be used without a mouse.</li>
+            <li><strong>Screen readers:</strong> forms have labels, icons are decorative, and images have text alternatives.</li>
+            <li><strong>Readable contrast:</strong> text colors are chosen to stand out clearly against the dark background.</li>
+            <li><strong>Reduced motion:</strong> if your device asks for reduced motion, animations like the floating card are turned off.</li>
+            <li><strong>Responsive layout:</strong> pages adapt to phones, tablets, and zoomed-in browsers.</li>
+            <li><strong>Clear errors:</strong> form errors are shown in text right next to the field, not only by color.</li>
+        </ul>
+
+        <h2>Feedback</h2>
+        <p class="mb-0">Having trouble using any part of Alto? <a asp-controller="Support" asp-action="Contact">Let us know</a> and we will help and work on a fix.</p>
+    </div>
+</div>

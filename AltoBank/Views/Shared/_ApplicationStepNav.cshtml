@@ -1,0 +1,62 @@
+@model int
+@* Progress tracker for the account application.
+   Model = the current step (1–7), or 8 when the application is finished (all steps checked).
+   Desktop: vertical list in a left sidebar. Phones: "Step X of 7" bar.
+   Used on Apply.cshtml (apply.js updates it live) and Decision.cshtml (all complete). *@
+@{
+    var steps = new[]
+    {
+        (Title: "Account", Icon: "bi-wallet2"),
+        (Title: "About you", Icon: "bi-person"),
+        (Title: "Contact & address", Icon: "bi-geo-alt"),
+        (Title: "Employment", Icon: "bi-briefcase"),
+        (Title: "Verify identity", Icon: "bi-fingerprint"),
+        (Title: "Fund account", Icon: "bi-cash-coin"),
+        (Title: "Review & sign", Icon: "bi-pen"),
+    };
+    var current = Math.Clamp(Model, 1, steps.Length + 1);
+    var finished = current > steps.Length;
+    var shown = Math.Min(current, steps.Length);
+}
+<nav class="step-nav" aria-label="Application progress">
+    @* ----- Phones / tablets ----- *@
+    <div class="step-nav-mobile d-lg-none">
+        <div class="d-flex justify-content-between align-items-baseline">
+            <span class="fw-semibold">@(finished ? "Complete" : "Step")
+                @if (!finished) { <span data-nav-num>@shown</span> <span>of @steps.Length</span> }
+            </span>
+            <span class="text-muted-alto small" data-nav-title>@steps[shown - 1].Title</span>
+        </div>
+        <div class="progress alto-progress mt-2" role="progressbar" aria-label="Application progress">
+            <div class="progress-bar" data-nav-bar style="width: @((finished ? 100 : shown * 100 / steps.Length))%"></div>
+        </div>
+    </div>
+
+    @* ----- Desktop sidebar ----- *@
+    <div class="d-none d-lg-block">
+        <div class="step-nav-heading">Your application</div>
+        <ol class="step-nav-list">
+            @for (var i = 0; i < steps.Length; i++)
+            {
+                var n = i + 1;
+                var state = n < current ? "done" : n == current ? "current" : "todo";
+                <li class="step-nav-item @state" data-nav-step="@n">
+                    <button type="button" class="step-nav-btn" data-goto="@n" disabled="@(finished || n >= current)">
+                        <span class="step-nav-dot">
+                            <i class="bi bi-check-lg nav-check" aria-hidden="true"></i>
+                            <i class="bi @steps[i].Icon nav-icon" aria-hidden="true"></i>
+                        </span>
+                        <span class="step-nav-text">
+                            <span class="step-nav-title">@steps[i].Title</span>
+                            <span class="step-nav-status" data-nav-status>@(state == "done" ? "Completed" : state == "current" ? "In progress" : "Not started")</span>
+                        </span>
+                    </button>
+                </li>
+            }
+        </ol>
+        <div class="step-nav-help">
+            <i class="bi bi-shield-check me-1"></i>Your answers are saved in this browser tab as you go.
+            <a asp-controller="Support" asp-action="Help" target="_blank" rel="noopener">Need help?</a>
+        </div>
+    </div>
+</nav>

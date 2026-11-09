@@ -1,0 +1,58 @@
+@model List<FaqItem>
+@{
+    ViewData["Title"] = "Help Center";
+}
+
+<partial name="_PageHero" model='new PageHeroViewModel("Help Center", "How can we help?",
+    "Answers to the most common questions about your Alto accounts.")' />
+
+<div class="container" style="max-width: 900px">
+    <div class="input-group input-group-lg mb-5">
+        <span class="input-group-text"><i class="bi bi-search"></i></span>
+        <input id="faq-search" class="form-control" type="search" placeholder="Search questions, e.g. transfer" aria-label="Search questions" />
+    </div>
+
+    @* Questions grouped by category; each one is rendered by the _FaqItem partial *@
+    @foreach (var group in Model.GroupBy(f => f.Category))
+    {
+        <section class="faq-group mb-5">
+            <h2 class="h4 mb-3">@group.Key</h2>
+            <div class="accordion alto-accordion">
+                @foreach (var faq in group)
+                {
+                    <partial name="_FaqItem" model="faq" />
+                }
+            </div>
+        </section>
+    }
+    <p id="faq-none" class="text-muted-alto text-center d-none">No questions match your search.</p>
+
+    <div class="glass p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+            <h5 class="mb-1">Still need help?</h5>
+            <p class="text-muted-alto mb-0">Our support team is available 24/7.</p>
+        </div>
+        <a class="btn btn-alto" asp-action="Contact">Contact us</a>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Live search: hide questions (and empty categories) that don't match the typed text.
+        document.getElementById('faq-search').addEventListener('input', function () {
+            const q = this.value.trim().toLowerCase();
+            let anyVisible = false;
+            document.querySelectorAll('.faq-group').forEach(group => {
+                let groupVisible = false;
+                group.querySelectorAll('.faq-item').forEach(item => {
+                    const match = item.textContent.toLowerCase().includes(q);
+                    item.classList.toggle('d-none', !match);
+                    groupVisible ||= match;
+                });
+                group.classList.toggle('d-none', !groupVisible);
+                anyVisible ||= groupVisible;
+            });
+            document.getElementById('faq-none').classList.toggle('d-none', anyVisible);
+        });
+    </script>
+}

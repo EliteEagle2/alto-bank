@@ -1,0 +1,22 @@
+@* Flash messages. Controllers set TempData["Success"] or TempData["Error"] right before a redirect
+   (Post/Redirect/Get). TempData survives exactly one redirect, so each message shows once.
+   Used by both layouts (_Layout and _BankingLayout). *@
+@{
+    var alerts = new[]
+    {
+        (Key: "Success", Css: "alert-alto-success", Icon: "bi-check-circle"),
+        (Key: "Error",   Css: "alert-alto-error",   Icon: "bi-exclamation-octagon"),
+    };
+}
+@foreach (var a in alerts)
+{
+    if (TempData[a.Key] is string message)
+    {
+        <div class="container pt-4">
+            <div class="alert @a.Css alert-dismissible fade show" role="@(a.Key == "Error" ? "alert" : "status")">
+                <i class="bi @a.Icon me-2"></i>@message
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        </div>
+    }
+}

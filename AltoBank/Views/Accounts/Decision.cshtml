@@ -1,0 +1,106 @@
+@model ApplicationDecisionViewModel
+@{
+    Layout = "_ApplyLayout";
+    ViewData["Title"] = "Application approved";
+    ViewData["IsDecision"] = true;
+
+    var a = Model.Account;
+    var app = Model.Application;
+    var isChecking = a.AccountType == AccountType.Checking;
+    var variant = isChecking ? CardDesigns.CssClass(a.CardDesign) : "alto-card--violet";
+    var masked = $"**** {a.Last4}";
+}
+
+<div class="apply-grid decision" id="decision" data-animate="@(Model.Animate ? "true" : "false")" data-user-key="@Model.UserKey">
+    <aside class="apply-aside">
+        @* Same tracker partial as the application, with every step complete. *@
+        <partial name="_ApplicationStepNav" model="8" />
+    </aside>
+
+    <section class="apply-main">
+        @* Phase 1 (first visit only): "Reviewing your application" — decision.js swaps to phase 2 after ~3 s. *@
+        <div class="glass reviewing" data-reviewing hidden>
+            <div class="orbit" aria-hidden="true"><span></span><span></span><span></span></div>
+            <h1 class="h3 mt-4 mb-2">Reviewing your application</h1>
+            <p class="text-muted-alto mb-0" data-review-status aria-live="polite">Checking your information…</p>
+        </div>
+
+        @* Phase 2: the decision *@
+        <div class="decision-result" data-result>
+            <div class="text-center success-head">
+                <svg class="success-check" viewBox="0 0 80 80" aria-hidden="true">
+                    <circle class="success-circle" cx="40" cy="40" r="36" />
+                    <path class="success-tick" d="M24 41 L35 52 L57 29" />
+                </svg>
+                <h1 class="mt-3 mb-2 approved-title">Approved!</h1>
+                <p class="text-muted-alto mb-0">
+                    Welcome to @(isChecking ? "Alto Checking" : "Summit Savings"), @app.FirstName.
+                    <strong class="text-light">@a.DisplayName</strong> is open and ready to use.
+                </p>
+            </div>
+
+            <div class="row g-4 align-items-center mt-2">
+                <div class="col-md-6 success-card">
+                    <div class="card-stage">
+                        <partial name="_CardArt" model='new CardArtViewModel(isChecking ? "Debit" : "Savings", variant, masked, Model.HolderName, a.Nickname)' />
+                    </div>
+                </div>
+                <div class="col-md-6 success-details">
+                    <div class="glass p-4">
+                        <dl class="detail-list mb-0">
+                            <div><dt>Account</dt><dd>@a.DisplayName</dd></div>
+                            <div><dt>Account number</dt><dd class="font-monospace">@masked</dd></div>
+                            <div><dt>Routing number</dt><dd class="font-monospace">@Model.RoutingNumber</dd></div>
+                            <div><dt>Opening balance</dt><dd class="fs-5"><money amount="@Model.OpeningBalance" class="text-gradient fw-bold" /></dd></div>
+                            @if (!string.IsNullOrEmpty(app.FundingSource))
+                            {
+                                <div><dt>Funded from</dt><dd>@app.FundingSource</dd></div>
+                            }
+                            <div><dt>Application #</dt><dd class="font-monospace">ALTO-@app.Id.ToString("D6")</dd></div>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+
+            <h2 class="sub-title mt-5">Next steps</h2>
+            <div class="row g-4">
+                <div class="col-lg-6">
+                    <div class="glass p-4 h-100 next-step">
+                        <div class="feature-icon"><i class="bi bi-building-down"></i></div>
+                        <h3 class="h5">Set up direct deposit</h3>
+                        <p class="text-muted-alto small">Give these numbers to your employer to get paid straight into this account.</p>
+                        <div class="copy-row">
+                            <div><div class="review-label">Routing number</div><div class="font-monospace">@Model.RoutingNumber</div></div>
+                            <button type="button" class="btn btn-alto-ghost btn-sm" data-copy="@Model.RoutingNumber"><i class="bi bi-clipboard me-1"></i>Copy</button>
+                        </div>
+                        <div class="copy-row">
+                            <div><div class="review-label">Account number</div><div class="font-monospace" data-acct-display>@masked</div></div>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-alto-ghost btn-sm" data-reveal="@a.AccountNumber" aria-pressed="false"><i class="bi bi-eye me-1"></i>Show</button>
+                                <button type="button" class="btn btn-alto-ghost btn-sm" data-copy="@a.AccountNumber"><i class="bi bi-clipboard me-1"></i>Copy</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <a class="glass glass-hover p-4 h-100 next-step next-link" asp-controller="Transactions" asp-action="Deposit" asp-route-accountId="@a.Id">
+                        <div class="feature-icon"><i class="bi bi-arrow-down-circle"></i></div>
+                        <h3 class="h5">Make a deposit</h3>
+                        <p class="text-muted-alto small mb-0">Add money to @a.DisplayName now.</p>
+                    </a>
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <a class="glass glass-hover p-4 h-100 next-step next-link" asp-controller="Dashboard" asp-action="Index">
+                        <div class="feature-icon"><i class="bi bi-grid-1x2"></i></div>
+                        <h3 class="h5">Go to dashboard</h3>
+                        <p class="text-muted-alto small mb-0">See all your accounts in one place.</p>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+@section Scripts {
+    <script src="~/js/decision.js" asp-append-version="true"></script>
+}

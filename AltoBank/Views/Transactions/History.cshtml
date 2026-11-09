@@ -1,0 +1,37 @@
+@model HistoryViewModel
+@{
+    ViewData["Title"] = $"{Model.Account.DisplayName} History";
+    var a = Model.Account;
+}
+
+<div class="container">
+    <div class="page-head">
+        <a asp-controller="Accounts" asp-action="Index" class="small text-decoration-none"><i class="bi bi-chevron-left"></i> Accounts</a>
+        <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mt-2">
+            <div>
+                <span class="account-type">@a.AccountType</span>
+                <h1 class="mt-2 mb-1">@a.DisplayName</h1>
+                <div class="account-digits">Account •••• @a.Last4</div>
+            </div>
+            <div class="text-lg-end">
+                <div class="text-muted-alto small text-uppercase" style="letter-spacing:.14em">Current balance</div>
+                <div class="total-balance text-gradient"><money amount="@a.Balance" /></div>
+            </div>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+            <a class="btn btn-alto-ghost btn-sm" asp-action="Deposit" asp-route-accountId="@a.Id">Deposit</a>
+            <a class="btn btn-alto-ghost btn-sm" asp-action="Withdraw" asp-route-accountId="@a.Id">Withdraw</a>
+            <a class="btn btn-alto-ghost btn-sm" asp-action="Transfer" asp-route-fromAccountId="@a.Id">Transfer</a>
+        </div>
+    </div>
+
+    @* Shared table partial, with the Type and running Balance columns turned on *@
+    <partial name="_TransactionTable" model='new TransactionTableViewModel
+    {
+        Transactions = Model.Transactions,
+        ShowType = true,
+        ShowRunningBalance = true,
+        DateFormat = "MMM d, yyyy",
+        EmptyMessage = "No transactions on this account yet."
+    }' />
+</div>

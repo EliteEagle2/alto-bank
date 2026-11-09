@@ -1,0 +1,13 @@
+@model JobOpening
+@* One open position in the Careers list. "Apply" opens the Contact form with the Careers topic selected. *@
+<div class="job-row">
+    <div>
+        <h5 class="mb-1">@Model.Title</h5>
+        <div class="text-muted-alto small">
+            <span class="me-3"><i class="bi bi-diagram-3 me-1"></i>@Model.Team</span>
+            <span class="me-3"><i class="bi bi-geo-alt me-1"></i>@Model.Location</span>
+            <span><i class="bi bi-clock me-1"></i>@Model.Type</span>
+        </div>
+    </div>
+    <a class="btn btn-alto-outline btn-sm" asp-controller="Support" asp-action="Contact" asp-route-topic="Careers">Apply</a>
+</div>

@@ -1,0 +1,91 @@
+@model AccountApplicationViewModel
+@* STEP 1 — choose Checking or Savings (+ optional nickname and debit card design). *@
+@{
+    var products = new[]
+    {
+        (Type: AccountType.Checking, Icon: "bi-wallet2", Title: "Alto Checking", Rate: "$0", RateLabel: "monthly fee",
+         Points: new[] { "No monthly fee or minimum", "Alto debit card in your design", "Unlimited instant transfers" }),
+        (Type: AccountType.Savings, Icon: "bi-piggy-bank", Title: "Summit Savings", Rate: "4.10%", RateLabel: "APY",
+         Points: new[] { "4.10% APY on every dollar", "No minimum balance", "Up to 6 withdrawals per month" }),
+    };
+    var design = CardDesigns.All.Contains(Model.CardDesign) ? Model.CardDesign : CardDesigns.Aurora;
+}
+<section class="step-pane" data-step="1" aria-labelledby="s1-title">
+    <p class="step-kicker">Step 1 of 7</p>
+    <h1 class="step-title" id="s1-title">Let's find the right account for you</h1>
+    <p class="step-lead">Pick one to start. You can always open another later.</p>
+
+    <div class="field" data-field="AccountType">
+        <div class="row g-3" role="radiogroup" aria-labelledby="s1-title">
+            @foreach (var p in products)
+            {
+                <div class="col-md-6">
+                    <label class="choice-card">
+                        <input type="radio" name="AccountType" value="@p.Type" class="visually-hidden" checked="@(Model.AccountType == p.Type)" />
+                        <span class="choice-check" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
+                        <span class="d-flex align-items-center gap-3 mb-3">
+                            <span class="feature-icon mb-0"><i class="bi @p.Icon"></i></span>
+                            <span>
+                                <span class="choice-title d-block">@p.Title</span>
+                                <span class="choice-rate"><strong>@p.Rate</strong> @p.RateLabel</span>
+                            </span>
+                        </span>
+                        <ul class="check-list mb-0">
+                            @foreach (var point in p.Points) { <li>@point</li> }
+                        </ul>
+                    </label>
+                </div>
+            }
+        </div>
+        <div class="field-msg" data-msg="AccountType"><span asp-validation-for="AccountType"></span></div>
+    </div>
+
+    @* Bootstrap "collapse" toggles the comparison table open and closed. *@
+    <button class="btn btn-link compare-toggle px-0" type="button" data-bs-toggle="collapse" data-bs-target="#compareAccounts" aria-expanded="false" aria-controls="compareAccounts">
+        <i class="bi bi-layout-split me-1"></i>Compare accounts
+    </button>
+    <div class="collapse" id="compareAccounts">
+        <div class="table-responsive review-card mt-2">
+            <table class="table alto-table compare-table mb-0">
+                <thead><tr><th></th><th>Alto Checking</th><th>Summit Savings</th></tr></thead>
+                <tbody>
+                    <tr><td class="text-muted-alto">Monthly fee</td><td>$0</td><td>$0</td></tr>
+                    <tr><td class="text-muted-alto">Interest</td><td>None</td><td>4.10% APY</td></tr>
+                    <tr><td class="text-muted-alto">Minimum balance</td><td>$0</td><td>$0</td></tr>
+                    <tr><td class="text-muted-alto">Debit card</td><td><i class="bi bi-check-lg text-success-alto"></i> Included</td><td>—</td></tr>
+                    <tr><td class="text-muted-alto">Withdrawals</td><td>Unlimited</td><td>6 per month</td></tr>
+                    <tr><td class="text-muted-alto">Best for</td><td>Everyday spending</td><td>Growing your savings</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-1">
+        <div class="col-md-6">
+            <div class="field" data-field="Nickname">
+                <label asp-for="Nickname" class="form-label">Account nickname <span class="opt">(optional)</span></label>
+                <input asp-for="Nickname" class="form-control" maxlength="30" placeholder="e.g. Rainy Day Fund" autocomplete="off" />
+                <div class="d-flex">
+                    <div class="field-msg" data-msg="Nickname"><span asp-validation-for="Nickname"></span></div>
+                    <small class="text-muted-alto ms-auto mt-1"><span data-count-for="Nickname">0</span>/30</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6" data-show-when="AccountType=Checking">
+            <div class="field" data-field="CardDesign">
+                <span class="form-label d-block" id="design-label">Debit card design</span>
+                <div class="swatches" role="radiogroup" aria-labelledby="design-label">
+                    @foreach (var d in CardDesigns.All)
+                    {
+                        <label class="swatch">
+                            <input type="radio" name="CardDesign" value="@d" class="visually-hidden" checked="@(d == design)" />
+                            <span class="swatch-dot swatch-dot--@d" aria-hidden="true"></span>
+                            <span class="swatch-name">@CardDesigns.DisplayName(d)</span>
+                        </label>
+                    }
+                </div>
+                <div class="field-msg" data-msg="CardDesign"><span asp-validation-for="CardDesign"></span></div>
+            </div>
+        </div>
+    </div>
+</section>

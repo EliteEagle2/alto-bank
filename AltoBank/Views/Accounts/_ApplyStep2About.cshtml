@@ -1,0 +1,73 @@
+@model AccountApplicationViewModel
+@* STEP 2 — name, date of birth (3 boxes with auto-advance), citizenship. *@
+@{
+    var citizenship = (Dictionary<string, string>)ViewBag.Citizenship;
+}
+<section class="step-pane" data-step="2" aria-labelledby="s2-title">
+    <p class="step-kicker">Step 2 of 7</p>
+    <h1 class="step-title" id="s2-title">Let's get to know you</h1>
+    <p class="step-lead">Use your full legal name as it appears on your government ID.</p>
+
+    <div class="row g-3">
+        <div class="col-sm-5">
+            <div class="field" data-field="FirstName">
+                <label asp-for="FirstName" class="form-label"></label>
+                <input asp-for="FirstName" class="form-control" autocomplete="given-name" maxlength="50" />
+                <div class="field-msg" data-msg="FirstName"><span asp-validation-for="FirstName"></span></div>
+            </div>
+        </div>
+        <div class="col-4 col-sm-2">
+            <div class="field" data-field="MiddleInitial">
+                <label asp-for="MiddleInitial" class="form-label">M.I. <span class="opt">(opt.)</span></label>
+                <input asp-for="MiddleInitial" class="form-control text-uppercase" maxlength="1" autocomplete="additional-name" />
+                <div class="field-msg" data-msg="MiddleInitial"><span asp-validation-for="MiddleInitial"></span></div>
+            </div>
+        </div>
+        <div class="col-8 col-sm-5">
+            <div class="field" data-field="LastName">
+                <label asp-for="LastName" class="form-label"></label>
+                <input asp-for="LastName" class="form-control" autocomplete="family-name" maxlength="50" />
+                <div class="field-msg" data-msg="LastName"><span asp-validation-for="LastName"></span></div>
+            </div>
+        </div>
+    </div>
+
+    @* Date of birth: three boxes. apply.js jumps to the next box automatically. *@
+    <div class="field mt-3" data-field="Dob">
+        <span class="form-label d-block" id="dob-label">Date of birth</span>
+        <div class="dob-group" role="group" aria-labelledby="dob-label">
+            <input asp-for="DobMonth" type="text" class="form-control dob-mm" inputmode="numeric" maxlength="2" placeholder="MM" autocomplete="bday-month" aria-label="Birth month (MM)" />
+            <span class="dob-sep">/</span>
+            <input asp-for="DobDay" type="text" class="form-control dob-dd" inputmode="numeric" maxlength="2" placeholder="DD" autocomplete="bday-day" aria-label="Birth day (DD)" />
+            <span class="dob-sep">/</span>
+            <input asp-for="DobYear" type="text" class="form-control dob-yyyy" inputmode="numeric" maxlength="4" placeholder="YYYY" autocomplete="bday-year" aria-label="Birth year (YYYY)" />
+        </div>
+        <div class="field-msg" data-msg="Dob">
+            <span asp-validation-for="DobMonth"></span><span asp-validation-for="DobDay"></span>
+            <span asp-validation-for="DobYear"></span><span asp-validation-for="DateOfBirth"></span>
+        </div>
+    </div>
+
+    <div class="field mt-3" data-field="Citizenship">
+        <span class="form-label d-block" id="cit-label">Citizenship</span>
+        <div class="pill-options" role="radiogroup" aria-labelledby="cit-label">
+            @foreach (var c in citizenship)
+            {
+                <label class="pill-option">
+                    <input type="radio" name="Citizenship" value="@c.Key" checked="@(Model.Citizenship == c.Key)" />
+                    <span>@c.Value</span>
+                </label>
+            }
+        </div>
+        <div class="field-msg" data-msg="Citizenship"><span asp-validation-for="Citizenship"></span></div>
+    </div>
+
+    <div class="notice notice-info mt-2" data-show-when="Citizenship=Other">
+        <i class="bi bi-globe-americas"></i>
+        <div>
+            <strong>Thanks for your interest in Alto.</strong>
+            Right now this demo can only open accounts for U.S. citizens and permanent residents.
+            We hope to welcome you in the future.
+        </div>
+    </div>
+</section>

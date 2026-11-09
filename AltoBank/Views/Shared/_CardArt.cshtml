@@ -1,0 +1,25 @@
+@model CardArtViewModel
+@* A credit card drawn with HTML + CSS (see .alto-card in site.css).
+   Variant adds a color/animation class, e.g. "alto-card--violet static". *@
+<div class="alto-card @Model.Variant" aria-hidden="true">
+    <div class="card-top">
+        <div>
+            <span class="card-brand">ALTO</span>
+            <span class="card-tier">@Model.Tier</span>
+        </div>
+        <i class="bi bi-wifi fs-4" style="transform: rotate(90deg)"></i>
+    </div>
+    <div class="chip-row">
+        <div class="chip"></div>
+        <div class="card-nickname" data-card-nickname>@Model.Nickname</div>
+    </div>
+    <div class="card-number">@Model.Number</div>
+    <div class="card-bottom">
+        <div><small>Card holder</small>@Model.Holder</div>
+        <div><small>Valid thru</small>09/30</div>
+        <svg class="peak-mark" viewBox="0 0 36 32">
+            <path d="M3 28 L18 4 L33 28" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M12 28 L18 18.5 L24 28" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" opacity=".6" />
+        </svg>
+    </div>
+</div>

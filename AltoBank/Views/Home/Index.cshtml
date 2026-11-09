@@ -1,0 +1,100 @@
+﻿@{
+    ViewData["Title"] = "Banking, elevated";
+
+    // Data for the product tiles; the anchor ids are what the nav's Checking/Savings links jump to.
+    var tiles = new List<FeatureTileViewModel>
+    {
+        new("checking", "bi-wallet2", "Checking",
+            "Everyday spending with no monthly fees, no minimum balance, and instant alerts.",
+            "Explore checking", "Products", "Checking"),
+        new("savings", "bi-piggy-bank", "Savings",
+            "Summit Savings earns a high yield, and you can move money to checking at any time.",
+            "Explore savings", "Products", "Savings"),
+        new("credit-cards", "bi-credit-card-2-front", "Credit Cards",
+            "The Alto Peak card: flat cash back on every purchase and no annual fee.",
+            "Compare cards", "Products", "CreditCards"),
+        new("loans", "bi-graph-up-arrow", "Loans",
+            "Personal and auto loans with transparent rates and decisions in minutes.",
+            "Estimate a payment", "Products", "Loans"),
+    };
+}
+
+@* ===== Hero ===== *@
+<section class="hero">
+    <div class="container position-relative">
+        <div class="row align-items-center g-5">
+            <div class="col-lg-6">
+                <span class="eyebrow-pill mb-4"><i class="bi bi-stars"></i> New: 4.10% APY Summit Savings</span>
+                <p class="tagline mb-3">Banking, elevated.</p>
+                <h1 class="mb-4">Your money, <span class="text-gradient">at altitude.</span></h1>
+                <p class="lead text-muted-alto mb-4">
+                    No monthly fees. Instant transfers between your accounts. A dashboard that shows
+                    exactly where you stand — all in one place.
+                </p>
+                <div class="d-flex flex-wrap gap-3 mb-5">
+                    <a class="btn btn-alto btn-lg" asp-controller="Auth" asp-action="Register">Open an account <i class="bi bi-arrow-right ms-1"></i></a>
+                    <a class="btn btn-alto-ghost btn-lg" asp-controller="Auth" asp-action="Login">Log in</a>
+                </div>
+                <div class="row hero-stats g-3">
+                    <div class="col-4"><div class="stat-value">$0</div><div class="stat-label">Monthly fees</div></div>
+                    <div class="col-4"><div class="stat-value">4.10%</div><div class="stat-label">Savings APY</div></div>
+                    <div class="col-4"><div class="stat-value">24/7</div><div class="stat-label">Support</div></div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <partial name="_HeroCard" />
+            </div>
+        </div>
+    </div>
+</section>
+
+@* ===== Feature tiles (ids are the targets of the nav links) ===== *@
+<section class="section">
+    <div class="container">
+        <div class="text-center mb-5">
+            <p class="tagline text-uppercase small" style="letter-spacing:.3em;color:var(--primary)">Products</p>
+            <h2 class="section-title">Everything you need to climb higher</h2>
+        </div>
+        <div class="row g-4">
+            @* Each tile is rendered by the _FeatureTile partial *@
+            @foreach (var tile in tiles)
+            {
+                <partial name="_FeatureTile" model="tile" />
+            }
+        </div>
+    </div>
+</section>
+
+@* ===== Why Alto ===== *@
+<section class="section pt-0">
+    <div class="container">
+        <div class="row g-4 align-items-stretch">
+            <div class="col-md-4">
+                <div class="glass p-4 h-100">
+                    <i class="bi bi-shield-lock fs-2 text-gradient"></i>
+                    <h5 class="mt-3">Bank-grade security</h5>
+                    <p class="text-muted-alto mb-0">Hashed passwords, protected sessions, and account lockout keep your money yours.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="glass p-4 h-100">
+                    <i class="bi bi-lightning-charge fs-2 text-gradient"></i>
+                    <h5 class="mt-3">Instant transfers</h5>
+                    <p class="text-muted-alto mb-0">Move money between checking and savings in seconds, any time of day.</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="glass p-4 h-100">
+                    <i class="bi bi-activity fs-2 text-gradient"></i>
+                    <h5 class="mt-3">Real-time history</h5>
+                    <p class="text-muted-alto mb-0">Every transaction shows up right away, with your running balance next to it.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-5">
+            <partial name="_CtaBand" model='new CtaViewModel("Ready to rise?", "Opening an account takes about two minutes.", "Open your Alto account", "Auth", "Register")' />
+        </div>
+    </div>
+</section>

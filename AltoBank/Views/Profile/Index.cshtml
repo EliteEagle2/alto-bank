@@ -1,0 +1,87 @@
+@model ProfileViewModel
+@{
+    ViewData["Title"] = "Profile";
+}
+
+<div class="container py-5">
+    <div class="glass form-card">
+        <div class="d-flex align-items-center gap-3 mb-4">
+            <span class="avatar-sm" style="width:56px;height:56px;font-size:1.4rem">@(Model.FirstName.FirstOrDefault())</span>
+            <div>
+                <h2 class="mb-0">@Model.FirstName @Model.LastName</h2>
+                <div class="text-muted-alto">@Model.Email</div>
+            </div>
+        </div>
+
+        <form asp-action="Index" method="post">
+            <div asp-validation-summary="ModelOnly" class="mb-3"></div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-sm-6">
+                    <label asp-for="FirstName" class="form-label"></label>
+                    <input asp-for="FirstName" class="form-control" />
+                    <span asp-validation-for="FirstName" class="field-validation-error"></span>
+                </div>
+                <div class="col-sm-6">
+                    <label asp-for="LastName" class="form-label"></label>
+                    <input asp-for="LastName" class="form-control" />
+                    <span asp-validation-for="LastName" class="field-validation-error"></span>
+                </div>
+            </div>
+            <div class="mb-4">
+                <label asp-for="Email" class="form-label"></label>
+                <input asp-for="Email" class="form-control" />
+                <div class="form-text text-muted-alto">Your email is also your login.</div>
+                <span asp-validation-for="Email" class="field-validation-error"></span>
+            </div>
+            <button type="submit" class="btn btn-alto">Save changes</button>
+        </form>
+    </div>
+
+    @* ----- Past account applications ----- *@
+    <div class="form-card px-0 mt-5" id="applications">
+        <div class="d-flex justify-content-between align-items-end mb-3">
+            <h2 class="h4 mb-0">Applications</h2>
+            <a class="btn btn-alto-ghost btn-sm" asp-controller="Accounts" asp-action="Apply"><i class="bi bi-plus-lg me-1"></i>New application</a>
+        </div>
+        <div class="glass overflow-hidden">
+            @if (!Model.Applications.Any())
+            {
+                <partial name="_EmptyState" model='new EmptyStateViewModel("bi-file-earmark-text", "No applications yet.", "Open an account", "Accounts", "Apply")' />
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table alto-table table-hover">
+                        <thead>
+                            <tr><th>Submitted</th><th>Account</th><th class="d-none d-sm-table-cell">Opening deposit</th><th>Status</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var app in Model.Applications)
+                            {
+                                <tr>
+                                    <td class="text-muted-alto text-nowrap">@DateTime.SpecifyKind(app.SubmittedAt, DateTimeKind.Utc).ToLocalTime().ToString("MMM d, yyyy")</td>
+                                    <td>
+                                        @(app.AccountType == AccountType.Checking ? "Alto Checking" : "Summit Savings")
+                                        @if (app.Account != null)
+                                        {
+                                            <a class="small d-block" asp-controller="Transactions" asp-action="History" asp-route-id="@app.Account.Id">@app.Account.DisplayName ••@app.Account.Last4</a>
+                                        }
+                                    </td>
+                                    <td class="d-none d-sm-table-cell"><money amount="@app.OpeningDeposit" /></td>
+                                    <td>
+                                        <span class="type-badge @(app.Status == ApplicationStatus.Approved ? "credit" : "debit")">
+                                            <i class="bi @(app.Status == ApplicationStatus.Approved ? "bi-check-circle" : "bi-x-circle") me-1"></i>@app.Status
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts { <partial name="_ValidationScriptsPartial" /> }

@@ -1,0 +1,57 @@
+@{
+    ViewData["Title"] = "Security";
+
+    // These describe how THIS app actually protects accounts (see Program.cs and the controllers).
+    var protections = new List<BenefitViewModel>
+    {
+        new("bi-key", "Hashed passwords", "Passwords are salted and hashed by ASP.NET Core Identity. Nobody, including us, can read them."),
+        new("bi-lock", "Account lockout", "Five failed sign-in attempts in a row temporarily lock the account to stop password guessing."),
+        new("bi-person-badge", "Ownership checks", "Every account request checks that the account belongs to you, so others can't view or move your money."),
+        new("bi-shield-check", "Forgery protection", "Every form includes an anti-forgery token, which blocks cross-site request forgery attacks."),
+        new("bi-arrow-repeat", "All-or-nothing transfers", "Transfers run inside a database transaction, so money is never lost halfway through."),
+        new("bi-globe2", "Encrypted connections", "Traffic is redirected to HTTPS so your data is encrypted in transit."),
+    };
+
+    var tips = new[]
+    {
+        "Use a unique password for Alto that you don't use anywhere else.",
+        "Alto will never call, text, or email to ask for your password.",
+        "Log out when you're using a shared or public computer.",
+        "Check your transaction history regularly and report anything you don't recognize.",
+        "Be careful with links in unexpected emails. Type the Alto address in yourself.",
+    };
+}
+
+<partial name="_PageHero" model='new PageHeroViewModel("Security", "Your money, locked down.",
+    "Security is built into every layer of Alto, from how we store passwords to how we move money.")' />
+
+<div class="container">
+    <h2 class="section-title mb-4">How we protect you</h2>
+    <div class="row g-4">
+        @foreach (var p in protections)
+        {
+            <div class="col-md-6 col-lg-4"><partial name="_BenefitCard" model="p" /></div>
+        }
+    </div>
+
+    <section class="section">
+        <div class="row g-4">
+            <div class="col-lg-7">
+                <div class="glass p-4 p-lg-5 h-100">
+                    <h2 class="h3 mb-3">How to protect yourself</h2>
+                    <ul class="check-list mb-0">
+                        @foreach (var tip in tips) { <li>@tip</li> }
+                    </ul>
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="glass p-4 p-lg-5 h-100 report-box">
+                    <i class="bi bi-exclamation-triangle fs-1 text-danger-alto"></i>
+                    <h2 class="h3 mt-3">Report fraud</h2>
+                    <p class="text-muted-alto">See something suspicious on your account? Tell us right away and we'll help secure it.</p>
+                    <a class="btn btn-alto" asp-action="Contact" asp-route-topic="Report fraud">Report an issue</a>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>

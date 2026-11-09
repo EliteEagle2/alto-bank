@@ -1,0 +1,78 @@
+@{
+    ViewData["Title"] = "About Alto";
+
+    var stats = new List<StatViewModel>
+    {
+        new("2024", "Founded"),
+        new("Denver", "Headquarters"),
+        new("120+", "Team members"),
+        new("$0", "Monthly fees, always"),
+    };
+
+    var values = new List<BenefitViewModel>
+    {
+        new("bi-eye", "Radical clarity", "Every fee, rate, and rule is written in plain language. If we can't explain it simply, we don't do it."),
+        new("bi-speedometer2", "Speed is a feature", "Money should move as fast as a message. We build for instant, not \"3–5 business days\"."),
+        new("bi-shield-lock", "Security first", "We protect customer data like it's our own, because it's the foundation of everything else."),
+        new("bi-people", "People over products", "Real support, real humans, and products that work for customers rather than against them."),
+    };
+
+    // (year, milestone) for the timeline
+    var timeline = new[]
+    {
+        ("2024", "Alto Bank is founded in Denver with a team of eight and one goal: banking that feels modern."),
+        ("2025", "Alto Checking and Summit Savings launch with no monthly fees and no minimums."),
+        ("2026", "Instant 24/7 transfers go live, Summit Savings rises to 4.10% APY, and the Alto Peak card waitlist opens."),
+    };
+}
+
+<partial name="_PageHero" model='new PageHeroViewModel("About Alto", "Banking, elevated.",
+    "We started Alto because banking should feel as fast, clear, and well-designed as everything else on your phone.")' />
+
+<div class="container">
+    <partial name="_StatStrip" model="stats" />
+
+    <section class="section">
+        <div class="row g-5 align-items-center">
+            <div class="col-lg-6">
+                <p class="eyebrow mb-2">Our mission</p>
+                <h2 class="section-title mb-3">Help everyone reach a higher financial altitude.</h2>
+            </div>
+            <div class="col-lg-6">
+                <p class="text-muted-alto">
+                    Traditional banks were built for branches and paper statements. Alto is built for the way people actually live:
+                    instantly, on any screen, at any hour.
+                </p>
+                <p class="text-muted-alto mb-0">
+                    We keep things simple: no monthly fees, no overdraft fees, a great savings rate, and a dashboard that shows
+                    exactly where you stand. That's it. That's the bank.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <section class="section pt-0">
+        <h2 class="section-title mb-4">What we value</h2>
+        <div class="row g-4">
+            @foreach (var v in values)
+            {
+                <div class="col-md-6 col-lg-3"><partial name="_BenefitCard" model="v" /></div>
+            }
+        </div>
+    </section>
+
+    <section class="section pt-0">
+        <h2 class="section-title mb-4">Our journey</h2>
+        <div class="timeline">
+            @foreach (var (year, text) in timeline)
+            {
+                <div class="timeline-item">
+                    <div class="timeline-year text-gradient">@year</div>
+                    <p class="text-muted-alto mb-0">@text</p>
+                </div>
+            }
+        </div>
+    </section>
+
+    <partial name="_CtaBand" model='new CtaViewModel("Want to build the future of banking?", "We are hiring across engineering, design, risk, and support.", "See open roles", "Company", "Careers")' />
+</div>

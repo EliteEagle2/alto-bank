@@ -1,0 +1,12 @@
+@* Compact footer for online banking (the public site has the big multi-column footer instead). *@
+<footer class="app-footer">
+    <div>&copy; @DateTime.Now.Year Alto Bank · Online Banking</div>
+    <nav class="d-flex flex-wrap gap-3">
+        <a asp-controller="Support" asp-action="Help">Help</a>
+        <a asp-controller="Support" asp-action="Contact">Contact</a>
+        <a asp-controller="Support" asp-action="Security">Security</a>
+        <a asp-controller="Legal" asp-action="Privacy">Privacy</a>
+        <a asp-controller="Legal" asp-action="Terms">Terms</a>
+    </nav>
+    <div class="w-100 app-disclaimer">Demo application for an academic project. Not a real bank; no real money; not FDIC insured.</div>
+</footer>

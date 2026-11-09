@@ -1,0 +1,67 @@
+@model AccountApplicationViewModel
+@using System.Globalization
+@* STEP 6 — optional opening deposit from an Alto account (a real transfer) or an external bank (simulated).
+   data-balance lets apply.js warn about overdrafts; the server checks again on submit. *@
+<section class="step-pane" data-step="6" aria-labelledby="s6-title">
+    <p class="step-kicker">Step 6 of 7</p>
+    <h1 class="step-title" id="s6-title">Fund your new account</h1>
+    <p class="step-lead">There's no minimum. Add money now or skip this and fund it later.</p>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="field" data-field="InitialDeposit">
+                <label asp-for="InitialDeposit" class="form-label">Opening deposit <span class="opt">(optional)</span></label>
+                <div class="input-group input-group-lg">
+                    <span class="input-group-text">$</span>
+                    <input asp-for="InitialDeposit" type="text" class="form-control" inputmode="decimal" placeholder="0.00" autocomplete="off" />
+                </div>
+                <div class="chip-row-amounts js-only mt-2" aria-label="Quick amounts">
+                    @foreach (var amt in new[] { 25, 100, 500 })
+                    {
+                        <button type="button" class="amount-chip" data-amount="@amt">$@amt</button>
+                    }
+                    <button type="button" class="amount-chip" data-amount="custom">Custom</button>
+                </div>
+                <div class="field-msg" data-msg="InitialDeposit"><span asp-validation-for="InitialDeposit"></span></div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="field" data-field="FundingAccountId">
+                <label asp-for="FundingAccountId" class="form-label">Transfer from</label>
+                <select asp-for="FundingAccountId" class="form-select form-select-lg">
+                    @foreach (var a in Model.FundingAccounts)
+                    {
+                        <option value="@a.Id" data-balance="@a.Balance.ToString(CultureInfo.InvariantCulture)" data-name="@a.DisplayName ••@a.Last4">
+                            @a.DisplayName ••@a.Last4 (@a.Balance.ToString("C") available)
+                        </option>
+                    }
+                    <option value="" selected="@(Model.FundingAccountId == null)">External bank (simulated)</option>
+                </select>
+                <div class="form-text text-muted-alto" data-source-hint></div>
+                <div class="field-msg" data-msg="FundingAccountId"><span asp-validation-for="FundingAccountId"></span></div>
+            </div>
+
+            @* External bank details: only shown when "External bank" is chosen and there's a deposit. *@
+            <div class="row g-3 mt-0" data-show-when="FundingAccountId=&DepositPositive=true">
+                <div class="col-8">
+                    <div class="field" data-field="ExternalBankName">
+                        <label asp-for="ExternalBankName" class="form-label"></label>
+                        <input asp-for="ExternalBankName" class="form-control" maxlength="60" placeholder="e.g. First Keystone Bank" />
+                        <div class="field-msg" data-msg="ExternalBankName"><span asp-validation-for="ExternalBankName"></span></div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="field" data-field="ExternalLast4">
+                        <label asp-for="ExternalLast4" class="form-label">Last 4</label>
+                        <input asp-for="ExternalLast4" class="form-control" inputmode="numeric" maxlength="4" placeholder="1234" autocomplete="off" />
+                        <div class="field-msg" data-msg="ExternalLast4"><span asp-validation-for="ExternalLast4"></span></div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="form-text text-muted-alto mt-0"><i class="bi bi-info-circle me-1"></i>Simulated: no real bank is contacted.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

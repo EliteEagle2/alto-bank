@@ -1,0 +1,57 @@
+@* Sticky top navigation. Shows Log In / Open Account when signed out,
+   and Dashboard + a user menu when signed in. Rendered from _Layout. *@
+@inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@{
+    var controller = ViewContext.RouteData.Values["controller"]?.ToString();
+    var action = ViewContext.RouteData.Values["action"]?.ToString();
+    // Highlights the nav link for the product page you're on.
+    string Active(string a) => controller == "Products" && action == a ? "active" : "";
+}
+<nav class="navbar navbar-expand-lg sticky-top alto-nav">
+    <div class="container">
+        <a class="navbar-brand" asp-controller="Home" asp-action="Index"><partial name="_Logo" /></a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav"
+                aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-list fs-2 text-light"></i>
+        </button>
+
+        <div class="collapse navbar-collapse" id="mainNav">
+            <ul class="navbar-nav mx-lg-auto">
+                <li class="nav-item"><a class="nav-link @Active("Checking")" asp-controller="Products" asp-action="Checking">Checking</a></li>
+                <li class="nav-item"><a class="nav-link @Active("Savings")" asp-controller="Products" asp-action="Savings">Savings</a></li>
+                <li class="nav-item"><a class="nav-link @Active("CreditCards")" asp-controller="Products" asp-action="CreditCards">Credit Cards</a></li>
+                <li class="nav-item"><a class="nav-link @Active("Loans")" asp-controller="Products" asp-action="Loans">Loans</a></li>
+            </ul>
+
+            <div class="d-flex flex-column flex-lg-row gap-2 py-3 py-lg-0">
+                @if (SignInManager.IsSignedIn(User))
+                {
+                    var me = await UserManager.GetUserAsync(User);
+                    <a class="btn btn-alto-ghost @(controller == "Dashboard" ? "active" : "")" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-grid-1x2 me-1"></i>Dashboard</a>
+                    <div class="dropdown">
+                        <button class="btn btn-alto-ghost dropdown-toggle w-100" data-bs-toggle="dropdown" aria-expanded="false">
+                            <span class="avatar-sm me-1">@(me?.FirstName.FirstOrDefault())</span>@me?.FirstName
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end alto-dropdown">
+                            <li><a class="dropdown-item" asp-controller="Accounts" asp-action="Index"><i class="bi bi-wallet2 me-2"></i>Accounts</a></li>
+                            <li><a class="dropdown-item" asp-controller="Transactions" asp-action="Transfer"><i class="bi bi-arrow-left-right me-2"></i>Transfer</a></li>
+                            <li><a class="dropdown-item" asp-controller="Profile" asp-action="Index"><i class="bi bi-person me-2"></i>Profile</a></li>
+                            <li><hr class="dropdown-divider" /></li>
+                            <li>
+                                <form asp-controller="Auth" asp-action="Logout" method="post">
+                                    <button type="submit" class="dropdown-item text-danger-alto"><i class="bi bi-box-arrow-right me-2"></i>Log out</button>
+                                </form>
+                            </li>
+                        </ul>
+                    </div>
+                }
+                else
+                {
+                    <a class="btn btn-alto-ghost" asp-controller="Auth" asp-action="Login">Log In</a>
+                    <a class="btn btn-alto" asp-controller="Auth" asp-action="Register">Open Account</a>
+                }
+            </div>
+        </div>
+    </div>
+</nav>

@@ -1,0 +1,22 @@
+@model AccountApplicationViewModel
+@* RETURNING CUSTOMERS — replaces steps 2 and 3 with a quick "Is this still correct?" check.
+   The details below are filled in by apply.js from the (prefilled) form fields. *@
+<section class="step-pane" data-step="confirm" aria-labelledby="sc-title">
+    <p class="step-kicker">Steps 2–3 of 7</p>
+    <h1 class="step-title" id="sc-title">Welcome back, @Model.FirstName. Is this still correct?</h1>
+    <p class="step-lead">We filled this in from your last application to save you time.</p>
+
+    <div class="review-card confirm-card">
+        <div class="review-row"><div><div class="review-label">Name</div><div class="review-value" data-confirm="name"></div></div></div>
+        <div class="review-row"><div><div class="review-label">Date of birth</div><div class="review-value" data-confirm="dob"></div></div></div>
+        <div class="review-row"><div><div class="review-label">Citizenship</div><div class="review-value" data-confirm="citizenship"></div></div></div>
+        <div class="review-row"><div><div class="review-label">Email</div><div class="review-value" data-confirm="email"></div></div></div>
+        <div class="review-row"><div><div class="review-label">Mobile phone</div><div class="review-value" data-confirm="phone"></div></div></div>
+        <div class="review-row"><div><div class="review-label">Home address</div><div class="review-value" data-confirm="address"></div></div></div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-3 mt-4">
+        <button type="button" class="btn btn-alto" data-confirm-yes><i class="bi bi-check2-circle me-2"></i>Yes, this is correct</button>
+        <button type="button" class="btn btn-alto-ghost" data-confirm-edit><i class="bi bi-pencil me-2"></i>Update my information</button>
+    </div>
+</section>

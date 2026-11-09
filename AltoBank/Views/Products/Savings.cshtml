@@ -1,0 +1,98 @@
+@{
+    ViewData["Title"] = "Savings";
+
+    var stats = new List<StatViewModel>
+    {
+        new("4.10%", "APY*"),
+        new("$0", "Minimum balance"),
+        new("1", "Rate for everyone"),
+        new("∞", "Goal accounts"),
+    };
+
+    var benefits = new List<BenefitViewModel>
+    {
+        new("bi-graph-up", "High yield, no tiers", "Every dollar earns the same 4.10% APY. No balance thresholds to chase."),
+        new("bi-bullseye", "Save for goals", "Open as many savings accounts as you like and name each one: Emergency Fund, New Car, Trip."),
+        new("bi-arrow-left-right", "Always accessible", "Move money back to checking instantly whenever you need it."),
+    };
+}
+
+<partial name="_PageHero" model='new PageHeroViewModel("Summit Savings", "Watch your savings climb.",
+    "Earn 4.10% APY with no minimums and no tiers, and open a separate account for every goal.",
+    "Start saving", "Auth", "Register")' />
+
+<div class="container">
+    <partial name="_StatStrip" model="stats" />
+
+    <section class="section">
+        <div class="row g-4">
+            @foreach (var b in benefits)
+            {
+                <div class="col-md-4"><partial name="_BenefitCard" model="b" /></div>
+            }
+        </div>
+    </section>
+
+    @* Savings growth calculator (runs in the browser, see the script below) *@
+    <section class="section pt-0">
+        <div class="glass p-4 p-lg-5">
+            <div class="row g-5 align-items-center">
+                <div class="col-lg-6">
+                    <h2 class="section-title mb-2">Savings calculator</h2>
+                    <p class="text-muted-alto mb-4">See how your money could grow at 4.10% APY.</p>
+
+                    <label class="form-label" for="sv-start">Starting deposit</label>
+                    <div class="input-group mb-3"><span class="input-group-text">$</span>
+                        <input id="sv-start" class="form-control" type="number" min="0" step="100" value="5000" /></div>
+
+                    <label class="form-label" for="sv-monthly">Monthly contribution</label>
+                    <div class="input-group mb-3"><span class="input-group-text">$</span>
+                        <input id="sv-monthly" class="form-control" type="number" min="0" step="25" value="250" /></div>
+
+                    <label class="form-label" for="sv-years">Years: <span id="sv-years-label" class="text-light">5</span></label>
+                    <input id="sv-years" class="form-range" type="range" min="1" max="30" value="5" />
+                </div>
+                <div class="col-lg-6 text-center">
+                    <div class="text-muted-alto small text-uppercase" style="letter-spacing:.14em">Projected balance</div>
+                    <div id="sv-total" class="calc-result text-gradient">$0.00</div>
+                    <div class="row mt-3">
+                        <div class="col-6"><div class="text-muted-alto small">You contribute</div><div id="sv-contrib" class="fs-5 fw-semibold">$0</div></div>
+                        <div class="col-6"><div class="text-muted-alto small">Interest earned</div><div id="sv-interest" class="fs-5 fw-semibold text-success-alto">$0</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <p class="footnote mt-3">*Annual Percentage Yield is illustrative for this demo. Projections assume a constant rate compounded monthly and are not a guarantee. Demo accounts in this app do not accrue interest.</p>
+    </section>
+
+    <partial name="_CtaBand" model='new CtaViewModel("Your summit starts here", "Open Summit Savings in under a minute.", "Open savings", "Auth", "Register")' />
+</div>
+
+@section Scripts {
+    <script>
+        // Future value with monthly compounding: FV = P(1+i)^n + C * ((1+i)^n - 1) / i
+        (function () {
+            const apy = 0.041;
+            const i = Math.pow(1 + apy, 1 / 12) - 1;        // monthly rate equivalent to the APY
+            const fmt = v => v.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+            const $ = id => document.getElementById(id);
+
+            function update() {
+                const p = Math.max(0, parseFloat($('sv-start').value) || 0);
+                const c = Math.max(0, parseFloat($('sv-monthly').value) || 0);
+                const years = parseInt($('sv-years').value, 10);
+                const n = years * 12;
+                const growth = Math.pow(1 + i, n);
+                const total = p * growth + c * (growth - 1) / i;
+                const contributed = p + c * n;
+
+                $('sv-years-label').textContent = years;
+                $('sv-total').textContent = fmt(total);
+                $('sv-contrib').textContent = fmt(contributed);
+                $('sv-interest').textContent = fmt(total - contributed);
+            }
+            ['sv-start', 'sv-monthly', 'sv-years'].forEach(id => $(id).addEventListener('input', update));
+            update();
+        })();
+    </script>
+}

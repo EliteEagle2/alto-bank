@@ -1,0 +1,62 @@
+@model AccountApplicationViewModel
+@* STEP 4 — employment, income range, and source of funds (dropdown lists come from ViewBag). *@
+@{
+    var sources = (string[])ViewBag.FundSources;
+}
+<section class="step-pane" data-step="4" aria-labelledby="s4-title">
+    <p class="step-kicker">Step 4 of 7</p>
+    <h1 class="step-title" id="s4-title">Tell us a little about your work</h1>
+    <p class="step-lead">Banks are required to ask this to help prevent fraud and money laundering.</p>
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <div class="field" data-field="EmploymentStatus">
+                <label asp-for="EmploymentStatus" class="form-label"></label>
+                <select asp-for="EmploymentStatus" asp-items="ViewBag.EmploymentStatuses" class="form-select">
+                    <option value="">Select</option>
+                </select>
+                <div class="field-msg" data-msg="EmploymentStatus"><span asp-validation-for="EmploymentStatus"></span></div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="field" data-field="IncomeRange">
+                <label asp-for="IncomeRange" class="form-label">Annual income</label>
+                <select asp-for="IncomeRange" asp-items="ViewBag.IncomeRanges" class="form-select">
+                    <option value="">Select a range</option>
+                </select>
+                <div class="field-msg" data-msg="IncomeRange"><span asp-validation-for="IncomeRange"></span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mt-0" data-show-when="EmploymentStatus=Employed">
+        <div class="col-md-6">
+            <div class="field" data-field="Employer">
+                <label asp-for="Employer" class="form-label"></label>
+                <input asp-for="Employer" class="form-control" maxlength="80" autocomplete="organization" />
+                <div class="field-msg" data-msg="Employer"><span asp-validation-for="Employer"></span></div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="field" data-field="Occupation">
+                <label asp-for="Occupation" class="form-label"></label>
+                <input asp-for="Occupation" class="form-control" maxlength="80" autocomplete="organization-title" />
+                <div class="field-msg" data-msg="Occupation"><span asp-validation-for="Occupation"></span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="field mt-4" data-field="SourceOfFunds">
+        <span class="form-label d-block" id="sof-label">Where will the money in this account come from? <span class="opt">(choose all that apply)</span></span>
+        <div class="pill-options" role="group" aria-labelledby="sof-label">
+            @foreach (var s in sources)
+            {
+                <label class="pill-option">
+                    <input type="checkbox" name="SourceOfFunds" value="@s" checked="@Model.SourceOfFunds.Contains(s)" />
+                    <span>@s</span>
+                </label>
+            }
+        </div>
+        <div class="field-msg" data-msg="SourceOfFunds"><span asp-validation-for="SourceOfFunds"></span></div>
+    </div>
+</section>

@@ -1,0 +1,77 @@
+@model AccountApplicationViewModel
+@{
+    Layout = "_ApplyLayout";            // full-page application layout (overrides the folder's _ViewStart)
+    ViewData["Title"] = "Open an account";
+
+    // If the server rejected the application, start on the first step that has an error.
+    int StepFor(string key) => key switch
+    {
+        "AccountType" or "Nickname" or "CardDesign" => 1,
+        "FirstName" or "MiddleInitial" or "LastName" or "DobMonth" or "DobDay" or "DobYear" or "DateOfBirth" or "Citizenship" => 2,
+        "Phone" or "Street" or "Apt" or "City" or "State" or "Zip" or "LivedTwoYears"
+            or "PrevStreet" or "PrevCity" or "PrevState" or "PrevZip" => 3,
+        "EmploymentStatus" or "Employer" or "Occupation" or "IncomeRange" or "SourceOfFunds" => 4,
+        "IdentityToken" or "QuizStreet" or "QuizZip" => 5,
+        "AgreeAccountAgreement" or "AgreePrivacy" or "AgreeESign" or "ESignName" => 7,
+        _ => 6 // deposit / funding fields and service errors like "Insufficient funds"
+    };
+    var hasErrors = !ViewData.ModelState.IsValid;
+    var startStep = hasErrors
+        ? ViewData.ModelState.Where(kv => kv.Value!.Errors.Count > 0).Select(kv => StepFor(kv.Key)).DefaultIfEmpty(1).Min()
+        : 1;
+}
+
+@* The whole application is ONE form posted once at the end. apply.js shows one step at a time,
+   validates as you type, and saves progress to sessionStorage. Without JavaScript every step
+   is shown in order and the form still works (the server validates everything). *@
+<form asp-action="Apply" method="post" id="applyForm" class="apply" novalidate
+      data-start-step="@startStep"
+      data-has-errors="@(hasErrors ? "true" : "false")"
+      data-returning="@(Model.IsReturning ? "true" : "false")"
+      data-user-key="@Model.UserKey"
+      data-verify-url="@Url.Action("VerifyIdentity")">
+    <div class="apply-grid">
+        <aside class="apply-aside">
+            <partial name="_ApplicationStepNav" model="startStep" />
+        </aside>
+
+        <section class="apply-main">
+            @if (hasErrors)
+            {
+                <div class="apply-errors mb-3" role="alert">
+                    <i class="bi bi-exclamation-octagon me-2"></i>Please review the highlighted answers below.
+                    <div asp-validation-summary="ModelOnly" class="mt-1"></div>
+                </div>
+            }
+
+            <div class="glass apply-card">
+                <partial name="_ApplyStep1Account" model="Model" />
+                @if (Model.IsReturning)
+                {
+                    <partial name="_ApplyConfirmProfile" model="Model" />
+                }
+                <partial name="_ApplyStep2About" model="Model" />
+                <partial name="_ApplyStep3Contact" model="Model" />
+                <partial name="_ApplyStep4Employment" model="Model" />
+                <partial name="_ApplyStep5Identity" model="Model" />
+                <partial name="_ApplyStep6Fund" model="Model" />
+                <partial name="_ApplyStep7Review" model="Model" />
+
+                <div class="apply-nav">
+                    <button type="button" class="btn btn-alto-ghost js-only" data-back><i class="bi bi-chevron-left me-1"></i>Back</button>
+                    <button type="button" class="btn btn-alto ms-auto js-only" data-next>Continue<i class="bi bi-chevron-right ms-1"></i></button>
+                    <button type="submit" class="btn btn-alto ms-auto" data-submit>
+                        <span class="spinner-border spinner-border-sm me-2 d-none" role="status" aria-hidden="true" data-spinner></span>
+                        <span data-submit-label>Submit application</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+    </div>
+</form>
+
+<partial name="_ApplyDisclosures" />
+
+@section Scripts {
+    <script src="~/js/apply.js" asp-append-version="true"></script>
+}
