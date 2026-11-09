@@ -99,12 +99,16 @@ public static class SeedData
         await EnsureReviewDemoDataAsync(db, userManager);
     }
 
-    /// <summary>Every open checking account has a usable virtual debit card (also backfills older databases).</summary>
+    /// <summary>
+    /// Backfill for older databases: an open checking account that has NEVER had a card gets one.
+    /// Accounts whose cards were all cancelled are left alone; the customer requests a new card themselves
+    /// (otherwise a restart would quietly issue a second card next to the one they request).
+    /// </summary>
     private static async Task EnsureDebitCardsAsync(ApplicationDbContext db, AltoBank.Services.ICardService cards)
     {
         var needCard = await db.Accounts.Include(a => a.User)
             .Where(a => a.AccountType == AccountType.Checking && a.Status != AccountStatus.Closed
-                        && !a.Cards.Any(c => c.Status != CardStatus.Cancelled))
+                        && !a.Cards.Any())
             .ToListAsync();
         foreach (var account in needCard)
         {

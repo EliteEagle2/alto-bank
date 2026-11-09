@@ -486,7 +486,7 @@ public class AdminService : IAdminService
             var before = AccountSnapshot(account);
             account.Balance += isCredit ? amount : -amount;
             var tx = AddTransaction(account, isCredit ? TransactionType.AdjustmentCredit : TransactionType.AdjustmentDebit,
-                                    amount, "Admin adjustment", memo: reason);
+                                    amount, "Admin adjustment", memo: CustomerMemo);
             await _db.SaveChangesAsync();
             _audit.Add("Account.Adjust", $"{(isCredit ? "Credited" : "Debited")} {amount:C} {(isCredit ? "to" : "from")} ••{account.Last4}",
                        "Account", account.Id.ToString(), before, new { balance = account.Balance, transactionId = tx.Id }, reason);
@@ -604,7 +604,7 @@ public class AdminService : IAdminService
                     return Fail($"Can't reverse: ••{account.Last4} only has {account.Balance:C}, and overdrafts aren't allowed.");
                 account.Balance += undoCredit ? -leg.Amount : leg.Amount;
                 var rev = AddTransaction(account, undoCredit ? TransactionType.ReversalDebit : TransactionType.ReversalCredit,
-                                         leg.Amount, $"Reversal: {leg.Description}", memo: reason, counterpartyId: leg.CounterpartyAccountId);
+                                         leg.Amount, $"Reversal: {leg.Description}", memo: CustomerMemo, counterpartyId: leg.CounterpartyAccountId);
                 rev.ReversalOfTransactionId = leg.Id;
                 leg.Status = TransactionStatus.Reversed;
                 reversals.Add((leg, rev));
@@ -846,6 +846,9 @@ public class AdminService : IAdminService
                        "Account", account.Id.ToString(), before, AccountSnapshot(account), reason);
             return result;
         });
+
+    /// <summary>What the customer sees on an adjustment or reversal. The admin's reason is internal and stays in the AuditLog.</summary>
+    private const string CustomerMemo = "Posted by Alto Bank. Questions? Contact support.";
 
     private static void SetStatus(Account account, AccountStatus status, string? reason)
     {

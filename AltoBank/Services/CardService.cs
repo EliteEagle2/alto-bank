@@ -114,6 +114,9 @@ public class CardService : ICardService
         if (old?.Account == null) return (Fail("Card not found."), null);
         if (old.Account.Status == AccountStatus.Closed) return (Fail("This account is closed, so a new card can't be issued."), null);
         if (await _db.Cards.AnyAsync(c => c.ReplacesCardId == old.Id)) return (Fail("A replacement for this card was already issued."), null);
+        // One usable card per account: never issue a second card while another one is still active or frozen.
+        if (await _db.Cards.AnyAsync(c => c.AccountId == old.AccountId && c.Id != old.Id && c.Status != CardStatus.Cancelled))
+            return (Fail("This account already has a card that is active or frozen. Cancel it first."), null);
 
         var before = Snapshot(old);
         if (old.Status != CardStatus.Cancelled) Cancel(old, reason);

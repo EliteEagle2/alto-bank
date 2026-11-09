@@ -26,7 +26,7 @@ public static class Csv
             DateTime dt => dt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
             _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? ""
         };
-        if (s.Length > 0 && "=+-@".Contains(s[0]) && value is string) s = "'" + s;
+        if (s.Length > 0 && "=+-@\t\r".Contains(s[0]) && value is string) s = "'" + s;
         return s.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0 ? $"\"{s.Replace("\"", "\"\"")}\"" : s;
     }
 }
