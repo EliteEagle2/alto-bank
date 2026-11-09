@@ -57,6 +57,8 @@ public class AccountsController : AdminControllerBase
     private IActionResult Done(int id, AdminResult result)
     {
         Flash(result);
-        return RedirectToAction(nameof(Details), new { id });
+        // area = "Admin" is explicit: the customer side has an attribute route "accounts/{id}" for an action
+        // also named Details, and without it link generation would pick the customer URL.
+        return RedirectToAction(nameof(Details), new { id, area = "Admin" });
     }
 }

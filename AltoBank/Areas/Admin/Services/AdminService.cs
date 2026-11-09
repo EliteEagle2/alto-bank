@@ -220,7 +220,7 @@ public class AdminService : IAdminService
             temp = GenerateTempPassword();
             var created = await _users.CreateAsync(user, temp);
             if (!created.Succeeded) return Fail(string.Join(" ", created.Errors.Select(e => e.Description)));
-            await _users.AddToRoleAsync(user, SeedData.CustomerRole);
+            if (IdentityError(await _users.AddToRoleAsync(user, SeedData.CustomerRole)) is { } roleError) return Fail(roleError);
             newId = user.Id;
 
             _audit.Add("Customer.Create", $"Created customer {user.FirstName} {user.LastName} ({email})",
@@ -296,9 +296,10 @@ public class AdminService : IAdminService
             if (user == null) return Fail("Customer not found.");
             if (user.LockoutEnd > DateTimeOffset.UtcNow) return Fail("This customer's login is already locked.");
 
-            await _users.SetLockoutEnabledAsync(user, true);
-            await _users.SetLockoutEndDateAsync(user, DateTimeOffset.MaxValue);   // Identity lockout = can't log in
-            await _users.UpdateSecurityStampAsync(user);                          // signs them out of existing sessions
+            // Each Identity call returns a result; any failure stops here and the transaction rolls back.
+            if (IdentityError(await _users.SetLockoutEnabledAsync(user, true)) is { } e1) return Fail(e1);
+            if (IdentityError(await _users.SetLockoutEndDateAsync(user, DateTimeOffset.MaxValue)) is { } e2) return Fail(e2); // can't log in
+            if (IdentityError(await _users.UpdateSecurityStampAsync(user)) is { } e3) return Fail(e3);                       // signs them out now
             _audit.Add("Customer.Lock", $"Locked login for {user.Email}", "Customer", user.Id,
                        new { locked = false }, new { locked = true }, reason);
             return Ok($"{user.FirstName} {user.LastName} can no longer log in.");
@@ -311,8 +312,8 @@ public class AdminService : IAdminService
             if (user == null) return Fail("Customer not found.");
             if (!(user.LockoutEnd > DateTimeOffset.UtcNow)) return Fail("This customer's login isn't locked.");
 
-            await _users.SetLockoutEndDateAsync(user, null);
-            await _users.ResetAccessFailedCountAsync(user);
+            if (IdentityError(await _users.SetLockoutEndDateAsync(user, null)) is { } e1) return Fail(e1);
+            if (IdentityError(await _users.ResetAccessFailedCountAsync(user)) is { } e2) return Fail(e2);
             _audit.Add("Customer.Unlock", $"Unlocked login for {user.Email}", "Customer", user.Id,
                        new { locked = true }, new { locked = false }, reason);
             return Ok($"{user.FirstName} {user.LastName} can log in again.");
@@ -331,8 +332,8 @@ public class AdminService : IAdminService
             var reset = await _users.ResetPasswordAsync(user, token, temp);
             if (!reset.Succeeded) return Fail(string.Join(" ", reset.Errors.Select(e => e.Description)));
             user.MustChangePassword = true;
-            await _users.UpdateAsync(user);
-            await _users.UpdateSecurityStampAsync(user);
+            if (IdentityError(await _users.UpdateAsync(user)) is { } e1) return Fail(e1);
+            if (IdentityError(await _users.UpdateSecurityStampAsync(user)) is { } e2) return Fail(e2);
             // The temporary password itself is NEVER written to the audit log.
             _audit.Add("Customer.ResetPassword", $"Reset password for {user.Email} (must change at next login)", "Customer", user.Id,
                        after: new { mustChangePassword = true }, reason: reason);
@@ -348,7 +349,7 @@ public class AdminService : IAdminService
             if (user == null) return Fail("Customer not found.");
             var before = user.MustChangePassword;
             user.MustChangePassword = required;
-            await _users.UpdateAsync(user);
+            if (IdentityError(await _users.UpdateAsync(user)) is { } e1) return Fail(e1);
             _audit.Add("Customer.ForcePasswordChange", $"{(required ? "Required" : "Cleared")} password change for {user.Email}",
                        "Customer", user.Id, new { mustChangePassword = before }, new { mustChangePassword = required }, reason);
             return Ok(required ? "The customer must change their password at next login." : "Password change requirement removed.");
@@ -510,6 +511,9 @@ public class AdminService : IAdminService
             if (account == null) return Fail("Account not found.");
             if (account.AccountType != AccountType.Savings) return Fail("Interest can only be posted to savings accounts.");
             if (account.Status == AccountStatus.Closed) return Fail("Can't post interest to a closed account.");
+            // Idempotency: one month's interest at most once per calendar month (UTC), so it can't be paid twice.
+            if ((await AccountsPaidThisMonthAsync()).Contains(account.Id))
+                return Fail($"Interest for {MonthStart:MMMM yyyy} was already posted to this account.");
             var settings = await _db.GetSettingsAsync();
             var interest = MonthlyInterest(account.Balance, settings.SavingsApy);
             if (interest <= 0) return Fail("No interest is due (the balance is too small).");
@@ -728,9 +732,13 @@ public class AdminService : IAdminService
         var result = await ExecuteAsync(reason, true, async () =>
         {
             var settings = await _db.GetSettingsAsync();
+            // Idempotency: skip accounts that already got interest this calendar month, so re-running can't pay twice.
+            var alreadyPaid = await AccountsPaidThisMonthAsync();
             var savings = (await _db.Accounts
                     .Where(a => a.AccountType == AccountType.Savings && a.Status == AccountStatus.Active).ToListAsync())
-                .Where(a => a.Balance > 0).ToList();
+                .Where(a => a.Balance > 0 && !alreadyPaid.Contains(a.Id)).ToList();
+            if (savings.Count == 0 && alreadyPaid.Count > 0)
+                return Fail($"Monthly interest for {MonthStart:MMMM yyyy} was already paid to every eligible account.");
 
             var lines = new List<(string, decimal)>();
             foreach (var account in savings)
@@ -780,6 +788,10 @@ public class AdminService : IAdminService
 
     private static AdminResult Ok(string message) => new(true, message);
     private static AdminResult Fail(string message) => new(false, message);
+
+    // null if the Identity operation worked, otherwise its error text (so we never audit a failed step as a success).
+    private static string? IdentityError(IdentityResult result) =>
+        result.Succeeded ? null : string.Join(" ", result.Errors.Select(e => e.Description));
 
     /// <summary>
     /// Runs one admin change: checks the reason, opens a DB transaction, runs the work,
@@ -855,6 +867,14 @@ public class AdminService : IAdminService
         _db.Transactions.Add(t);
         return t;
     }
+
+    private static DateTime MonthStart => new(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    // Ids of accounts that already received (non-reversed) interest this calendar month.
+    private async Task<HashSet<int>> AccountsPaidThisMonthAsync() =>
+        (await _db.Transactions.AsNoTracking()
+            .Where(t => t.Type == TransactionType.Interest && t.Status == TransactionStatus.Posted && t.Date >= MonthStart)
+            .Select(t => t.AccountId).Distinct().ToListAsync()).ToHashSet();
 
     public static decimal MonthlyInterest(decimal balance, decimal apy) =>
         Math.Round(balance * apy / 12m, 2, MidpointRounding.AwayFromZero);

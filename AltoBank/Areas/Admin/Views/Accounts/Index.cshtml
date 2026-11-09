@@ -42,7 +42,7 @@
                 @foreach (var a in Model.Items)
                 {
                     <tr class="@(a.Status == AccountStatus.Closed ? "is-muted" : "")">
-                        <td><a asp-action="Details" asp-route-id="@a.Id" class="fw-semibold">@a.DisplayName</a><div class="small text-muted-alto font-monospace">••@a.Last4</div></td>
+                        <td><a asp-area="Admin" asp-action="Details" asp-route-id="@a.Id" class="fw-semibold">@a.DisplayName</a><div class="small text-muted-alto font-monospace">••@a.Last4</div></td>
                         <td><a asp-controller="Customers" asp-action="Details" asp-route-id="@a.UserId">@a.User?.FirstName @a.User?.LastName</a><div class="small text-muted-alto">@a.User?.Email</div></td>
                         <td>@a.AccountType</td>
                         <td><partial name="_StatusPill" model="a.Status.ToString()" /></td>

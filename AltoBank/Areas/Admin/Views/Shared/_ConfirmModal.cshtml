@@ -2,14 +2,16 @@
 @* CONFIRMATION MODAL used for every destructive or money-moving admin action.
    - "What will happen" spells out the exact effect.
    - The reason box is REQUIRED here (HTML) and again on the server (IAdminService) — it's saved in the audit log.
-   - The form tag helper adds the anti-forgery token automatically. *@
+   - asp-antiforgery="true" is REQUIRED here: when a form has a plain action="..." attribute, the form
+     tag helper does NOT add the anti-forgery token on its own, and [AutoValidateAntiforgeryToken] would
+     reject the POST with 400. *@
 @{
     var tone = Model.Tone == "warn" ? "warn" : Model.Tone == "primary" ? "" : "danger";
     var submitClass = Model.Tone switch { "warn" => "btn-admin-warn", "primary" => "btn-admin", _ => "btn-admin-danger" };
 }
 <div class="modal fade alto-modal" id="@Model.Id" tabindex="-1" aria-labelledby="@(Model.Id)-title" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <form class="modal-content" method="post" action="@Model.FormUrl">
+        <form class="modal-content" method="post" action="@Model.FormUrl" asp-antiforgery="true">
             <div class="modal-header">
                 <h2 class="modal-title h5" id="@(Model.Id)-title">@Model.Title</h2>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>

@@ -34,7 +34,7 @@
                         <td><a asp-action="Details" asp-route-id="@t.Id">@t.Id</a></td>
                         <td class="text-nowrap">@t.LocalDate.ToString("MMM d, yyyy h:mm tt")</td>
                         <td><a asp-controller="Customers" asp-action="Details" asp-route-id="@t.Account?.UserId">@t.Account?.User?.FirstName @t.Account?.User?.LastName</a></td>
-                        <td><a asp-controller="Accounts" asp-action="Details" asp-route-id="@t.AccountId">••@t.Account?.Last4</a></td>
+                        <td><a asp-area="Admin" asp-controller="Accounts" asp-action="Details" asp-route-id="@t.AccountId">••@t.Account?.Last4</a></td>
                         <td>@t.Description</td>
                         <td>@t.TypeLabel</td>
                         <td><partial name="_StatusPill" model="t.Status.ToString()" /></td>

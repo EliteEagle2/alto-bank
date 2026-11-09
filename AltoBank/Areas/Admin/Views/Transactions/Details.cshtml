@@ -39,7 +39,7 @@
                 <dt>Memo</dt><dd>@(t.Memo ?? "—")</dd>
                 <dt>Type</dt><dd>@t.TypeLabel (@t.Type)</dd>
                 <dt>Balance after</dt><dd><money amount="@t.BalanceAfter" /></dd>
-                <dt>Account</dt><dd><a asp-controller="Accounts" asp-action="Details" asp-route-id="@a.Id">@a.DisplayName ••@a.Last4</a> (@a.Status)</dd>
+                <dt>Account</dt><dd><a asp-area="Admin" asp-controller="Accounts" asp-action="Details" asp-route-id="@a.Id">@a.DisplayName ••@a.Last4</a> (@a.Status)</dd>
                 <dt>Customer</dt><dd><a asp-controller="Customers" asp-action="Details" asp-route-id="@a.UserId">@a.User?.FirstName @a.User?.LastName</a> · @a.User?.Email</dd>
             </dl>
         </div>

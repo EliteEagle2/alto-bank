@@ -91,7 +91,7 @@
                         {
                             var card = a.Cards.OrderByDescending(c => c.IssuedAt).FirstOrDefault();
                             <tr class="@(a.Status == AccountStatus.Closed ? "is-muted" : "")">
-                                <td><a asp-controller="Accounts" asp-action="Details" asp-route-id="@a.Id">@a.DisplayName ••@a.Last4</a></td>
+                                <td><a asp-area="Admin" asp-controller="Accounts" asp-action="Details" asp-route-id="@a.Id">@a.DisplayName ••@a.Last4</a></td>
                                 <td>@a.AccountType</td>
                                 <td><partial name="_StatusPill" model="a.Status.ToString()" /></td>
                                 <td>@(card == null ? "—" : $"••{card.Last4} ({card.Status})")</td>

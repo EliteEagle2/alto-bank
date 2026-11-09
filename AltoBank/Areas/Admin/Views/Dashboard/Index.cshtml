@@ -78,7 +78,7 @@
                     <ul class="attention-list">
                         @foreach (var a in Model.FrozenList)
                         {
-                            <li><a asp-controller="Accounts" asp-action="Details" asp-route-id="@a.Id">••@a.Last4</a>
+                            <li><a asp-area="Admin" asp-controller="Accounts" asp-action="Details" asp-route-id="@a.Id">••@a.Last4</a>
                                 <span class="small text-muted-alto">@a.User?.FirstName @a.User?.LastName</span></li>
                         }
                     </ul>

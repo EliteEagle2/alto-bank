@@ -52,6 +52,10 @@ builder.Services.ConfigureApplicationCookie(options =>
     };
 });
 
+// Re-check the user's security stamp on EVERY request (default is every 30 minutes). When an admin
+// locks a customer or resets their password, the stamp changes and the customer is signed out right away.
+builder.Services.Configure<SecurityStampValidatorOptions>(options => options.ValidationInterval = TimeSpan.Zero);
+
 // 3) Our banking logic. Controllers ask for IBankService; DI hands them a BankService.
 //    Scoped = one instance per web request (same lifetime as the DbContext it uses).
 builder.Services.AddScoped<IBankService, BankService>();

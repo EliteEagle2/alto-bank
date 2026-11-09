@@ -36,7 +36,7 @@
         <dl class="kv mb-0">
             <dt>Decision</dt><dd>@app.Status by @(app.ReviewedBy ?? "—") on @Local(app.ReviewedAt)</dd>
             @if (app.DenialReason != null) { <dt>Reason shown to customer</dt><dd>@app.DenialReason</dd> }
-            @if (app.Account != null) { <dt>Account opened</dt><dd><a asp-controller="Accounts" asp-action="Details" asp-route-id="@app.Account.Id">@app.Account.DisplayName ••@app.Account.Last4</a></dd> }
+            @if (app.Account != null) { <dt>Account opened</dt><dd><a asp-area="Admin" asp-controller="Accounts" asp-action="Details" asp-route-id="@app.Account.Id">@app.Account.DisplayName ••@app.Account.Last4</a></dd> }
         </dl>
     </div>
 }
