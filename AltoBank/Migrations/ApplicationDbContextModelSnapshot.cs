@@ -33,6 +33,7 @@ namespace AltoBank.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<decimal>("Balance")
+                        .IsConcurrencyToken()
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("CardDesign")

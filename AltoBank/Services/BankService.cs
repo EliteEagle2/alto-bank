@@ -79,13 +79,6 @@ public class BankService : IBankService
                     .Take(recentPerAccount))
             .FirstOrDefaultAsync(u => u.Id == userId);
 
-    /// <summary>Transaction history for one account, newest first.</summary>
-    public Task<List<Transaction>> GetHistoryAsync(int accountId) =>
-        _db.Transactions
-            .Where(t => t.AccountId == accountId)
-            .OrderByDescending(t => t.Date).ThenByDescending(t => t.Id)
-            .ToListAsync();
-
     /// <summary>
     /// Money in vs. money out per day across ALL of a user's accounts (dashboard chart).
     /// Transfers between the user's own accounts are left out, since they aren't new money in or out.
@@ -112,10 +105,15 @@ public class BankService : IBankService
             .ToList();
     }
 
-    /// <summary>One page of an account's transactions (used by the JSON API).</summary>
-    public async Task<(List<Transaction> Items, int TotalCount)> GetTransactionsPageAsync(int accountId, int page, int pageSize)
+    /// <summary>
+    /// One page of an account's transactions (used by the JSON API).
+    /// Filtered by BOTH the account and its owner, so it's safe by construction: even if a caller
+    /// forgot to check ownership first, another user's transactions could never come back.
+    /// </summary>
+    public async Task<(List<Transaction> Items, int TotalCount)> GetTransactionsPageAsync(string userId, int accountId, int page, int pageSize)
     {
-        var query = _db.Transactions.AsNoTracking().Where(t => t.AccountId == accountId);
+        var query = _db.Transactions.AsNoTracking()
+            .Where(t => t.AccountId == accountId && t.Account!.UserId == userId);
         var total = await query.CountAsync();
         var items = await query
             .OrderByDescending(t => t.Date).ThenByDescending(t => t.Id)
@@ -129,58 +127,61 @@ public class BankService : IBankService
     // Moving money
     // =====================================================================
 
-    public async Task<BankResult> DepositAsync(string userId, int accountId, decimal amount, string? description)
+    public Task<BankResult> DepositAsync(string userId, int accountId, decimal amount, string? description)
     {
-        if (amount <= 0) return new(false, "Amount must be greater than zero.");
-        if (amount > MaxAmount) return new(false, "Amount can't be more than $1,000,000.");
+        if (CheckAmount(amount) is { } invalid) return Task.FromResult(invalid);
 
-        var account = await GetAccountAsync(accountId, userId);
-        if (account == null) return new(false, "Account not found.");
+        return InTransactionAsync(async () =>
+        {
+            var account = await GetAccountAsync(accountId, userId);
+            if (account == null) return new BankResult(false, "Account not found.");
 
-        // Change tracking: EF notices the Balance change on this tracked entity and
-        // writes an UPDATE for it when SaveChangesAsync runs.
-        account.Balance += amount;
-        AddTransaction(account, TransactionType.Deposit, amount, description ?? "Deposit");
-        await _db.SaveChangesAsync();
-        return new(true, $"Deposited {amount:C} into {account.DisplayName}.");
+            // Change tracking: EF notices the Balance change on this tracked entity and
+            // writes an UPDATE for it when SaveChangesAsync runs.
+            account.Balance += amount;
+            AddTransaction(account, TransactionType.Deposit, amount, description ?? "Deposit");
+            await _db.SaveChangesAsync();
+            return new BankResult(true, $"Deposited {amount:C} into {account.DisplayName}.");
+        });
     }
 
-    public async Task<BankResult> WithdrawAsync(string userId, int accountId, decimal amount, string? description)
+    public Task<BankResult> WithdrawAsync(string userId, int accountId, decimal amount, string? description)
     {
-        if (amount <= 0) return new(false, "Amount must be greater than zero.");
+        if (CheckAmount(amount) is { } invalid) return Task.FromResult(invalid);
 
-        var account = await GetAccountAsync(accountId, userId);
-        if (account == null) return new(false, "Account not found.");
+        return InTransactionAsync(async () =>
+        {
+            var account = await GetAccountAsync(accountId, userId);
+            if (account == null) return new BankResult(false, "Account not found.");
 
-        // No overdrafts: you can't take out more than you have.
-        if (amount > account.Balance)
-            return new(false, $"Insufficient funds. Available balance is {account.Balance:C}.");
+            // No overdrafts: you can't take out more than you have.
+            if (amount > account.Balance)
+                return new BankResult(false, $"Insufficient funds. Available balance is {account.Balance:C}.");
 
-        account.Balance -= amount;
-        AddTransaction(account, TransactionType.Withdrawal, amount, description ?? "Withdrawal");
-        await _db.SaveChangesAsync();
-        return new(true, $"Withdrew {amount:C} from {account.DisplayName}.");
+            account.Balance -= amount;
+            AddTransaction(account, TransactionType.Withdrawal, amount, description ?? "Withdrawal");
+            await _db.SaveChangesAsync();
+            return new BankResult(true, $"Withdrew {amount:C} from {account.DisplayName}.");
+        });
     }
 
     /// <summary>
     /// Moves money between two of the user's own accounts. Wrapped in a database
     /// transaction so BOTH sides succeed or NEITHER does — money is never lost or duplicated.
     /// </summary>
-    public async Task<BankResult> TransferAsync(string userId, int fromId, int toId, decimal amount, string? memo)
+    public Task<BankResult> TransferAsync(string userId, int fromId, int toId, decimal amount, string? memo)
     {
-        if (amount <= 0) return new(false, "Amount must be greater than zero.");
-        if (amount > MaxAmount) return new(false, "Amount can't be more than $1,000,000.");
-        if (fromId == toId) return new(false, "Choose two different accounts.");
+        if (CheckAmount(amount) is { } invalid) return Task.FromResult(invalid);
+        if (fromId == toId) return Task.FromResult(new BankResult(false, "Choose two different accounts."));
 
-        await using var dbTransaction = await _db.Database.BeginTransactionAsync();
-        try
+        return InTransactionAsync(async () =>
         {
             var from = await GetAccountAsync(fromId, userId);
             var to = await GetAccountAsync(toId, userId);
-            if (from == null || to == null) return new(false, "Account not found.");
+            if (from == null || to == null) return new BankResult(false, "Account not found.");
 
             if (amount > from.Balance)
-                return new(false, $"Insufficient funds. {from.DisplayName} has {from.Balance:C} available.");
+                return new BankResult(false, $"Insufficient funds. {from.DisplayName} has {from.Balance:C} available.");
 
             from.Balance -= amount;
             to.Balance += amount;
@@ -190,12 +191,51 @@ public class BankService : IBankService
             AddTransaction(to, TransactionType.TransferIn, amount, $"Transfer from {from.DisplayName}{note}");
 
             await _db.SaveChangesAsync();
-            await dbTransaction.CommitAsync(); // make both changes permanent together
-            return new(true, $"Transferred {amount:C} from {from.DisplayName} to {to.DisplayName}.");
+            return new BankResult(true, $"Transferred {amount:C} from {from.DisplayName} to {to.DisplayName}.");
+        });
+    }
+
+    // ---------- Shared safety rules for every money movement ----------
+
+    /// <summary>Amount rules enforced HERE (not only in view models), so the API path can't skip them.</summary>
+    private static BankResult? CheckAmount(decimal amount)
+    {
+        if (amount <= 0) return new(false, "Amount must be greater than zero.");
+        if (amount > MaxAmount) return new(false, "Amount can't be more than $1,000,000.");
+        if (decimal.Round(amount, 2) != amount) return new(false, "Amount can have at most 2 decimal places.");
+        return null;
+    }
+
+    private const string ConcurrencyMessage =
+        "Your balance changed while we were processing this request. Nothing was moved. Please try again.";
+
+    /// <summary>
+    /// Runs a money movement inside ONE database transaction:
+    ///  • commits only if the step reports success, otherwise rolls back (nothing half-done);
+    ///  • Account.Balance is a concurrency token ([ConcurrencyCheck]), so if two requests change the
+    ///    same balance at once, the second SaveChanges fails instead of overwriting the first.
+    ///    That prevents "lost update" overdrafts. We roll back and ask the user to retry.
+    /// </summary>
+    private async Task<BankResult> InTransactionAsync(Func<Task<BankResult>> work)
+    {
+        await using var dbTransaction = await _db.Database.BeginTransactionAsync();
+        try
+        {
+            var result = await work();
+            if (result.Success) await dbTransaction.CommitAsync();
+            else await dbTransaction.RollbackAsync();
+            return result;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await dbTransaction.RollbackAsync();
+            _db.ChangeTracker.Clear();   // forget the stale balances we loaded
+            return new BankResult(false, ConcurrencyMessage);
         }
         catch
         {
             await dbTransaction.RollbackAsync(); // undo everything if anything failed
+            _db.ChangeTracker.Clear();
             throw;
         }
     }
@@ -207,18 +247,14 @@ public class BankService : IBankService
     /// <summary>Opens an account on its own (used when a new user registers).</summary>
     public async Task<(BankResult Result, Account? Account)> OpenAccountAsync(string userId, OpenAccountRequest request)
     {
-        await using var dbTransaction = await _db.Database.BeginTransactionAsync();
-        try
+        Account? opened = null;
+        var result = await InTransactionAsync(async () =>
         {
-            var (result, account) = await OpenAccountCoreAsync(userId, request);
-            if (result.Success) await dbTransaction.CommitAsync();
-            return (result, account);
-        }
-        catch
-        {
-            await dbTransaction.RollbackAsync();
-            throw;
-        }
+            var (r, account) = await OpenAccountCoreAsync(userId, request);
+            opened = account;
+            return r;
+        });
+        return (result, result.Success ? opened : null);
     }
 
     /// <summary>
@@ -229,11 +265,10 @@ public class BankService : IBankService
     public async Task<(BankResult Result, AccountApplication? Application)> SubmitApplicationAsync(
         string userId, AccountApplication application, OpenAccountRequest request)
     {
-        await using var dbTransaction = await _db.Database.BeginTransactionAsync();
-        try
+        var result = await InTransactionAsync(async () =>
         {
-            var (result, account) = await OpenAccountCoreAsync(userId, request);
-            if (!result.Success || account == null) return (result, null);
+            var (r, account) = await OpenAccountCoreAsync(userId, request);
+            if (!r.Success || account == null) return r;
 
             application.UserId = userId;
             application.AccountId = account.Id;
@@ -254,14 +289,9 @@ public class BankService : IBankService
             user.Zip = application.Zip;
 
             await _db.SaveChangesAsync();
-            await dbTransaction.CommitAsync();
-            return (result, application);
-        }
-        catch
-        {
-            await dbTransaction.RollbackAsync();
-            throw;
-        }
+            return r;
+        });
+        return (result, result.Success ? application : null);
     }
 
     /// <summary>

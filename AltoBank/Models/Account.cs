@@ -27,7 +27,11 @@ public class Account
     public string? Nickname { get; set; }
 
     // Money is ALWAYS stored as decimal (never float/double) to avoid rounding errors.
+    // [ConcurrencyCheck]: EF adds "AND Balance = <the value we read>" to every UPDATE. If another
+    // request changed the balance in the meantime, the update matches 0 rows and EF throws
+    // DbUpdateConcurrencyException, so two simultaneous withdrawals can't both succeed (no lost updates).
     [Column(TypeName = "decimal(18,2)")]
+    [ConcurrencyCheck]
     public decimal Balance { get; set; }
 
     // When the account was opened (UTC).

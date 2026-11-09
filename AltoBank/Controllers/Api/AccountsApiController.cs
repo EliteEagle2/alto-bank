@@ -77,7 +77,7 @@ public class AccountsApiController : ControllerBase
         var account = await _bank.GetAccountAsync(id, UserId);
         if (account == null) return NotFound(new ProblemDetails { Title = "Account not found." });
 
-        var (items, total) = await _bank.GetTransactionsPageAsync(id, page, PageSize);
+        var (items, total) = await _bank.GetTransactionsPageAsync(UserId, id, page, PageSize);
         return new PagedResult<TransactionDto>(
             items.Select(ToDto).ToList(), page, PageSize, total,
             TotalPages: (int)Math.Ceiling(total / (double)PageSize));
