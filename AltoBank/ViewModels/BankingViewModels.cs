@@ -52,10 +52,3 @@ public class TransferViewModel
     [ValidateNever]
     public List<SelectListItem> AccountOptions { get; set; } = new();
 }
-
-/// <summary>One account plus its transactions for the history page.</summary>
-public class HistoryViewModel
-{
-    public Account Account { get; set; } = null!;
-    public List<Transaction> Transactions { get; set; } = new();
-}

@@ -40,9 +40,79 @@ public class AccountsController : Controller
     // GET /Accounts
     public async Task<IActionResult> Index() => View(await _bank.GetAccountsAsync(UserId));
 
-    // GET /accounts/5 — account details page. (Part 1: forwards to the history view; Part 3 builds the full page.)
+    // =====================================================================
+    // ACCOUNT DETAILS — /accounts/{id}
+    //
+    // IDOR PROTECTION ("Insecure Direct Object Reference"): account ids are just numbers in the URL,
+    // so anyone could type /accounts/7. EVERY account-specific action below loads the account with
+    // the logged-in user's id in the WHERE clause (BankService methods take userId). Someone else's
+    // id simply isn't found and we return 404, which doesn't even reveal that the account exists.
+    // =====================================================================
     [HttpGet("accounts/{id:int}")]
-    public IActionResult Details(int id) => RedirectToAction("History", "Transactions", new { id });
+    public async Task<IActionResult> Details(int id)
+    {
+        var account = await _bank.GetAccountDetailsAsync(id, UserId);   // eager: owner + cards
+        if (account == null) return NotFound();
+
+        var from = DateTime.UtcNow.Date.AddDays(-(AccountDetailsViewModel.DefaultDays - 1));
+        var activity = await _bank.GetActivityAsync(UserId, id, new ActivityFilter(null, null, from, null), 1, AccountDetailsViewModel.PageSize);
+        var settings = await _bank.GetSettingsAsync();
+        var (limit, used) = await _bank.GetDailyTransferUsageAsync(account);
+        var accounts = await _bank.GetAccountsAsync(UserId);
+
+        // Monthly statements: every month since the account opened (newest first, up to 12).
+        var months = new List<DateOnly>();
+        for (var m = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+             m >= new DateOnly(account.OpenedAt.Year, account.OpenedAt.Month, 1) && months.Count < 12; m = m.AddMonths(-1))
+            months.Add(m);
+
+        ViewData["Title"] = account.DisplayName;
+        return View(new AccountDetailsViewModel
+        {
+            Account = account,
+            Cards = account.Cards.OrderByDescending(c => c.IssuedAt).ToList(),
+            FirstPage = activity.Items,
+            TotalCount = activity.TotalCount,
+            MoneyIn = activity.MoneyIn,
+            MoneyOut = activity.MoneyOut,
+            AccountLabels = await _bank.GetAccountLabelsAsync(UserId),
+            Apy = account.AccountType == AccountType.Savings ? settings.SavingsApy : settings.CheckingApy,
+            InterestThisYear = await _bank.GetInterestThisYearAsync(UserId, id),
+            DailyLimit = limit,
+            UsedToday = used,
+            OpenAccountCount = accounts.Count(a => a.Status != AccountStatus.Closed),
+            StatementMonths = months,
+            RoutingNumber = BankService.RoutingNumber,
+            BankName = BankService.BankName,
+            BankAddress = BankService.BankAddress
+        });
+    }
+
+    // GET /accounts/5/statements/2026/10 — printable monthly statement (simulated). Owner-only.
+    [HttpGet("accounts/{id:int}/statements/{year:int}/{month:int}")]
+    public async Task<IActionResult> Statement(int id, int year, int month)
+    {
+        var data = await _bank.GetStatementAsync(UserId, id, year, month);   // explicit loading inside
+        return data == null ? NotFound() : View(data);
+    }
+
+    // GET /accounts/5/activity.csv?search=&kind=&from=&to= — the Activity tab's current filters as CSV. Owner-only.
+    [HttpGet("accounts/{id:int}/activity.csv")]
+    public async Task<IActionResult> ActivityCsv(int id, string? search, string? kind, DateTime? from, DateTime? to)
+    {
+        var account = await _bank.GetAccountAsync(id, UserId);
+        if (account == null) return NotFound();
+        var result = await _bank.GetActivityAsync(UserId, id, new ActivityFilter(search, kind, from, to), 1, 50_000);
+        var labels = await _bank.GetAccountLabelsAsync(UserId);
+        var csv = Csv.Build(
+            new[] { "Date (UTC)", "Description", "Type", "Status", "Amount", "Balance after", "Memo", "Counterparty", "Transaction ID" },
+            result.Items.Select(t => new object?[]
+            {
+                t.Date, t.Description, t.TypeLabel, t.Status.ToString(), t.SignedAmount, t.BalanceAfter, t.Memo,
+                t.CounterpartyAccountId is int c ? labels.GetValueOrDefault(c) : null, t.Id
+            }));
+        return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", $"alto-{account.Last4}-activity-{DateTime.UtcNow:yyyyMMdd}.csv");
+    }
 
     // Old URL from earlier versions — send people to the new application.
     [HttpGet]

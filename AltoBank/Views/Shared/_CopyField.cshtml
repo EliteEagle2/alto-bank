@@ -1,0 +1,20 @@
+@model CopyFieldViewModel
+@* A labeled value with Show / Copy buttons (account-details.js wires them up).
+   - CopyValue set: the value is already safe to show (e.g. the routing number) → Copy only.
+   - RevealUrl set: the real value is fetched from an owner-only API when Show/Copy is clicked,
+     shown for 30 seconds, then masked again. It is never written into the page HTML. *@
+<div class="copy-field" id="@Model.Id"
+     data-reveal-url="@Model.RevealUrl" data-reveal-field="@Model.RevealField" data-copy-value="@Model.CopyValue" data-masked="@Model.Display">
+    <div class="copy-field-label">@Model.Label</div>
+    <div class="copy-field-row">
+        <span class="copy-field-value @(Model.Monospace ? "font-monospace" : "")" data-value aria-live="polite">@Model.Display</span>
+        <span class="copy-field-timer" data-timer hidden></span>
+        <span class="ms-auto d-flex gap-1">
+            @if (Model.RevealUrl != null)
+            {
+                <button type="button" class="btn btn-alto-ghost btn-sm" data-show aria-pressed="false"><i class="bi bi-eye me-1"></i>Show</button>
+            }
+            <button type="button" class="btn btn-alto-ghost btn-sm" data-copy aria-label="Copy @Model.Label"><i class="bi bi-clipboard me-1"></i>Copy</button>
+        </span>
+    </div>
+</div>

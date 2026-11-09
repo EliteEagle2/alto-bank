@@ -1,57 +1,78 @@
-# Alto Bank: course requirements and API reference
+# Alto Bank: course requirements, features, and API reference
+
+All paths are relative to `AltoBank/`. Locations name the file and the class/method, so they stay correct as code moves.
+
+## Two sides of the app
+
+| Side | URL | Who | Code |
+|---|---|---|---|
+| Customer bank | `/dashboard`, `/accounts`, `/accounts/{id}`, `/transactions/...`, `/profile` | `Customer` role | `Controllers/`, `Views/`, layout `Views/Shared/_BankingLayout.cshtml` |
+| Admin portal | `/admin/...` | `Admin` role | `Areas/Admin/` (own controllers, views, `_AdminLayout`, `_AdminSidebar`, `_ViewStart`, `_ViewImports`) |
+| Public site | `/`, `/products/...`, `/company/...` | everyone | `Controllers/HomeController.cs` and friends, layout `_Layout.cshtml` |
+
+Customers who open `/admin` (or admins who open customer pages) get a styled **Access Denied** page (`Views/Auth/AccessDenied.cshtml`).
 
 ## Requirements checklist (term → where it's used)
 
-All paths are relative to `AltoBank/`.
-
 | Requirement | Where it's used |
 |---|---|
-| **Models** | `Models/Account.cs`, `Models/Transaction.cs`, `Models/ApplicationUser.cs`, `Models/AccountApplication.cs` |
-| **Views** | `Views/**` (e.g. `Views/Dashboard/Index.cshtml`, `Views/Accounts/Apply.cshtml`) |
-| **Controllers / action methods** | `Controllers/*.cs`, e.g. `TransactionsController.Deposit` (GET + POST), `AccountsController.Apply` (GET + POST) |
-| **Conventional routing** | `Program.cs:99` (`MapControllerRoute` `{controller=Home}/{action=Index}/{id?}`) |
-| **Custom / attribute route** | `Controllers/TransactionsController.cs:116`: `[HttpGet("accounts/{id:int}/history")]`; API routes in `Controllers/Api/AccountsApiController.cs` |
-| **Migrations** (history kept) | `Migrations/*_InitialCreate.cs`, `*_AccountOpeningDetails.cs`, `*_AccountApplication.cs` |
-| **Seeder** (3 customers + admin, multiple accounts, ~90 days of transactions) | `Data/SeedData.cs:20` (applies migrations at line 81; transaction generator `GenerateHistory`) |
-| **Master layout** | `Views/Shared/_Layout.cshtml` (public site); also `_BankingLayout.cshtml` (signed-in) and `_ApplyLayout.cshtml` (application) |
-| **Partial views, used on multiple pages** | `_AccountCard` (Dashboard + Accounts), `_TransactionTable` (Dashboard + History), `_StatusAlert` (both main layouts), `_ApplicationStepNav` (Apply + Decision), `_EmptyState`, `_CardArt`, `_Navbar`, `_Footer`, and more in `Views/Shared` |
-| **Razor C# in views** | Loops: `Views/Dashboard/Index.cshtml:35`, `Views/Company/Careers.cshtml:35` (`GroupBy`); conditionals: `Views/Shared/_TransactionTable.cshtml`; formatting: `ToString("MMM d, yyyy")`, `ToString("C")` |
-| **Built-in tag helpers** | `asp-controller` / `asp-action` / `asp-for` / `asp-validation-for` / `asp-items` throughout, e.g. `Views/Transactions/_MoneyForm.cshtml:25` |
-| **Custom tag helper** `<money>` | `TagHelpers/MoneyTagHelper.cs:19`; registered in `Views/_ViewImports.cshtml`; used in `_AccountCard.cshtml:10`, `_TransactionTable.cshtml` (green/red), `Dashboard/Index.cshtml:15`, `Admin/Index.cshtml:86` |
-| **Model binding + validation attributes** | `[Required]`, `[Range]`, `[EmailAddress]`, `[StringLength]`, `[RegularExpression]`, `[Compare]` in `ViewModels/*.cs` (e.g. `AuthViewModels.cs:16`, `Dtos/ApiDtos.cs:26`) |
-| **Custom validation attribute** `[MinimumAge(18)]` | `Validation/MinimumAgeAttribute.cs`; applied at `ViewModels/ApplicationViewModels.cs:55` |
-| **TempData flash messages (Post/Redirect/Get)** | Set in `TransactionsController.cs:45,72,102` (deposit/withdraw/transfer), `:123` (error), `AccountsController.cs:178` (account opening); shown by `Views/Shared/_StatusAlert.cshtml` |
-| **ViewData** | `ViewData["Title"]` on every page; `ViewData["ShowDemo"]` in `AuthController.cs:73` |
-| **ViewBag** | Dropdown lists for the application: `AccountsController.cs:335` (`ViewBag.States`, `EmploymentStatuses`, `IncomeRanges`, ...), used in `Views/Accounts/_ApplyStep3Contact.cshtml` and `_ApplyStep4Employment.cshtml` |
-| **Dependency injection** behind an interface | `Services/IBankService.cs`, `Services/BankService.cs`; registered at `Program.cs:55` (`AddScoped<IBankService, BankService>()`); injected into every banking controller |
-| **Custom middleware** | `Middleware/RequestTimingMiddleware.cs` (logs `[AltoBank] GET /path -> 200 in 12 ms`, adds `X-Response-Time-ms`); registered at `Program.cs:77` |
-| **EF Core: DbContext + DbSets** | `Data/ApplicationDbContext.cs:15-17` |
-| **Navigation properties** | `ApplicationUser.Accounts/Applications`, `Account.Transactions`, `Transaction.Account`, `AccountApplication.Account/User` |
-| **LINQ queries** | `Services/BankService.cs` (`Where`, `OrderBy`, `Skip/Take` paging, `GroupBy` for stats) |
-| **SaveChanges + change tracking** | `Services/BankService.cs:114` (comment) and the deposit/withdraw/transfer methods; database transactions at `:149`, `:184`, `:206` |
-| **Eager loading** (`Include` / `ThenInclude`) | `BankService.GetDashboardDataAsync` (`Services/BankService.cs:77`), used by `DashboardController` |
-| **Explicit loading** (`Entry().Collection().LoadAsync()`) | `BankService.GetAccountWithHistoryAsync` (`Services/BankService.cs:61`), used by the History page |
-| **Lazy loading: why it's not enabled** | Comment at `Services/BankService.cs:17` |
-| **Identity + roles** | `Program.cs` (`AddIdentity<ApplicationUser, IdentityRole>`); `Admin` and `Customer` roles seeded in `Data/SeedData.cs`; `[Authorize(Roles = "Customer")]` on customer controllers; `[Area("Admin")] [Authorize(Roles = "Admin")]` on `Areas/Admin/Controllers/*` |
-| **Areas** (admin vs. customer) | `Areas/Admin/` (own Controllers, Views, `_AdminLayout`, `_ViewStart`, `_ViewImports`); area route in `Program.cs` (`{area:exists}/{controller=Dashboard}/{action=Index}/{id?}`) |
-| **Seeding command** | `Program.cs`: `dotnet run -- --seed` and `dotnet run -- --reset-db` |
-| **JSON API with DTOs** | `Controllers/Api/AccountsApiController.cs:28` (`[ApiController]`), DTOs in `Dtos/ApiDtos.cs` |
-| **401 for the API when logged out** | `Program.cs:39` (cookie `OnRedirectToLogin` returns 401 for `/api/*`) |
-| **Swagger** | `Program.cs:61` (`AddSwaggerGen`), `:81` (`UseSwagger` / `UseSwaggerUI`, Development only) |
-| **Admin dashboard + Chart.js** | `Areas/Admin/Views/Dashboard/Index.cshtml` (Chart.js 4.4.1 from cdnjs), `wwwroot/js/admin-overview.js` (fetches `/api/admin/stats`); customer 30-day chart in `Views/Dashboard/Index.cshtml` + `wwwroot/js/dashboard.js` |
-| **Demo mode** | `AuthController.DemoLogin` (`Controllers/AuthController.cs:105`, Development only) + buttons in `Views/Auth/Login.cshtml` |
+| **Models** | `Models/Account.cs`, `Transaction.cs`, `ApplicationUser.cs`, `AccountApplication.cs`, `Card.cs`, `AuditLog.cs`, `CustomerNote.cs`, `BankSetting.cs` |
+| **Views / Controllers / Actions** | `Views/**`, `Areas/Admin/Views/**`; `Controllers/*.cs`, `Areas/Admin/Controllers/*.cs` (e.g. `TransactionsController.Deposit` GET + POST) |
+| **Conventional + area routing** | `Program.cs`: `MapControllerRoute("areas", "{area:exists}/{controller=Dashboard}/...")` and `"default"` |
+| **Attribute routes** | `AccountsController.Details` → `accounts/{id:int}`, `.Statement` → `accounts/{id}/statements/{year}/{month}`, `.ActivityCsv`; `CardsController` (`accounts/{id}/cards/{cardId}/freeze` …); `TransactionsController.History` → `accounts/{id}/history`; all API controllers |
+| **Migrations** (history kept) | `Migrations/`: `InitialCreate` → `AccountOpeningDetails` → `AccountApplication` → `AccountBalanceConcurrency` → `AdminPortal` (converts old "Declined" applications to "Denied") |
+| **Seeder** (3 customers + admin, accounts, ~90 days of activity) | `Data/SeedData.cs` (`InitializeAsync`, `GenerateHistory`); command: `dotnet run -- --seed` / `--reset-db` (`Program.cs`) |
+| **Master layout + partials** | `_Layout`, `_BankingLayout`, `_ApplyLayout`, `Areas/Admin/Views/Shared/_AdminLayout`; partials: `_AccountCard` (dashboard, accounts, admin view-as), `_TransactionTable`, `_StatusAlert` (all layouts), `_ApplicationStepNav` (apply + decision), `_AccountHeader`, `_TransactionRow`, `_TransactionFilters`, `_CopyField` (account info + direct deposit), `_CardArt` (home, products, apply, account header, card tab), `_ConfirmModal`, `_KpiTile`, `_AdminSidebar`, `_Pager`, `_StatusPill` |
+| **Razor C# in views** | loops/grouping in `Views/Accounts/Details.cshtml` (groups activity by day), `Areas/Admin/Views/Accounts/Details.cshtml` (builds confirm modals), formatting helpers (`ToString("C")`, dates) |
+| **Tag helpers** | `asp-*` everywhere; custom `<money>` tag helper `TagHelpers/MoneyTagHelper.cs` (green/red amounts), registered in both `_ViewImports` |
+| **Validation attributes** | `[Required]`, `[Range]`, `[EmailAddress]`, `[StringLength]`, `[RegularExpression]`, `[Compare]` in `ViewModels/*`, `Areas/Admin/ViewModels/*`, `Dtos/*`; custom **`[MinimumAge(18)]`** in `Validation/MinimumAgeAttribute.cs` (used on the application and admin "create customer") |
+| **TempData + Post/Redirect/Get** | Every POST sets `TempData["Success"/"Error"]` then redirects (e.g. `TransactionsController.Deposit`, `CardsController.Run`, `AdminControllerBase.Flash`); shown by `_StatusAlert` |
+| **ViewData / ViewBag** | `ViewData["Title"]` on every page, `ViewData["ShowDemo"]`; `ViewBag.States` etc. for application dropdowns (`AccountsController.PrepareFormAsync`), `ViewBag.Query` for admin list filters |
+| **Dependency injection** | `IBankService`, `ICardService`, `IAuditLogger`, `IAdminService` registered in `Program.cs` (`AddScoped<…>`) and injected into controllers |
+| **Custom middleware** | `Middleware/RequestTimingMiddleware.cs` (`app.UseMiddleware<…>()` in `Program.cs`) |
+| **Global action filter** | `Filters/ForcePasswordChangeFilter.cs` (forces a password change after an admin reset) |
+| **EF Core** (DbContext, DbSets, navigation properties, LINQ, SaveChanges, change tracking) | `Data/ApplicationDbContext.cs`; `Services/BankService.cs`; `Areas/Admin/Services/AdminService.cs` |
+| **Eager loading** | `BankService.GetDashboardDataAsync` (`Include`/`ThenInclude`), `BankService.GetAccountDetailsAsync` (account page), `AdminService.GetAccountAsync` / `GetCustomerAsync` (admin detail pages) |
+| **Explicit loading** | `BankService.GetStatementAsync`: `Entry(account).Collection(a => a.Transactions).Query().Where(…).LoadAsync()` |
+| **Lazy loading (why not)** | Class comment at the top of `Services/BankService.cs` |
+| **DB transactions + concurrency** | `BankService.InTransactionAsync`, `AdminService.ExecuteAsync`; `[ConcurrencyCheck]` on `Account.Balance` |
+| **Identity + roles** | `Program.cs` (`AddIdentity`), roles `Admin` / `Customer` seeded; `[Authorize(Roles = …)]` on every controller (`AdminControllerBase` for the admin area) |
+| **IDOR protection** | Every customer lookup filters by the signed-in user's id (`BankService.GetAccountAsync(id, userId)` …); explained in `AccountsController` (Account Details section) |
+| **JSON API + DTOs + Swagger** | `Controllers/Api/AccountsApiController.cs`, `Areas/Admin/Controllers/Api/AdminApiController.cs`, DTOs in `Dtos/ApiDtos.cs`; Swagger in `Program.cs` (Development only) |
+| **Charts (Chart.js from cdnjs)** | Customer dashboard 30-day in/out (`wwwroot/js/dashboard.js`); admin overview (`wwwroot/js/admin-overview.js` → `/api/admin/stats`) |
+| **Demo mode** | `AuthController.DemoLogin` + "Demo Customer / Demo Admin" buttons (Development only) |
 
----
+## Admin portal features (`/admin`)
+
+Every action that changes data goes through **`IAdminService`**: one database transaction, an **AuditLog** row (admin, action, target, before/after, reason, time), a **required reason** for destructive or money-moving actions, a confirmation modal that states exactly what will happen, and a flash message after the redirect. Nothing is ever hard-deleted: accounts are **Closed**, transactions **Reversed**, cards **Cancelled**, logins **Locked**, applications **Denied**.
+
+- **Overview**: KPI tiles (customers, deposits, accounts by type, transactions today, pending applications, frozen accounts), 3 charts, and a "Needs attention" panel
+- **Customers**: search/sort/page; create (temporary password shown once, forced change at first login); profile edit; open an account for them; internal notes; lock/unlock login; reset password; force password change; read-only **View as customer**
+- **Accounts**: filter by type/status/balance/owner; freeze/unfreeze; close (moving any balance first) and reopen; manual credit/debit adjustments; nickname and daily transfer limit; post interest (once per month)
+- **Transactions**: filters + CSV export; details; **reverse** (offsetting transaction, original marked Reversed, both transfer legs together, can't reverse twice)
+- **Applications**: Pending/Approved/Denied lists; approve (opens the account and moves the opening deposit) or deny (reason shown to the customer)
+- **Settings**: savings/checking APY, default daily transfer limit, large-transaction alert threshold, auto-approve toggle, **Run monthly interest** (with summary)
+- **Audit log**: filters, paging, CSV export
+
+## Customer Account Details (`/accounts/{id}`)
+
+Header (card graphic, balances, status banner, quick actions disabled when frozen/closed, savings APY/interest/goal) and tabs kept in the URL hash: **Activity** (search, type, date presets, grouped by day, expandable rows, money in/out/net, Load more, CSV), **Account Info** (inline nickname edit, Show/Copy account number re-masked after 30 s, rates & fees, printable monthly statements), **Direct Deposit** (routing `031300000`, Show/Copy, printable pre-filled form), **Card** (virtual debit card: show details, freeze/unfreeze, cancel, request a new card).
 
 ## API endpoints
 
-All endpoints use the same login cookie as the website. Log in first, then try them at **/swagger**.
-Without a login they return **401**. Customer endpoints return **403** for admins; `/api/admin/*` returns **403** for customers.
+Log in on the website first, then try them at **/swagger** (same cookie). No login → **401**. Customer endpoints → **403** for admins; `/api/admin/*` → **403** for customers. Another customer's id → **404**.
 
-| Method | URL | Description | Errors |
-|---|---|---|---|
-| GET | `/api/accounts` | The signed-in user's accounts (`AccountDto[]`) | 401 |
-| GET | `/api/accounts/{id}` | One account with its balance | 401, 404 if not yours |
-| GET | `/api/accounts/{id}/transactions?page=1` | Transactions, newest first, 10 per page (`PagedResult<TransactionDto>`) | 400 if `page < 1`, 404 |
-| POST | `/api/transfers` | Body `{ "fromAccountId": 1, "toAccountId": 2, "amount": 25.00, "memo": "rent" }`; transfers between your accounts via `IBankService` | **400** for invalid amount, same account, or insufficient funds |
-| GET | `/api/admin/stats?days=30` | Admin totals: customers, deposits, accounts by type, transactions per day | 401, 403 |
+| Method | URL | Description |
+|---|---|---|
+| GET | `/api/accounts` | Your accounts |
+| GET | `/api/accounts/{id}` | One account + balance + status |
+| GET | `/api/accounts/{id}/transactions?page=1&pageSize=20&search=&kind=&from=&to=` | Activity page + money in/out for the filtered range (`kind`: in, out, deposit, withdrawal, transfer, interest, adjustment, reversal) |
+| GET | `/api/accounts/{id}/number` | Full account number + routing number (audited) |
+| POST | `/api/accounts/{id}/nickname` | `{ "nickname": "Rainy Day" }` |
+| GET | `/api/accounts/{id}/cards/{cardId}/reveal` | Card number, expiry, CVV (CVV computed, never stored; audited) |
+| POST | `/api/transfers` | `{ "fromAccountId": 1, "toAccountId": 2, "amount": 25.00, "memo": "rent" }`; 400 on frozen/closed, daily limit, insufficient funds |
+| GET | `/api/admin/stats?days=30` | Admin KPIs + chart series |
+| GET | `/api/admin/customers?search=` | Customers matching a name/email |
+| GET | `/api/admin/accounts/{id}` | Admin view of any account |
+| POST | `/api/admin/accounts/{id}/freeze` | `{ "reason": "…" }` (via `IAdminService`, audited) |
+| POST | `/api/admin/accounts/{id}/unfreeze` | `{ "reason": "…" }` |

@@ -8,14 +8,7 @@ namespace AltoBank.Dtos;
 
 public record AccountDto(
     int Id, string Type, string Name, string? Nickname,
-    string MaskedNumber, decimal Balance, DateTime OpenedAt);
-
-public record TransactionDto(
-    int Id, DateTime Date, string Description, string Type,
-    decimal Amount, decimal SignedAmount, decimal BalanceAfter);
-
-public record PagedResult<T>(
-    IReadOnlyList<T> Items, int Page, int PageSize, int TotalCount, int TotalPages);
+    string MaskedNumber, decimal Balance, DateTime OpenedAt, string Status);
 
 /// <summary>Body for POST /api/transfers. Validated automatically because of [ApiController].</summary>
 public class TransferRequestDto
@@ -30,6 +23,31 @@ public class TransferRequestDto
 }
 
 public record TransferResultDto(string Message, AccountDto From, AccountDto To);
+
+/// <summary>One row of the Account Details "Activity" list (GET /api/accounts/{id}/activity).</summary>
+/// <remarks>Type = readable label ("Transfer In"); Kind = the enum name ("TransferIn").</remarks>
+public record ActivityItemDto(
+    int Id, DateTime Date, string Description, string Type, string Kind, bool IsCredit,
+    decimal Amount, decimal SignedAmount, decimal BalanceAfter, string Status,
+    string? Memo, string? Counterparty, int? ReversalOfTransactionId, int? ReversedByTransactionId);
+
+/// <summary>A page of activity plus the money in/out totals for the WHOLE filtered range.</summary>
+public record ActivityPageDto(
+    IReadOnlyList<ActivityItemDto> Items, int Page, int PageSize, int TotalCount, bool HasMore,
+    decimal MoneyIn, decimal MoneyOut, decimal Net);
+
+/// <summary>Full account number — only returned to the owner, on request (the "Show" button).</summary>
+public record AccountNumberDto(string AccountNumber, string RoutingNumber);
+
+/// <summary>Full card details — only returned to the owner, on request; CVV is computed, never stored.</summary>
+public record CardDetailsDto(string CardNumber, string Expiry, string Cvv, string NameOnCard);
+
+/// <summary>Body for POST /api/accounts/{id}/nickname (inline edit on Account Info).</summary>
+public class NicknameDto
+{
+    [StringLength(30, ErrorMessage = "Nickname can be at most 30 characters.")]
+    public string? Nickname { get; set; }
+}
 
 public record DailyActivityDto(DateOnly Date, int Count, decimal Volume);
 

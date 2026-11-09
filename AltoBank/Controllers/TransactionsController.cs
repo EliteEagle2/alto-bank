@@ -44,7 +44,7 @@ public class TransactionsController : Controller
             if (result.Success)
             {
                 TempData["Success"] = result.Message;   // flash message for the next page (PRG)
-                return RedirectToAction(nameof(History), new { id = model.AccountId });
+                return RedirectToAction("Details", "Accounts", new { id = model.AccountId }, "activity");
             }
             ModelState.AddModelError(string.Empty, result.Message);
         }
@@ -71,7 +71,7 @@ public class TransactionsController : Controller
             if (result.Success)
             {
                 TempData["Success"] = result.Message;
-                return RedirectToAction(nameof(History), new { id = model.AccountId });
+                return RedirectToAction("Details", "Accounts", new { id = model.AccountId }, "activity");
             }
             ModelState.AddModelError(string.Empty, result.Message); // e.g. "Insufficient funds"
         }
@@ -111,27 +111,18 @@ public class TransactionsController : Controller
 
     // ---------- History ----------
 
-    // ATTRIBUTE ROUTE: this action lives at /accounts/5/history instead of the conventional
-    // /Transactions/History/5. "{id:int}" is a route constraint (only numbers match).
-    // Tag helpers like asp-action="History" asp-route-id="5" generate this URL automatically.
+    // ATTRIBUTE ROUTE: /accounts/5/history (instead of the conventional /Transactions/History/5).
+    // "{id:int}" is a route constraint (only numbers match). The full history now lives on the
+    // Account Details page, so this old URL redirects to its Activity tab (#activity).
     [HttpGet("accounts/{id:int}/history")]
     public async Task<IActionResult> History(int id)
     {
-        // Explicit loading: the account is loaded first, then its Transactions (see BankService).
-        var account = await _bank.GetAccountWithHistoryAsync(id, UserId);
-        if (account == null)
+        if (await _bank.GetAccountAsync(id, UserId) == null)   // ownership check (IDOR)
         {
             TempData["Error"] = "That account wasn't found.";
             return RedirectToAction("Index", "Accounts");
         }
-
-        return View(new HistoryViewModel
-        {
-            Account = account,
-            Transactions = account.Transactions
-                .OrderByDescending(t => t.Date).ThenByDescending(t => t.Id)
-                .ToList()
-        });
+        return RedirectToAction("Details", "Accounts", new { id }, "activity");
     }
 
     // ---------- Helpers ----------

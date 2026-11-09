@@ -18,8 +18,8 @@ namespace AltoBank.Services;
 /// LOADING STRATEGIES used in this class (EF Core):
 ///  • EAGER loading  — GetDashboardDataAsync: .Include()/.ThenInclude() load the user, their
 ///                     accounts, and recent transactions in ONE query.
-///  • EXPLICIT loading — GetAccountWithHistoryAsync: load the account first, then later ask
-///                     for its Transactions with Entry(...).Collection(...).LoadAsync().
+///  • EXPLICIT loading — GetStatementAsync: load the account first, then later ask for just one
+///                     month of its Transactions with Entry(...).Collection(...).Query().LoadAsync().
 ///  • LAZY loading is NOT enabled. Lazy loading (UseLazyLoadingProxies + virtual navigation
 ///    properties) silently runs a new SQL query the first time you touch a navigation property.
 ///    That's convenient but easily causes the "N+1 queries" problem (e.g. one query per account
@@ -28,8 +28,10 @@ namespace AltoBank.Services;
 /// </summary>
 public class BankService : IBankService
 {
-    // Fictional routing number shown on account details (a well-known test value, not a real bank).
-    public const string RoutingNumber = "110000000";
+    // Placeholder routing number and bank details shown on Account Details / Direct Deposit (demo only).
+    public const string RoutingNumber = "031300000";
+    public const string BankName = "Alto Bank";
+    public const string BankAddress = "1200 Chestnut Ave, Altoona, PA 16601";
     public const decimal MaxAmount = 1_000_000m;
 
     private readonly ApplicationDbContext _db;
@@ -62,19 +64,119 @@ public class BankService : IBankService
         _db.Accounts.FirstOrDefaultAsync(a => a.Id == accountId && a.UserId == userId);
 
     /// <summary>
-    /// EXPLICIT LOADING example: first load just the account, then load its Transactions
-    /// collection in a second, deliberate step (only if the account belongs to the user).
+    /// EAGER LOADING for the Account Details page: the account, its owner and its cards in one query,
+    /// only if the account belongs to this user (IDOR protection).
     /// </summary>
-    public async Task<Account?> GetAccountWithHistoryAsync(int accountId, string userId)
+    public Task<Account?> GetAccountDetailsAsync(int accountId, string userId) =>
+        _db.Accounts.AsNoTracking()
+            .Include(a => a.User)
+            .Include(a => a.Cards)
+            .FirstOrDefaultAsync(a => a.Id == accountId && a.UserId == userId);
+
+    /// <summary>
+    /// One page of activity for the Account Details "Activity" tab and its JSON API, plus money in/out
+    /// for the WHOLE filtered range. Filtered by owner too, so it's safe by construction.
+    /// </summary>
+    public async Task<ActivityResult> GetActivityAsync(string userId, int accountId, ActivityFilter filter, int page, int pageSize)
     {
-        var account = await GetAccountAsync(accountId, userId);
+        var credits = new[] { TransactionType.Deposit, TransactionType.TransferIn, TransactionType.Interest,
+                              TransactionType.AdjustmentCredit, TransactionType.ReversalCredit };
+        var q = _db.Transactions.AsNoTracking().Where(t => t.AccountId == accountId && t.Account!.UserId == userId);
+
+        if (filter.From is DateTime from) q = q.Where(t => t.Date >= from.Date);
+        if (filter.To is DateTime to) { var end = to.Date.AddDays(1); q = q.Where(t => t.Date < end); }
+        if (!string.IsNullOrWhiteSpace(filter.Search))
+        {
+            var like = $"%{filter.Search.Trim()}%";
+            q = q.Where(t => EF.Functions.Like(t.Description, like) || EF.Functions.Like(t.Memo!, like));
+        }
+        q = filter.Kind switch
+        {
+            "in" => q.Where(t => credits.Contains(t.Type)),
+            "out" => q.Where(t => !credits.Contains(t.Type)),
+            "deposit" => q.Where(t => t.Type == TransactionType.Deposit),
+            "withdrawal" => q.Where(t => t.Type == TransactionType.Withdrawal),
+            "transfer" => q.Where(t => t.Type == TransactionType.TransferIn || t.Type == TransactionType.TransferOut),
+            "interest" => q.Where(t => t.Type == TransactionType.Interest),
+            "adjustment" => q.Where(t => t.Type == TransactionType.AdjustmentCredit || t.Type == TransactionType.AdjustmentDebit),
+            "reversal" => q.Where(t => t.Type == TransactionType.ReversalCredit || t.Type == TransactionType.ReversalDebit),
+            _ => q
+        };
+
+        // Totals for the whole range (SQLite can't SUM decimals, so add the matching amounts in memory).
+        var amounts = await q.Select(t => new { t.Type, t.Amount }).ToListAsync();
+        var items = await q.OrderByDescending(t => t.Date).ThenByDescending(t => t.Id)
+            .Skip((Math.Max(page, 1) - 1) * pageSize).Take(pageSize).ToListAsync();
+
+        return new ActivityResult(items, amounts.Count,
+            MoneyIn: amounts.Where(a => Transaction.IsCreditType(a.Type)).Sum(a => a.Amount),
+            MoneyOut: amounts.Where(a => !Transaction.IsCreditType(a.Type)).Sum(a => a.Amount));
+    }
+
+    /// <summary>
+    /// EXPLICIT LOADING example (monthly statement): load the account first, then load ONLY that
+    /// month's transactions with Entry(...).Collection(...).Query().Where(...).LoadAsync().
+    /// </summary>
+    public async Task<StatementData?> GetStatementAsync(string userId, int accountId, int year, int month)
+    {
+        if (month is < 1 or > 12 || year is < 2000 or > 2100) return null;
+        var account = await _db.Accounts.Include(a => a.User).FirstOrDefaultAsync(a => a.Id == accountId && a.UserId == userId);
         if (account == null) return null;
 
+        var start = new DateTime(year, month, 1);
+        var end = start.AddMonths(1);
         await _db.Entry(account)
             .Collection(a => a.Transactions)
+            .Query().Where(t => t.Date >= start && t.Date < end)
             .LoadAsync();
 
-        return account;
+        var rows = account.Transactions.OrderBy(t => t.Date).ThenBy(t => t.Id).ToList();
+        var before = await _db.Transactions.AsNoTracking()
+            .Where(t => t.AccountId == accountId && t.Date < start)
+            .OrderByDescending(t => t.Date).ThenByDescending(t => t.Id)
+            .Select(t => (decimal?)t.BalanceAfter).FirstOrDefaultAsync();
+        var opening = before ?? 0m;
+        return new StatementData(account, account.User!, year, month, opening,
+            ClosingBalance: rows.LastOrDefault()?.BalanceAfter ?? opening,
+            TotalIn: rows.Where(t => t.IsCredit).Sum(t => t.Amount),
+            TotalOut: rows.Where(t => !t.IsCredit).Sum(t => t.Amount),
+            Transactions: rows);
+    }
+
+    /// <summary>Bank-wide settings (read-only copy for display: APYs, default limits).</summary>
+    public async Task<BankSetting> GetSettingsAsync() =>
+        await _db.BankSettings.AsNoTracking().FirstOrDefaultAsync(s => s.Id == BankSetting.SingletonId) ?? new BankSetting();
+
+    /// <summary>Interest posted to this account since January 1st (owner-filtered).</summary>
+    public async Task<decimal> GetInterestThisYearAsync(string userId, int accountId)
+    {
+        var jan1 = new DateTime(DateTime.UtcNow.Year, 1, 1);
+        var amounts = await _db.Transactions.AsNoTracking()
+            .Where(t => t.AccountId == accountId && t.Account!.UserId == userId && t.Type == TransactionType.Interest
+                        && t.Status == TransactionStatus.Posted && t.Date >= jan1)
+            .Select(t => t.Amount).ToListAsync();
+        return amounts.Sum();
+    }
+
+    /// <summary>"Everyday Checking ••4821" labels for the user's accounts (to show transfer counterparties).</summary>
+    public async Task<Dictionary<int, string>> GetAccountLabelsAsync(string userId) =>
+        (await _db.Accounts.AsNoTracking().Where(a => a.UserId == userId).ToListAsync())
+            .ToDictionary(a => a.Id, a => $"{a.DisplayName} ••{a.Last4}");
+
+    /// <summary>Inline nickname edit from the Account Info tab. Owner-only; audited.</summary>
+    public async Task<BankResult> UpdateNicknameAsync(string userId, int accountId, string? nickname)
+    {
+        nickname = Clean(nickname);
+        if (nickname?.Length > 30) return new(false, "Nickname can be at most 30 characters.");
+        var account = await GetAccountAsync(accountId, userId);
+        if (account == null) return new(false, "Account not found.");
+        if (account.Status == AccountStatus.Closed) return new(false, "Closed accounts can't be renamed.");
+        var before = account.Nickname;
+        account.Nickname = nickname;
+        _audit.Add("Account.Rename", $"Renamed ••{account.Last4} to \"{account.DisplayName}\"", "Account", account.Id.ToString(),
+                   new { nickname = before }, new { nickname });
+        await _db.SaveChangesAsync();
+        return new(true, $"Nickname saved: {account.DisplayName}");
     }
 
     /// <summary>
@@ -116,24 +218,6 @@ public class BankService : IBankService
                     Out: list.Where(r => !Transaction.IsCreditType(r.Type)).Sum(r => r.Amount));
             })
             .ToList();
-    }
-
-    /// <summary>
-    /// One page of an account's transactions (used by the JSON API).
-    /// Filtered by BOTH the account and its owner, so it's safe by construction: even if a caller
-    /// forgot to check ownership first, another user's transactions could never come back.
-    /// </summary>
-    public async Task<(List<Transaction> Items, int TotalCount)> GetTransactionsPageAsync(string userId, int accountId, int page, int pageSize)
-    {
-        var query = _db.Transactions.AsNoTracking()
-            .Where(t => t.AccountId == accountId && t.Account!.UserId == userId);
-        var total = await query.CountAsync();
-        var items = await query
-            .OrderByDescending(t => t.Date).ThenByDescending(t => t.Id)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
-        return (items, total);
     }
 
     /// <summary>The account's daily transfer limit and how much of it has been used today (UTC day).</summary>

@@ -15,6 +15,16 @@ public record OpenAccountRequest(
     decimal? GoalAmount, string? GoalName,
     decimal InitialDeposit, int? FundingAccountId, string? ExternalSource = null);
 
+/// <summary>Filters for the Account Details activity list. Kind: in, out, deposit, withdrawal, transfer, interest, adjustment, reversal.</summary>
+public record ActivityFilter(string? Search, string? Kind, DateTime? From, DateTime? To);
+
+/// <summary>A page of activity, the total matching rows, and money in/out for ALL matching rows.</summary>
+public record ActivityResult(List<Transaction> Items, int TotalCount, decimal MoneyIn, decimal MoneyOut);
+
+/// <summary>Everything a monthly statement shows.</summary>
+public record StatementData(Account Account, ApplicationUser Owner, int Year, int Month,
+    decimal OpeningBalance, decimal ClosingBalance, decimal TotalIn, decimal TotalOut, List<Transaction> Transactions);
+
 /// <summary>
 /// The CUSTOMER banking operations. Controllers depend on this INTERFACE, not on the
 /// BankService class, and Program.cs tells dependency injection which class to use:
@@ -27,10 +37,15 @@ public interface IBankService
     // ----- Reading accounts (always filtered by the owner's userId) -----
     Task<List<Account>> GetAccountsAsync(string userId);
     Task<Account?> GetAccountAsync(int accountId, string userId);
-    Task<Account?> GetAccountWithHistoryAsync(int accountId, string userId);       // explicit loading
+    Task<Account?> GetAccountDetailsAsync(int accountId, string userId);            // eager loading (owner + cards)
     Task<ApplicationUser?> GetDashboardDataAsync(string userId, int recentPerAccount); // eager loading
+    Task<ActivityResult> GetActivityAsync(string userId, int accountId, ActivityFilter filter, int page, int pageSize);
+    Task<StatementData?> GetStatementAsync(string userId, int accountId, int year, int month); // explicit loading
+    Task<decimal> GetInterestThisYearAsync(string userId, int accountId);
+    Task<Dictionary<int, string>> GetAccountLabelsAsync(string userId);
+    Task<BankResult> UpdateNicknameAsync(string userId, int accountId, string? nickname);
+    Task<BankSetting> GetSettingsAsync();                                              // read-only (APYs, limits)
     Task<List<DailyFlowDto>> GetDailyFlowsAsync(string userId, int days);              // dashboard chart
-    Task<(List<Transaction> Items, int TotalCount)> GetTransactionsPageAsync(string userId, int accountId, int page, int pageSize);
     Task<(decimal Limit, decimal UsedToday)> GetDailyTransferUsageAsync(Account account);
 
     // ----- Moving money (status, limits, and balance rules enforced inside) -----

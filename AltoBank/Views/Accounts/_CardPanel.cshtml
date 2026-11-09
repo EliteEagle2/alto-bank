@@ -1,0 +1,146 @@
+@model AccountDetailsViewModel
+@* CARD tab (checking accounts): the virtual debit card, Show details (number / expiry / CVV, fetched from an
+   owner-only API and re-masked after 30 s), Freeze/Unfreeze, Cancel, Request a new card, and past cards.
+   Card actions POST to CardsController (anti-forgery token added by the form tag helper), then return here. *@
+@{
+    var a = Model.Account;
+    var card = Model.CurrentCard;
+    var lastCard = Model.Cards.FirstOrDefault();          // newest card of any status
+    var canReplace = a.Status != AccountStatus.Closed && lastCard != null
+                     && !Model.Cards.Any(c => c.ReplacesCardId == lastCard.Id);
+    var reasons = CardCancelReasons.CustomerChoices;
+}
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        @if (card != null)
+        {
+            <div class="card-stage card-stage--sm" id="cardArt" data-card-id="@card.Id"
+                 data-reveal-url="@Url.Action("RevealCard", "AccountsApi", new { id = a.Id, cardId = card.Id })">
+                <partial name="_CardArt" model='new CardArtViewModel("Debit", CardDesigns.CssClass(card.Design) + " static" + (card.Status == CardStatus.Frozen ? " is-frozen" : ""),
+                    card.MaskedNumber, card.NameOnCard, a.Nickname)' />
+            </div>
+        }
+        else
+        {
+            <div class="glass empty-state">
+                <i class="bi bi-credit-card-2-front"></i>
+                <p class="mt-2 mb-0">There's no active card on this account.</p>
+            </div>
+        }
+    </div>
+
+    <div class="col-lg-6">
+        @if (card != null)
+        {
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <h2 class="h5 mb-0">Alto Debit ••@card.Last4</h2>
+                <span class="acct-status acct-status--@card.Status.ToString().ToLowerInvariant()">@card.Status</span>
+            </div>
+            <p class="text-muted-alto small">Virtual card · issued @card.IssuedAt.ToString("MMM d, yyyy") · expires @card.Expiry</p>
+            @if (card.Status == CardStatus.Frozen)
+            {
+                <div class="notice notice-info mb-3"><i class="bi bi-snow"></i><div>This card is <strong>frozen</strong>. New purchases are declined until you unfreeze it.</div></div>
+            }
+
+            <div class="card-details" data-card-details hidden>
+                <div class="card-details-grid">
+                    <div><div class="acct-label">Card number</div><div class="font-monospace" data-card-field="cardNumber"></div></div>
+                    <div><div class="acct-label">Expires</div><div class="font-monospace" data-card-field="expiry"></div></div>
+                    <div><div class="acct-label">CVV</div><div class="font-monospace" data-card-field="cvv"></div></div>
+                </div>
+                <div class="small text-muted-alto mt-2"><i class="bi bi-clock me-1"></i>Hidden again in <span data-card-timer>30</span>s</div>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 mt-3">
+                <button type="button" class="btn btn-alto-outline" data-reveal-card><i class="bi bi-eye me-1"></i>Show card details</button>
+                @if (card.Status == CardStatus.Active)
+                {
+                    <form asp-controller="Cards" asp-action="Freeze" asp-route-id="@a.Id" asp-route-cardId="@card.Id" method="post">
+                        <button type="submit" class="btn btn-alto-ghost"><i class="bi bi-snow me-1"></i>Freeze card</button>
+                    </form>
+                }
+                else if (card.Status == CardStatus.Frozen)
+                {
+                    <form asp-controller="Cards" asp-action="Unfreeze" asp-route-id="@a.Id" asp-route-cardId="@card.Id" method="post">
+                        <button type="submit" class="btn btn-alto-ghost"><i class="bi bi-sun me-1"></i>Unfreeze card</button>
+                    </form>
+                }
+                <button type="button" class="btn btn-alto-ghost text-danger-alto" data-bs-toggle="modal" data-bs-target="#cancelCardModal"><i class="bi bi-x-circle me-1"></i>Cancel card</button>
+            </div>
+        }
+
+        @if (canReplace)
+        {
+            <button type="button" class="btn btn-alto mt-3" data-bs-toggle="modal" data-bs-target="#replaceCardModal"><i class="bi bi-arrow-repeat me-1"></i>Request a new card</button>
+        }
+        else if (a.Status == AccountStatus.Closed)
+        {
+            <p class="small text-muted-alto mt-3">Cards can't be issued on a closed account.</p>
+        }
+
+        @if (Model.Cards.Count > 1 || card == null)
+        {
+            <h3 class="h6 mt-4">Card history</h3>
+            <ul class="card-history">
+                @foreach (var c in Model.Cards)
+                {
+                    <li>
+                        <span class="font-monospace">••@c.Last4</span>
+                        <span class="acct-status acct-status--@c.Status.ToString().ToLowerInvariant()">@c.Status</span>
+                        <span class="small text-muted-alto">issued @c.IssuedAt.ToString("MMM d, yyyy")@(c.CancelledAt == null ? "" : $" · cancelled {c.CancelledAt:MMM d, yyyy} ({c.CancelReason})")</span>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@* ----- Cancel card ----- *@
+@if (card != null)
+{
+    <div class="modal fade alto-modal" id="cancelCardModal" tabindex="-1" aria-labelledby="cancelCardTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content" asp-controller="Cards" asp-action="Cancel" asp-route-id="@a.Id" asp-route-cardId="@card.Id" method="post">
+                <div class="modal-header"><h2 class="modal-title h5" id="cancelCardTitle">Cancel card ••@card.Last4?</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                <div class="modal-body">
+                    <p class="text-muted-alto">The card stops working immediately and can't be turned back on. Your account and money aren't affected. You can request a new card afterwards.</p>
+                    <label class="form-label" for="cancelReason">Reason</label>
+                    <select id="cancelReason" name="reason" class="form-select" required>
+                        @foreach (var r in reasons) { <option value="@r">@r</option> }
+                    </select>
+                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-alto-ghost" data-bs-dismiss="modal">Keep card</button><button type="submit" class="btn btn-alto">Cancel card</button></div>
+            </form>
+        </div>
+    </div>
+}
+
+@* ----- Request a new card (replacement) ----- *@
+@if (canReplace)
+{
+    <div class="modal fade alto-modal" id="replaceCardModal" tabindex="-1" aria-labelledby="replaceCardTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form class="modal-content" asp-controller="Cards" asp-action="Replace" asp-route-id="@a.Id" asp-route-cardId="@lastCard!.Id" method="post">
+                <div class="modal-header"><h2 class="modal-title h5" id="replaceCardTitle">Request a new card</h2><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+                <div class="modal-body">
+                    <p class="text-muted-alto">
+                        @if (lastCard.Status != CardStatus.Cancelled)
+                        {
+                            <text>Card ••@lastCard.Last4 will be cancelled right away and a new virtual card with a new number will be issued instantly.</text>
+                        }
+                        else
+                        {
+                            <text>A new virtual card with a new number will be issued instantly.</text>
+                        }
+                    </p>
+                    <label class="form-label" for="replaceReason">Why do you need a new card?</label>
+                    <select id="replaceReason" name="reason" class="form-select" required>
+                        @foreach (var r in reasons.Where(r => r != CardCancelReasons.NoLongerNeeded)) { <option value="@r">@r</option> }
+                    </select>
+                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-alto-ghost" data-bs-dismiss="modal">Close</button><button type="submit" class="btn btn-alto">Issue new card</button></div>
+            </form>
+        </div>
+    </div>
+}

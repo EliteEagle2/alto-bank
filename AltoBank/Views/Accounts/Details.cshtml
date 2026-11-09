@@ -1,0 +1,200 @@
+@model AccountDetailsViewModel
+@* CUSTOMER ACCOUNT DETAILS — /accounts/{id}. Tabs switch without a page reload and the active tab is kept
+   in the URL hash (#activity, #info, #direct-deposit, #card). The first page of activity is rendered here
+   (grouped by date); "Load more" and filter changes call GET /api/accounts/{id}/transactions. *@
+@{
+    var a = Model.Account;
+    var groups = Model.FirstPage.GroupBy(t => t.LocalDate.Date);
+    string DayLabel(DateTime d) => d == DateTime.Today ? "Today" : d == DateTime.Today.AddDays(-1) ? "Yesterday" : d.ToString("dddd, MMM d, yyyy");
+    var numberUrl = Url.Action("GetAccountNumber", "AccountsApi", new { id = a.Id });
+}
+
+<div class="container acct-details" id="accountDetails"
+     data-account-id="@a.Id"
+     data-activity-url="@Url.Action("GetTransactions", "AccountsApi", new { id = a.Id })"
+     data-nickname-url="@Url.Action("SetNickname", "AccountsApi", new { id = a.Id })"
+     data-number-url="@numberUrl"
+     data-page-size="@AccountDetailsViewModel.PageSize"
+     data-total="@Model.TotalCount"
+     data-default-days="@AccountDetailsViewModel.DefaultDays">
+
+    <partial name="_AccountHeader" model="Model" />
+
+    <ul class="nav acct-tabs" role="tablist">
+        <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#activity" type="button" role="tab" aria-controls="activity" aria-selected="true">Activity</button></li>
+        <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#info" type="button" role="tab" aria-controls="info" aria-selected="false">Account Info</button></li>
+        <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#direct-deposit" type="button" role="tab" aria-controls="direct-deposit" aria-selected="false">Direct Deposit</button></li>
+        @if (Model.IsChecking)
+        {
+            <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#card" type="button" role="tab" aria-controls="card" aria-selected="false">Card</button></li>
+        }
+    </ul>
+
+    <div class="tab-content">
+        @* ===================== ACTIVITY ===================== *@
+        <section class="tab-pane fade show active" id="activity" role="tabpanel" aria-label="Activity">
+            <partial name="_TransactionFilters" model="Model" />
+
+            <div class="activity-summary" aria-live="polite">
+                <div><span class="acct-label">Money in</span><span class="amount-credit" data-sum="in">+@Model.MoneyIn.ToString("C")</span></div>
+                <div><span class="acct-label">Money out</span><span class="amount-debit" data-sum="out">−@Model.MoneyOut.ToString("C")</span></div>
+                <div><span class="acct-label">Net</span><span data-sum="net"><money amount="@(Model.MoneyIn - Model.MoneyOut)" colorize="true" show-sign="true" /></span></div>
+                <div class="ms-auto text-muted-alto small" data-count>@Model.TotalCount transactions</div>
+            </div>
+
+            <div class="glass activity-list" id="activityList">
+                @foreach (var g in groups)
+                {
+                    <div class="tx-group" data-date="@g.Key.ToString("yyyy-MM-dd")">
+                        <div class="tx-date-head">@DayLabel(g.Key)</div>
+                        @foreach (var t in g)
+                        {
+                            <partial name="_TransactionRow" model='new TransactionRowViewModel(t, t.CounterpartyAccountId is int c ? Model.AccountLabels.GetValueOrDefault(c) : null)' />
+                        }
+                    </div>
+                }
+            </div>
+            <div class="activity-empty glass" data-empty @(Model.TotalCount == 0 ? "" : "hidden")>
+                <i class="bi bi-receipt"></i>
+                <p class="mb-0">No transactions match these filters.</p>
+            </div>
+            <div class="text-center mt-3">
+                <button type="button" class="btn btn-alto-ghost" data-load-more @(Model.TotalCount > Model.FirstPage.Count ? "" : "hidden")>
+                    <span class="spinner-border spinner-border-sm me-2 d-none" data-spinner></span>Load more
+                </button>
+            </div>
+        </section>
+
+        @* ===================== ACCOUNT INFO ===================== *@
+        <section class="tab-pane fade" id="info" role="tabpanel" aria-label="Account info">
+            <div class="row g-4">
+                <div class="col-lg-7">
+                    <div class="glass p-4">
+                        <h2 class="h5 mb-3">Account details</h2>
+                        <dl class="info-list">
+                            <div>
+                                <dt>Nickname</dt>
+                                <dd>
+                                    <div class="nickname-view" data-nickname-view>
+                                        <span data-nickname-text>@(a.Nickname ?? "None")</span>
+                                        @if (a.Status != AccountStatus.Closed)
+                                        {
+                                            <button type="button" class="btn btn-link btn-sm p-0 ms-2" data-nickname-edit aria-label="Edit nickname"><i class="bi bi-pencil"></i> Edit</button>
+                                        }
+                                    </div>
+                                    <form class="nickname-form" data-nickname-form hidden>
+                                        <input class="form-control form-control-sm" name="nickname" maxlength="30" value="@a.Nickname" aria-label="Nickname" placeholder="e.g. Rainy Day Fund" />
+                                        <button type="submit" class="btn btn-alto btn-sm">Save</button>
+                                        <button type="button" class="btn btn-alto-ghost btn-sm" data-nickname-cancel>Cancel</button>
+                                        <div class="small text-danger-alto w-100" data-nickname-error></div>
+                                    </form>
+                                </dd>
+                            </div>
+                            <div><dt>Account type</dt><dd>@(Model.IsChecking ? "Alto Checking" : "Summit Savings")</dd></div>
+                            <div><dt>Status</dt><dd><span class="acct-status acct-status--@a.Status.ToString().ToLowerInvariant()">@a.Status</span></dd></div>
+                            <div><dt>Opened</dt><dd>@a.OpenedAt.ToString("MMMM d, yyyy")</dd></div>
+                            <div><dt>Owner</dt><dd>@Model.OwnerName</dd></div>
+                        </dl>
+                        <partial name="_CopyField" model='new CopyFieldViewModel("acctNumber", "Account number", "•••• •••• " + a.Last4, RevealUrl: numberUrl, RevealField: "accountNumber")' />
+                        <partial name="_CopyField" model='new CopyFieldViewModel("routingInfo", "Routing number", Model.RoutingNumber, CopyValue: Model.RoutingNumber)' />
+                    </div>
+                </div>
+                <div class="col-lg-5">
+                    <div class="glass p-4 mb-4">
+                        <h2 class="h5 mb-3">Rates &amp; fees</h2>
+                        <dl class="info-list">
+                            <div><dt>APY</dt><dd>@Model.Apy.ToString("P2")</dd></div>
+                            <div><dt>Monthly fee</dt><dd>$0.00</dd></div>
+                            <div><dt>Overdraft</dt><dd>Not allowed (no fees)</dd></div>
+                            <div><dt>Daily transfer limit</dt><dd><money amount="@Model.DailyLimit" /> <span class="small text-muted-alto">(<money amount="@Model.UsedToday" /> used today)</span></dd></div>
+                            @if (!Model.IsChecking) { <div><dt>Withdrawals</dt><dd>Up to 6 per month</dd></div> }
+                        </dl>
+                    </div>
+                    <div class="glass p-4">
+                        <h2 class="h5 mb-3">Statements</h2>
+                        <ul class="statement-list">
+                            @foreach (var m in Model.StatementMonths)
+                            {
+                                var current = m.Year == DateTime.UtcNow.Year && m.Month == DateTime.UtcNow.Month;
+                                <li>
+                                    <a asp-action="Statement" asp-route-id="@a.Id" asp-route-year="@m.Year" asp-route-month="@m.Month" target="_blank" rel="noopener">
+                                        <i class="bi bi-file-earmark-text me-2"></i>@m.ToString("MMMM yyyy")
+                                    </a>
+                                    <span class="small text-muted-alto">@(current ? "Month to date" : "Statement")</span>
+                                </li>
+                            }
+                        </ul>
+                        <p class="small text-muted-alto mb-0">Statements are simulated for this demo and open in a printable view.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        @* ===================== DIRECT DEPOSIT ===================== *@
+        <section class="tab-pane fade" id="direct-deposit" role="tabpanel" aria-label="Direct deposit">
+            <div class="row g-4">
+                <div class="col-lg-6">
+                    <div class="glass p-4">
+                        <h2 class="h5 mb-3">Your direct deposit details</h2>
+                        <partial name="_CopyField" model='new CopyFieldViewModel("ddRouting", "Routing number", Model.RoutingNumber, CopyValue: Model.RoutingNumber)' />
+                        <partial name="_CopyField" model='new CopyFieldViewModel("ddAccount", "Account number", "•••• •••• " + a.Last4, RevealUrl: numberUrl, RevealField: "accountNumber")' />
+                        <dl class="info-list mt-3">
+                            <div><dt>Bank name</dt><dd>@Model.BankName</dd></div>
+                            <div><dt>Bank address</dt><dd>@Model.BankAddress</dd></div>
+                            <div><dt>Account type</dt><dd>@a.AccountType</dd></div>
+                        </dl>
+                        <button type="button" class="btn btn-alto mt-2" data-print-dd><i class="bi bi-printer me-1"></i>Print direct deposit form</button>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="glass p-4">
+                        <h2 class="h5 mb-3">How to set it up</h2>
+                        <ol class="dd-steps">
+                            <li>Ask your employer or benefits provider for their direct deposit form, or print the pre-filled Alto form.</li>
+                            <li>Enter the routing number <strong>@Model.RoutingNumber</strong> and your full account number.</li>
+                            <li>Choose <strong>@a.AccountType</strong> as the account type and how much to deposit.</li>
+                            <li>Sign it and hand it to your employer. Deposits usually start within 1–2 pay cycles.</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+
+            @* Printable form: only this block is shown when printing (see @media print in site.css). *@
+            <div class="dd-form" id="ddForm" aria-hidden="true">
+                <h2>Direct Deposit Authorization</h2>
+                <p class="dd-sub">@Model.BankName · @Model.BankAddress</p>
+                <table>
+                    <tr><th>Account holder</th><td>@Model.OwnerName</td></tr>
+                    <tr><th>Address</th><td>@(string.IsNullOrEmpty(Model.OwnerAddress) ? "" : Model.OwnerAddress)</td></tr>
+                    <tr><th>Bank name</th><td>@Model.BankName</td></tr>
+                    <tr><th>Routing number</th><td>@Model.RoutingNumber</td></tr>
+                    <tr><th>Account number</th><td data-dd-account>•••• •••• @a.Last4</td></tr>
+                    <tr><th>Account type</th><td>@(Model.IsChecking ? "☑ Checking   ☐ Savings" : "☐ Checking   ☑ Savings")</td></tr>
+                    <tr><th>Amount to deposit</th><td>☐ Entire paycheck   ☐ ______ %   ☐ $ ________</td></tr>
+                </table>
+                <p class="dd-legal">I authorize my employer to deposit my pay into the account above, and to correct any errors. This authorization stays in effect until I cancel it in writing.</p>
+                <div class="dd-sign"><span>Signature ______________________________</span><span>Date ______________</span></div>
+                <p class="dd-legal">Demo document generated by Alto Bank (fictional). Not valid for real payroll.</p>
+            </div>
+        </section>
+
+        @* ===================== CARD (checking only) ===================== *@
+        @if (Model.IsChecking)
+        {
+            <section class="tab-pane fade" id="card" role="tabpanel" aria-label="Debit card">
+                <partial name="_CardPanel" model="Model" />
+            </section>
+        }
+    </div>
+</div>
+
+@* Toasts ("Copied!" etc.) *@
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
+    <div class="toast alto-toast" id="altoToast" role="status" aria-live="polite" aria-atomic="true" data-bs-delay="2200">
+        <div class="toast-body"><i class="bi bi-check2-circle me-2"></i><span data-toast-text>Copied</span></div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/account-details.js" asp-append-version="true"></script>
+}

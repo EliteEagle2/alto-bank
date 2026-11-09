@@ -65,7 +65,7 @@
                                         @(app.AccountType == AccountType.Checking ? "Alto Checking" : "Summit Savings")
                                         @if (app.Account != null)
                                         {
-                                            <a class="small d-block" asp-controller="Transactions" asp-action="History" asp-route-id="@app.Account.Id">@app.Account.DisplayName ••@app.Account.Last4</a>
+                                            <a class="small d-block" asp-controller="Accounts" asp-action="Details" asp-route-id="@app.Account.Id">@app.Account.DisplayName ••@app.Account.Last4</a>
                                         }
                                     </td>
                                     <td class="d-none d-sm-table-cell"><money amount="@app.OpeningDeposit" /></td>

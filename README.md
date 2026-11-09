@@ -49,6 +49,11 @@ dotnet ef migrations add <Name>   # after changing a model
 dotnet ef database update         # apply migrations
 ```
 
+## Two sides
+
+- **Customer bank** at `/dashboard`: accounts, account details at `/accounts/{id}` (activity, statements, direct deposit, virtual debit card), transfers, and the 7-step account application.
+- **Admin portal** at `/admin`: customers, accounts, transactions, applications, settings, and the audit log. Every admin action asks for a reason and is recorded.
+
 ## Useful pages
 
 | Page | URL |

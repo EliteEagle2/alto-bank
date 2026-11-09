@@ -1,0 +1,118 @@
+@model AccountDetailsViewModel
+@* Top of the Account Details page: status banner, card graphic, balances, savings info, quick actions.
+   Quick actions are disabled (with an explanation) when the account is frozen or closed. *@
+@{
+    var a = Model.Account;
+    var isChecking = Model.IsChecking;
+    var design = Model.CurrentCard?.Design ?? a.CardDesign;
+    var variant = (isChecking ? CardDesigns.CssClass(design) : "alto-card--violet") + " static";
+    var holder = Model.OwnerName;
+    string? why = a.Status switch
+    {
+        AccountStatus.Frozen => "Paused while this account is frozen",
+        AccountStatus.Closed => "Not available on a closed account",
+        _ => null
+    };
+    var transferDisabled = !Model.CanSend || Model.OpenAccountCount < 2;
+}
+
+@if (a.Status == AccountStatus.Frozen)
+{
+    <div class="status-banner frozen" role="alert">
+        <i class="bi bi-snow"></i>
+        <div><strong>This account is frozen.</strong> Withdrawals and transfers out are paused for your protection.
+            Deposits and incoming transfers still work. Please <a asp-controller="Support" asp-action="Contact">contact support</a> to restore full access.</div>
+    </div>
+}
+else if (a.Status == AccountStatus.Closed)
+{
+    <div class="status-banner closed" role="alert">
+        <i class="bi bi-slash-circle"></i>
+        <div><strong>This account was closed@(a.ClosedAt == null ? "" : " on " + a.ClosedAt.Value.ToString("MMM d, yyyy")).</strong>
+            You can still view its history and statements, but money can't be moved in or out.</div>
+    </div>
+}
+
+<div class="acct-header">
+    <div class="acct-card-wrap">
+        <div class="card-stage card-stage--sm">
+            <partial name="_CardArt" model='new CardArtViewModel(isChecking ? "Checking" : "Savings", variant, "****  " + a.Last4, holder, a.Nickname)' />
+        </div>
+    </div>
+
+    <div class="acct-summary">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+            <span class="account-type">@a.AccountType</span>
+            <span class="acct-status acct-status--@a.Status.ToString().ToLowerInvariant()">@a.Status</span>
+            <span class="text-muted-alto small">Opened @a.OpenedAt.ToString("MMM d, yyyy")</span>
+        </div>
+        <h1 class="acct-name" data-account-name>@a.DisplayName</h1>
+        <div class="account-digits mb-3">•••• @a.Last4</div>
+
+        <div class="acct-balances">
+            <div>
+                <div class="acct-label">Current balance</div>
+                <div class="acct-balance"><money amount="@a.Balance" /></div>
+            </div>
+            <div>
+                <div class="acct-label">Available balance</div>
+                <div class="acct-available"><money amount="@Model.AvailableBalance" /></div>
+                @if (a.Status != AccountStatus.Active) { <div class="small text-muted-alto">@why</div> }
+            </div>
+            @if (!isChecking)
+            {
+                <div>
+                    <div class="acct-label">APY</div>
+                    <div class="acct-available">@Model.Apy.ToString("P2")</div>
+                </div>
+                <div>
+                    <div class="acct-label">Interest this year</div>
+                    <div class="acct-available"><money amount="@Model.InterestThisYear" class="text-success-alto" /></div>
+                </div>
+            }
+        </div>
+
+        @if (a.GoalAmount is decimal goal && goal > 0)
+        {
+            var pct = Math.Min(100m, a.Balance / goal * 100m);
+            <div class="goal mt-3" style="max-width: 460px">
+                <div class="d-flex justify-content-between small mb-1">
+                    <span><i class="bi bi-bullseye me-1"></i>@(a.GoalName ?? "Savings goal")</span>
+                    <span class="text-muted-alto"><money amount="@a.Balance" whole="true" /> of <money amount="@goal" whole="true" /> (@pct.ToString("0")%)</span>
+                </div>
+                <div class="progress alto-progress" role="progressbar" aria-valuenow="@pct.ToString("0")" aria-valuemin="0" aria-valuemax="100" aria-label="Goal progress">
+                    <div class="progress-bar" style="width: @pct.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                </div>
+            </div>
+        }
+
+        @* Quick actions. A disabled action is a non-clickable link with a tooltip explaining why. *@
+        <div class="acct-actions">
+            @if (Model.CanReceive)
+            {
+                <a class="btn btn-alto" asp-controller="Transactions" asp-action="Deposit" asp-route-accountId="@a.Id"><i class="bi bi-arrow-down-circle me-1"></i>Deposit</a>
+            }
+            else
+            {
+                <span class="btn btn-alto disabled" aria-disabled="true" title="@why"><i class="bi bi-arrow-down-circle me-1"></i>Deposit</span>
+            }
+            @if (Model.CanSend)
+            {
+                <a class="btn btn-alto-ghost" asp-controller="Transactions" asp-action="Withdraw" asp-route-accountId="@a.Id"><i class="bi bi-arrow-up-circle me-1"></i>Withdraw</a>
+            }
+            else
+            {
+                <span class="btn btn-alto-ghost disabled" aria-disabled="true" title="@why"><i class="bi bi-arrow-up-circle me-1"></i>Withdraw</span>
+            }
+            @if (!transferDisabled)
+            {
+                <a class="btn btn-alto-ghost" asp-controller="Transactions" asp-action="Transfer" asp-route-fromAccountId="@a.Id"><i class="bi bi-arrow-left-right me-1"></i>Transfer</a>
+            }
+            else
+            {
+                <span class="btn btn-alto-ghost disabled" aria-disabled="true" title="@(why ?? "You need a second open account to transfer")"><i class="bi bi-arrow-left-right me-1"></i>Transfer</span>
+            }
+            <a class="btn btn-link text-muted-alto" asp-controller="Accounts" asp-action="Index"><i class="bi bi-chevron-left"></i> Back to accounts</a>
+        </div>
+    </div>
+</div>

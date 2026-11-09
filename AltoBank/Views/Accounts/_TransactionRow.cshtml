@@ -1,0 +1,42 @@
+@model TransactionRowViewModel
+@* One row in the Account Details activity list. Click the row to expand the details.
+   (account-details.js builds rows for "Load more" with the same markup.) *@
+@{
+    var t = Model.Transaction;
+    var icon = t.Type switch
+    {
+        TransactionType.Deposit => "bi-arrow-down-left",
+        TransactionType.Withdrawal => "bi-arrow-up-right",
+        TransactionType.TransferIn or TransactionType.TransferOut => "bi-arrow-left-right",
+        TransactionType.Interest => "bi-percent",
+        TransactionType.AdjustmentCredit or TransactionType.AdjustmentDebit => "bi-sliders",
+        _ => "bi-arrow-counterclockwise"
+    };
+    var reversed = t.Status == TransactionStatus.Reversed;
+}
+<div class="tx-row @(reversed ? "is-reversed" : "")" data-tx-id="@t.Id">
+    <button type="button" class="tx-main" aria-expanded="false" aria-controls="tx-more-@t.Id">
+        <span class="tx-icon @(t.IsCredit ? "in" : "out")" aria-hidden="true"><i class="bi @icon"></i></span>
+        <span class="tx-desc">
+            <span class="tx-title">@t.Description</span>
+            <span class="tx-sub">@t.TypeLabel · @t.LocalDate.ToString("h:mm tt")
+                @if (reversed) { <span class="badge-reversed">Reversed</span> }
+            </span>
+        </span>
+        <span class="tx-amounts">
+            <money amount="@t.SignedAmount" colorize="true" show-sign="true" class="tx-amount" />
+            <span class="tx-bal">Bal <money amount="@t.BalanceAfter" /></span>
+        </span>
+        <i class="bi bi-chevron-down tx-caret" aria-hidden="true"></i>
+    </button>
+    <div class="tx-more" id="tx-more-@t.Id" hidden>
+        <dl class="tx-dl">
+            <div><dt>Transaction ID</dt><dd class="font-monospace">#@t.Id</dd></div>
+            <div><dt>Date &amp; time</dt><dd>@t.LocalDate.ToString("MMM d, yyyy h:mm:ss tt")</dd></div>
+            <div><dt>Type</dt><dd>@t.TypeLabel</dd></div>
+            <div><dt>Counterparty</dt><dd>@(Model.Counterparty ?? "—")</dd></div>
+            <div><dt>Memo</dt><dd>@(t.Memo ?? "—")</dd></div>
+            <div><dt>Status</dt><dd>@(reversed ? "Reversed" : "Posted")</dd></div>
+        </dl>
+    </div>
+</div>

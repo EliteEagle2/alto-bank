@@ -988,3 +988,141 @@ h1, h2, h3, h4, h5, h6, .display-font {
     font-size: 2rem; color: var(--danger); border: 1px solid rgba(255, 77, 109, 0.45);
     background: rgba(255, 77, 109, 0.08); box-shadow: 0 0 24px rgba(255, 77, 109, 0.25);
 }
+/* =========================================================
+   Part 3: customer Account Details (/accounts/{id})
+   ========================================================= */
+.acct-details { padding-top: 1.5rem; }
+.status-banner {
+    display: flex; gap: .85rem; align-items: flex-start; padding: .9rem 1.1rem; border-radius: 14px; margin-bottom: 1.25rem;
+}
+.status-banner i { font-size: 1.3rem; line-height: 1.2; }
+.status-banner.frozen { background: rgba(255, 181, 71, 0.08); border: 1px solid rgba(255, 181, 71, 0.45); color: #ffcf85; }
+.status-banner.closed { background: rgba(255, 77, 109, 0.07); border: 1px solid rgba(255, 77, 109, 0.4); color: #ff9fb1; }
+.status-banner a { color: inherit; text-decoration: underline; }
+
+.acct-header { display: grid; grid-template-columns: 1fr; gap: 1.5rem; align-items: center; margin-bottom: 1.75rem; }
+@media (min-width: 992px) { .acct-header { grid-template-columns: 380px 1fr; gap: 2.5rem; } }
+.card-stage--sm { padding: .5rem 0; }
+.card-stage--sm::before { opacity: .3; }
+.acct-name { font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 700; margin: .2rem 0; }
+.acct-label { display: block; font-size: .72rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+.acct-balances { display: flex; flex-wrap: wrap; gap: 1.25rem 2.25rem; }
+.acct-balance { font-family: "Space Grotesk", sans-serif; font-size: clamp(2rem, 5vw, 2.6rem); font-weight: 700; line-height: 1.1; }
+.acct-available { font-family: "Space Grotesk", sans-serif; font-size: 1.35rem; font-weight: 600; }
+.acct-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.25rem; align-items: center; }
+.acct-actions .disabled { opacity: .45; pointer-events: auto; cursor: not-allowed; }
+.acct-status { font-size: .72rem; font-weight: 600; padding: .15rem .55rem; border-radius: 999px; border: 1px solid var(--border); }
+.acct-status--active { color: var(--success); border-color: rgba(46, 242, 176, 0.4); }
+.acct-status--frozen { color: #ffcf85; border-color: rgba(255, 181, 71, 0.5); }
+.acct-status--closed, .acct-status--cancelled { color: #ff9fb1; border-color: rgba(255, 77, 109, 0.45); }
+
+.acct-tabs { border-bottom: 1px solid var(--border); margin-bottom: 1.25rem; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.acct-tabs .nav-link { color: var(--muted); border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: .7rem 1rem; white-space: nowrap; font-weight: 500; }
+.acct-tabs .nav-link:hover { color: var(--text); }
+.acct-tabs .nav-link.active { color: var(--text); background: none; border-bottom-color: var(--primary); box-shadow: 0 6px 12px -10px rgba(0, 229, 255, .9); }
+
+/* Activity */
+.activity-filters { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin-bottom: 1rem; }
+.af-search { position: relative; flex: 1 1 220px; }
+.af-search i { position: absolute; left: .85rem; top: 50%; transform: translateY(-50%); color: var(--muted); }
+.af-search .form-control { padding-left: 2.3rem; }
+.activity-filters .form-select { width: auto; flex: 0 0 auto; }
+.af-presets { display: flex; gap: .35rem; flex-wrap: wrap; }
+.af-chip { padding: .45rem .85rem; border-radius: 999px; font-size: .85rem; font-weight: 500; background: rgba(11, 15, 26, .6); color: var(--muted); border: 1px solid var(--border); }
+.af-chip:hover { color: var(--text); }
+.af-chip.active { color: var(--primary); border-color: var(--primary); box-shadow: var(--glow); }
+.af-custom { display: flex; gap: .4rem; align-items: center; }
+.af-custom .form-control { width: auto; padding: .45rem .7rem; }
+.activity-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 2rem; padding: .6rem .25rem 1rem; font-family: "Space Grotesk", sans-serif; font-size: 1.1rem; font-weight: 600; }
+.activity-summary .acct-label { font-family: Inter, sans-serif; }
+
+.activity-list { padding: 0; overflow: visible; }
+.tx-group + .tx-group { border-top: 1px solid var(--border); }
+.tx-date-head {
+    position: sticky; top: 64px; z-index: 2; padding: .55rem 1.1rem;
+    font-size: .74rem; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--muted);
+    background: rgba(17, 22, 35, 0.95); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border);
+}
+.tx-row + .tx-row { border-top: 1px solid rgba(138, 147, 166, .08); }
+.tx-main { display: flex; align-items: center; gap: .9rem; width: 100%; padding: .8rem 1.1rem; background: none; border: 0; color: var(--text); text-align: left; }
+.tx-main:hover { background: rgba(0, 229, 255, 0.035); }
+.tx-main:focus-visible { outline: 2px solid rgba(0, 229, 255, .6); outline-offset: -2px; }
+.tx-icon { flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-size: 1rem; }
+.tx-icon.in { color: var(--success); background: rgba(46, 242, 176, .1); }
+.tx-icon.out { color: #ff8fa3; background: rgba(255, 77, 109, .1); }
+.tx-desc { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tx-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx-sub { font-size: .8rem; color: var(--muted); }
+.tx-amounts { display: flex; flex-direction: column; align-items: flex-end; }
+.tx-amount { font-weight: 600; }
+.tx-bal { font-size: .76rem; color: var(--muted); }
+.tx-caret { color: var(--muted); transition: transform .2s; }
+.tx-row.open .tx-caret { transform: rotate(180deg); }
+.tx-row.is-reversed .tx-title, .tx-row.is-reversed .tx-amount { text-decoration: line-through; opacity: .65; }
+.badge-reversed { font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; padding: .05rem .4rem; border-radius: 6px; color: #ffcf85; border: 1px solid rgba(255, 181, 71, .5); margin-left: .25rem; }
+.tx-more { padding: 0 1.1rem 1rem 4.1rem; }
+.tx-dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .6rem 1.25rem; margin: 0; padding: .8rem 1rem; border-radius: 12px; background: rgba(11, 15, 26, .55); border: 1px solid var(--border); }
+.tx-dl dt { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 500; }
+.tx-dl dd { margin: 0; word-break: break-word; }
+.activity-empty { padding: 2.5rem 1rem; text-align: center; color: var(--muted); }
+.activity-empty i { font-size: 2rem; color: var(--primary); }
+@media (max-width: 575.98px) {
+    .tx-more { padding-left: 1.1rem; }
+    .tx-bal { display: none; }
+    .tx-date-head { top: 58px; }
+}
+
+/* Account info */
+.info-list > div { display: flex; justify-content: space-between; gap: 1rem; padding: .6rem 0; border-bottom: 1px solid rgba(138, 147, 166, .1); }
+.info-list > div:last-child { border-bottom: 0; }
+.info-list dt { font-weight: 400; color: var(--muted); }
+.info-list dd { margin: 0; text-align: right; font-weight: 500; }
+.nickname-form { display: flex; flex-wrap: wrap; gap: .4rem; justify-content: flex-end; }
+.nickname-form .form-control { width: 200px; }
+.statement-list { list-style: none; padding: 0; margin: 0 0 .75rem; }
+.statement-list li { display: flex; justify-content: space-between; padding: .45rem 0; border-bottom: 1px solid rgba(138, 147, 166, .1); }
+.statement-list a { text-decoration: none; }
+
+/* Show / Copy field */
+.copy-field { padding: .75rem 0; border-top: 1px solid rgba(138, 147, 166, .1); }
+.copy-field-label { font-size: .72rem; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin-bottom: .2rem; }
+.copy-field-row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.copy-field-value { font-size: 1.1rem; letter-spacing: .06em; }
+.copy-field-timer { font-size: .75rem; color: #ffcf85; border: 1px solid rgba(255, 181, 71, .45); border-radius: 999px; padding: 0 .45rem; }
+
+/* Direct deposit */
+.dd-steps { padding-left: 1.2rem; margin: 0; }
+.dd-steps li { margin-bottom: .6rem; color: #c5cbd8; }
+.dd-form { display: none; }
+
+/* Card tab */
+.alto-card.is-frozen { filter: saturate(.25) brightness(.8); }
+.alto-card.is-frozen::before { content: "FROZEN"; position: absolute; inset: auto 1.2rem 45% auto; z-index: 3; font: 700 1.1rem "Space Grotesk", sans-serif; letter-spacing: .3em; color: #fff; opacity: .9; mask-image: none; -webkit-mask-image: none; background: none; }
+.card-details { padding: 1rem 1.1rem; border-radius: 14px; border: 1px dashed rgba(0, 229, 255, .45); background: rgba(0, 229, 255, .04); }
+.card-details-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem; }
+.card-details-grid .font-monospace { font-size: 1.05rem; letter-spacing: .06em; }
+.card-history { list-style: none; padding: 0; }
+.card-history li { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; padding: .4rem 0; border-bottom: 1px solid rgba(138, 147, 166, .1); }
+
+.alto-toast { background: var(--surface); color: var(--text); border: 1px solid rgba(46, 242, 176, .45); border-radius: 12px; box-shadow: 0 10px 30px rgba(0, 0, 0, .45); }
+.alto-toast .bi { color: var(--success); }
+.alto-toast.is-error { border-color: rgba(255, 77, 109, .5); }
+.alto-toast.is-error .bi { color: var(--danger); }
+
+/* Print: when printing the direct deposit form, show ONLY the form, in plain black on white. */
+@media print {
+    body.print-dd * { visibility: hidden !important; }
+    body.print-dd .dd-form, body.print-dd .dd-form * { visibility: visible !important; }
+    body.print-dd { background: #fff !important; }
+    body.print-dd .dd-form {
+        display: block !important; position: absolute; left: 0; top: 0; width: 100%;
+        color: #000; font: 12pt/1.5 Arial, sans-serif; padding: 0 12mm;
+    }
+    .dd-form h2 { font-size: 18pt; margin: 0 0 4pt; color: #000; }
+    .dd-form .dd-sub { margin: 0 0 14pt; color: #333; }
+    .dd-form table { width: 100%; border-collapse: collapse; margin-bottom: 14pt; }
+    .dd-form th, .dd-form td { border: 1px solid #555; padding: 7pt 9pt; text-align: left; color: #000; }
+    .dd-form th { width: 34%; background: #f0f0f0; }
+    .dd-form .dd-legal { font-size: 9.5pt; color: #333; }
+    .dd-form .dd-sign { display: flex; justify-content: space-between; margin: 28pt 0 18pt; }
+}
