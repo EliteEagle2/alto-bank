@@ -70,14 +70,18 @@
 
     const ICONS = {
         Deposit: 'bi-arrow-down-left', Withdrawal: 'bi-arrow-up-right', TransferIn: 'bi-arrow-left-right', TransferOut: 'bi-arrow-left-right',
-        Interest: 'bi-percent', AdjustmentCredit: 'bi-sliders', AdjustmentDebit: 'bi-sliders'
+        Interest: 'bi-percent', AdjustmentCredit: 'bi-sliders', AdjustmentDebit: 'bi-sliders',
+        PaymentSent: 'bi-send', PaymentReceived: 'bi-person-down'
     };
+    // Dates follow the BANK's time zone and calendar (not the browser's), same as the server-rendered rows.
+    const TZ = root.dataset.tz || 'America/New_York';
+    const BANK_TODAY = root.dataset.today;   // "yyyy-MM-dd"
+    const addDays = (iso, n) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
     const isoDate = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    function dayLabel(d) {
-        const today = new Date(); const y = new Date(); y.setDate(today.getDate() - 1);
-        if (isoDate(d) === isoDate(today)) return 'Today';
-        if (isoDate(d) === isoDate(y)) return 'Yesterday';
-        return d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+    function dayLabel(iso) {
+        if (iso === BANK_TODAY) return 'Today';
+        if (iso === addDays(BANK_TODAY, -1)) return 'Yesterday';
+        return new Date(iso + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
     }
     function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 
@@ -94,7 +98,7 @@
         icon.appendChild(el('i', 'bi ' + (ICONS[t.kind] || 'bi-arrow-counterclockwise')));
         const desc = el('span', 'tx-desc');
         desc.appendChild(el('span', 'tx-title', t.description));
-        const sub = el('span', 'tx-sub', `${t.type} · ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} `);
+        const sub = el('span', 'tx-sub', `${t.type} · ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: TZ })} `);
         if (reversed) sub.appendChild(el('span', 'badge-reversed', 'Reversed'));
         desc.appendChild(sub);
         const amounts = el('span', 'tx-amounts');
@@ -106,12 +110,12 @@
 
         const more = el('div', 'tx-more'); more.id = 'tx-more-' + t.id; more.hidden = true;
         const dl = el('dl', 'tx-dl');
-        [['Transaction ID', '#' + t.id], ['Date & time', date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium' })],
+        [['Transaction ID', '#' + t.id], ['Date & time', date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium', timeZone: TZ })],
          ['Type', t.type], ['Counterparty', t.counterparty || '—'], ['Memo', t.memo || '—'], ['Status', reversed ? 'Reversed' : 'Posted']]
             .forEach(([k, v]) => { const d = el('div'); d.append(el('dt', null, k), el('dd', k === 'Transaction ID' ? 'font-monospace' : null, v)); dl.append(d); });
         more.append(dl);
         row.append(btn, more);
-        return { row, day: isoDate(date), label: dayLabel(date) };
+        return { row, day: t.bankDate, label: dayLabel(t.bankDate) };
     }
 
     function appendRows(items) {
@@ -146,15 +150,13 @@
         if (search) p.set('search', search);
         if (kind) p.set('kind', kind);
         const preset = ($('.af-chip.active', filters) || {}).dataset?.preset || '90';
-        const today = new Date();
         if (preset === 'custom') {
             if (filters.elements.from.value) p.set('from', filters.elements.from.value);
             if (filters.elements.to.value) p.set('to', filters.elements.to.value);
         } else if (preset === 'year') {
-            p.set('from', `${today.getFullYear()}-01-01`);
+            p.set('from', `${BANK_TODAY.slice(0, 4)}-01-01`);
         } else {
-            const d = new Date(); d.setDate(d.getDate() - (parseInt(preset, 10) - 1));
-            p.set('from', isoDate(d));
+            p.set('from', addDays(BANK_TODAY, -(parseInt(preset, 10) - 1)));
         }
         return p;
     }

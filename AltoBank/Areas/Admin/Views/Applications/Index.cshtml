@@ -24,7 +24,7 @@
                 {
                     <tr>
                         <td><a asp-action="Details" asp-route-id="@app.Id" class="font-monospace">ALTO-@app.Id.ToString("D6")</a></td>
-                        <td class="text-nowrap">@DateTime.SpecifyKind(app.SubmittedAt, DateTimeKind.Utc).ToLocalTime().ToString("MMM d, yyyy h:mm tt")</td>
+                        <td class="text-nowrap">@BankTime.ToLocal(app.SubmittedAt).ToString("MMM d, yyyy h:mm tt")</td>
                         <td>@app.FirstName @app.LastName<div class="small text-muted-alto">@app.User?.Email</div></td>
                         <td>@app.AccountType @if (app.Nickname != null) { <div class="small text-muted-alto">"@app.Nickname"</div> }</td>
                         <td class="text-end"><money amount="@app.OpeningDeposit" /></td>

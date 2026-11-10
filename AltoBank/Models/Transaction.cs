@@ -14,7 +14,9 @@ public enum TransactionType
     AdjustmentCredit,   // "Admin adjustment" that adds money
     AdjustmentDebit,    // "Admin adjustment" that removes money
     ReversalCredit,     // offsets (undoes) an earlier debit
-    ReversalDebit       // offsets (undoes) an earlier credit
+    ReversalDebit,      // offsets (undoes) an earlier credit
+    PaymentSent,        // Send & Request: money sent to another Alto customer (debit)
+    PaymentReceived     // Send & Request: money received from another Alto customer (credit)
 }
 
 /// <summary>
@@ -58,8 +60,13 @@ public class Transaction
     [StringLength(200)]
     public string? Memo { get; set; }
 
-    // Transfers: the OTHER account involved, and the matching leg on that account.
+    // Transfers and payments: the OTHER account involved, and the matching leg on that account.
     public int? CounterpartyAccountId { get; set; }
+
+    // Payments between customers: the other person's short name ("Maya C."), saved when the payment is made.
+    // Shown instead of looking up the other customer's account, so nothing else about them is exposed.
+    [StringLength(60)]
+    public string? CounterpartyName { get; set; }
     public int? LinkedTransactionId { get; set; }
 
     // Reversals: this row undoes ReversalOfTransactionId; the original points back via ReversedByTransactionId.
@@ -73,9 +80,20 @@ public class Transaction
     public bool IsCredit => IsCreditType(Type);
 
     /// <summary>Does this kind of transaction ADD money to the account?</summary>
-    public static bool IsCreditType(TransactionType type) =>
-        type is TransactionType.Deposit or TransactionType.TransferIn or TransactionType.Interest
-             or TransactionType.AdjustmentCredit or TransactionType.ReversalCredit;
+    public static bool IsCreditType(TransactionType type) => CreditTypes.Contains(type);
+
+    /// <summary>Every type that adds money (also used in LINQ-to-SQL filters).</summary>
+    public static readonly TransactionType[] CreditTypes =
+    {
+        TransactionType.Deposit, TransactionType.TransferIn, TransactionType.Interest,
+        TransactionType.AdjustmentCredit, TransactionType.ReversalCredit, TransactionType.PaymentReceived
+    };
+
+    /// <summary>Money sent to another account. These count toward the daily transfer limit (withdrawals don't).</summary>
+    public static readonly TransactionType[] LimitedTypes =
+    {
+        TransactionType.TransferOut, TransactionType.PaymentSent
+    };
 
     [NotMapped]
     public bool IsReversal => Type is TransactionType.ReversalCredit or TransactionType.ReversalDebit;
@@ -84,9 +102,9 @@ public class Transaction
     [NotMapped]
     public decimal SignedAmount => IsCredit ? Amount : -Amount;
 
-    // Dates are saved in UTC; SQLite forgets that, so we mark it UTC and convert for display.
+    // Dates are saved in UTC; shown in the bank's time zone (Services/BankTime.cs).
     [NotMapped]
-    public DateTime LocalDate => DateTime.SpecifyKind(Date, DateTimeKind.Utc).ToLocalTime();
+    public DateTime LocalDate => AltoBank.Services.BankTime.ToLocal(Date);
 
     [NotMapped]
     public string TypeLabel => LabelFor(Type);
@@ -97,6 +115,8 @@ public class Transaction
         TransactionType.TransferOut => "Transfer Out",
         TransactionType.AdjustmentCredit or TransactionType.AdjustmentDebit => "Admin adjustment",
         TransactionType.ReversalCredit or TransactionType.ReversalDebit => "Reversal",
+        TransactionType.PaymentSent => "Payment sent",
+        TransactionType.PaymentReceived => "Payment received",
         _ => type.ToString()
     };
 }

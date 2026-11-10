@@ -10,6 +10,8 @@
         TransactionType.TransferIn or TransactionType.TransferOut => "bi-arrow-left-right",
         TransactionType.Interest => "bi-percent",
         TransactionType.AdjustmentCredit or TransactionType.AdjustmentDebit => "bi-sliders",
+        TransactionType.PaymentSent => "bi-send",
+        TransactionType.PaymentReceived => "bi-person-down",
         _ => "bi-arrow-counterclockwise"
     };
     var reversed = t.Status == TransactionStatus.Reversed;

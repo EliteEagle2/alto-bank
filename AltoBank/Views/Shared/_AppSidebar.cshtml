@@ -25,10 +25,12 @@
 
             <div class="sidebar-label">Move money</div>
             <a class="side-link @Active("Transactions", "Transfer")" asp-controller="Transactions" asp-action="Transfer"><i class="bi bi-arrow-left-right"></i>Transfer</a>
+            <a class="side-link @Active("Payments")" asp-controller="Payments" asp-action="Index"><i class="bi bi-send"></i>Send &amp; Request</a>
             <a class="side-link @Active("Transactions", "Deposit")" asp-controller="Transactions" asp-action="Deposit"><i class="bi bi-arrow-down-circle"></i>Deposit</a>
             <a class="side-link @Active("Transactions", "Withdraw")" asp-controller="Transactions" asp-action="Withdraw"><i class="bi bi-arrow-up-circle"></i>Withdraw</a>
 
             <div class="sidebar-label">Settings &amp; help</div>
+            <a class="side-link @Active("Alerts")" asp-controller="Alerts" asp-action="Index"><i class="bi bi-bell"></i>Alerts</a>
             <a class="side-link @Active("Profile")" asp-controller="Profile" asp-action="Index"><i class="bi bi-person"></i>Profile</a>
             <a class="side-link" asp-controller="Support" asp-action="Help"><i class="bi bi-question-circle"></i>Help Center</a>
 

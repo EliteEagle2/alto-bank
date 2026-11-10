@@ -126,7 +126,9 @@ has "adjustment row shows a customer-facing memo, not the internal reason" "$(cu
 has "internal reason kept in the audit log" "$(curl -s -b $A "$B/admin/auditlog?action=Account.Adjust")" "Courtesy fee refund"
 
 echo "== Daily transfer limit (account override)"
-R=$(apost "/admin/accounts/details/$CHK" "/admin/accounts/updatesettings/$CHK" --data-urlencode nickname=Everyday\ Checking -d dailyLimit=50 --data-urlencode "reason=Lower limit while card is replaced")
+USED=$(curl -s -b $C $B/accounts/$CHK | tr -s ' \n' ' ' | grep -oE '\(<span class="money[^>]*>\$[0-9.,]+</span> used today' | grep -oE '[0-9][0-9.,]*' | head -1 | tr -d ,)
+LIM=$(awk -v u="${USED:-0}" 'BEGIN{printf "%.2f", u+50}')   # 50 more than already used today (seeded P2P payments count too)
+R=$(apost "/admin/accounts/details/$CHK" "/admin/accounts/updatesettings/$CHK" --data-urlencode nickname=Everyday\ Checking -d dailyLimit=$LIM --data-urlencode "reason=Lower limit while card is replaced")
 check "transfer within limit ok" "$(code -b $C -H "$J" -d "{\"fromAccountId\":$CHK,\"toAccountId\":$SAV,\"amount\":40}" $B/api/transfers)" 200
 has "transfer over remaining limit blocked" "$(curl -s -b $C -H "$J" -d "{\"fromAccountId\":$CHK,\"toAccountId\":$SAV,\"amount\":20}" $B/api/transfers)" "daily transfer limit"
 R=$(apost "/admin/accounts/details/$CHK" "/admin/accounts/updatesettings/$CHK" --data-urlencode nickname=Everyday\ Checking -d dailyLimit= --data-urlencode "reason=Back to bank default")

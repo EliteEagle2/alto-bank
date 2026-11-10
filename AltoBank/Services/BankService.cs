@@ -26,7 +26,7 @@ namespace AltoBank.Services;
 ///    card on the dashboard) and makes it hard to see what the database is doing, so we always
 ///    load related data on purpose with Include or explicit loading instead.
 /// </summary>
-public class BankService : IBankService
+public partial class BankService : IBankService
 {
     // Placeholder routing number and bank details shown on Account Details / Direct Deposit (demo only).
     public const string RoutingNumber = "031300000";
@@ -37,12 +37,14 @@ public class BankService : IBankService
     private readonly ApplicationDbContext _db;
     private readonly IAuditLogger _audit;
     private readonly ICardService _cards;
+    private readonly IAlertService _alerts;
 
-    public BankService(ApplicationDbContext db, IAuditLogger audit, ICardService cards)
+    public BankService(ApplicationDbContext db, IAuditLogger audit, ICardService cards, IAlertService alerts)
     {
         _db = db;
         _audit = audit;
         _cards = cards;
+        _alerts = alerts;
     }
 
     // =====================================================================
@@ -79,12 +81,12 @@ public class BankService : IBankService
     /// </summary>
     public async Task<ActivityResult> GetActivityAsync(string userId, int accountId, ActivityFilter filter, int page, int pageSize)
     {
-        var credits = new[] { TransactionType.Deposit, TransactionType.TransferIn, TransactionType.Interest,
-                              TransactionType.AdjustmentCredit, TransactionType.ReversalCredit };
+        var credits = Transaction.CreditTypes;
         var q = _db.Transactions.AsNoTracking().Where(t => t.AccountId == accountId && t.Account!.UserId == userId);
 
-        if (filter.From is DateTime from) q = q.Where(t => t.Date >= from.Date);
-        if (filter.To is DateTime to) { var end = to.Date.AddDays(1); q = q.Where(t => t.Date < end); }
+        // From/To are bank-local dates; convert each to the UTC instant that day starts.
+        if (filter.From is DateTime from) { var start = BankTime.StartOfDayUtc(from); q = q.Where(t => t.Date >= start); }
+        if (filter.To is DateTime to) { var end = BankTime.StartOfDayUtc(to.AddDays(1)); q = q.Where(t => t.Date < end); }
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
             var like = $"%{filter.Search.Trim()}%";
@@ -97,6 +99,7 @@ public class BankService : IBankService
             "deposit" => q.Where(t => t.Type == TransactionType.Deposit),
             "withdrawal" => q.Where(t => t.Type == TransactionType.Withdrawal),
             "transfer" => q.Where(t => t.Type == TransactionType.TransferIn || t.Type == TransactionType.TransferOut),
+            "payment" => q.Where(t => t.Type == TransactionType.PaymentSent || t.Type == TransactionType.PaymentReceived),
             "interest" => q.Where(t => t.Type == TransactionType.Interest),
             "adjustment" => q.Where(t => t.Type == TransactionType.AdjustmentCredit || t.Type == TransactionType.AdjustmentDebit),
             "reversal" => q.Where(t => t.Type == TransactionType.ReversalCredit || t.Type == TransactionType.ReversalDebit),
@@ -123,8 +126,8 @@ public class BankService : IBankService
         var account = await _db.Accounts.Include(a => a.User).FirstOrDefaultAsync(a => a.Id == accountId && a.UserId == userId);
         if (account == null) return null;
 
-        var start = new DateTime(year, month, 1);
-        var end = start.AddMonths(1);
+        var start = BankTime.StartOfMonthUtc(year, month);              // bank-local month, in UTC
+        var end = BankTime.StartOfDayUtc(new DateOnly(year, month, 1).AddMonths(1));
         await _db.Entry(account)
             .Collection(a => a.Transactions)
             .Query().Where(t => t.Date >= start && t.Date < end)
@@ -150,7 +153,7 @@ public class BankService : IBankService
     /// <summary>Interest posted to this account since January 1st (owner-filtered).</summary>
     public async Task<decimal> GetInterestThisYearAsync(string userId, int accountId)
     {
-        var jan1 = new DateTime(DateTime.UtcNow.Year, 1, 1);
+        var jan1 = BankTime.StartOfDayUtc(new DateOnly(BankTime.Today.Year, 1, 1));
         var amounts = await _db.Transactions.AsNoTracking()
             .Where(t => t.AccountId == accountId && t.Account!.UserId == userId && t.Type == TransactionType.Interest
                         && t.Status == TransactionStatus.Posted && t.Date >= jan1)
@@ -200,16 +203,17 @@ public class BankService : IBankService
     /// </summary>
     public async Task<List<DailyFlowDto>> GetDailyFlowsAsync(string userId, int days)
     {
-        var since = DateTime.UtcNow.Date.AddDays(-(days - 1));
+        var firstDay = BankTime.Today.AddDays(-(days - 1));
+        var since = BankTime.StartOfDayUtc(firstDay);
         var rows = await _db.Transactions.AsNoTracking()
             .Where(t => t.Account!.UserId == userId && t.Date >= since
                         && t.Type != TransactionType.TransferIn && t.Type != TransactionType.TransferOut)
             .Select(t => new { t.Date, t.Type, t.Amount })
             .ToListAsync();
 
-        var byDay = rows.GroupBy(r => DateOnly.FromDateTime(r.Date)).ToDictionary(g => g.Key, g => g.ToList());
+        var byDay = rows.GroupBy(r => BankTime.DateOf(r.Date)).ToDictionary(g => g.Key, g => g.ToList());
         return Enumerable.Range(0, days)
-            .Select(i => DateOnly.FromDateTime(since.AddDays(i)))
+            .Select(i => firstDay.AddDays(i))
             .Select(d =>
             {
                 var list = byDay.GetValueOrDefault(d) ?? new();
@@ -220,15 +224,19 @@ public class BankService : IBankService
             .ToList();
     }
 
-    /// <summary>The account's daily transfer limit and how much of it has been used today (UTC day).</summary>
+    /// <summary>
+    /// The account's daily transfer limit and how much of it has been used today. "Today" is the BANK day
+    /// (midnight to midnight in the bank time zone). Counts money sent to other accounts: transfers out
+    /// and payments sent to other customers. Withdrawals don't count.
+    /// </summary>
     public async Task<(decimal Limit, decimal UsedToday)> GetDailyTransferUsageAsync(Account account)
     {
         var settings = await _db.GetSettingsAsync();
         var limit = account.DailyTransferLimit ?? settings.DefaultDailyTransferLimit;
-        var today = DateTime.UtcNow.Date;
+        var today = BankTime.StartOfTodayUtc;
         // SQLite can't SUM decimals in SQL, so the (few) amounts are added up in memory.
         var amounts = await _db.Transactions.AsNoTracking()
-            .Where(t => t.AccountId == account.Id && t.Type == TransactionType.TransferOut
+            .Where(t => t.AccountId == account.Id && Transaction.LimitedTypes.Contains(t.Type)
                         && t.Status == TransactionStatus.Posted && t.Date >= today)
             .Select(t => t.Amount)
             .ToListAsync();

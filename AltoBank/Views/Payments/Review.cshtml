@@ -1,0 +1,27 @@
+@model SendReviewViewModel
+@* Step 2 of Send: shows exactly who the money goes to ("Maya C.") before anything moves.
+   "Send" posts the same values again; BankService re-checks everything at that moment. *@
+<div class="container py-5">
+    <div class="glass form-card review-card">
+        <div class="text-center mb-4">
+            <span class="review-avatar" aria-hidden="true">@Model.RecipientName.FirstOrDefault()</span>
+            <h2 class="h4 mt-3 mb-1">Sending to @Model.RecipientName</h2>
+            <div class="review-amount"><money amount="@Model.Input.Amount" /></div>
+        </div>
+        <dl class="info-list mb-4">
+            <div><dt>To</dt><dd>@Model.RecipientName <span class="small text-muted-alto">(@Model.Input.To)</span></dd></div>
+            <div><dt>From</dt><dd>@Model.FromLabel</dd></div>
+            <div><dt>Memo</dt><dd>@(string.IsNullOrWhiteSpace(Model.Input.Memo) ? "—" : Model.Input.Memo)</dd></div>
+            <div><dt>Arrives</dt><dd>Instantly, in their primary checking</dd></div>
+        </dl>
+        <form asp-action="Send" method="post" class="d-flex gap-2 flex-wrap">
+            <input type="hidden" asp-for="Input.FromAccountId" />
+            <input type="hidden" asp-for="Input.To" />
+            <input type="hidden" asp-for="Input.Amount" value="@Model.Input.Amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)" />
+            <input type="hidden" asp-for="Input.Memo" />
+            <button type="submit" class="btn btn-alto flex-grow-1"><i class="bi bi-send me-1"></i>Send <money amount="@Model.Input.Amount" /></button>
+            <a class="btn btn-alto-ghost" href="@Url.Action("Index")#send">Edit</a>
+        </form>
+        <p class="small text-muted-alto mt-3 mb-0"><i class="bi bi-exclamation-circle me-1"></i>Only send money to people you know. Payments can't be cancelled once sent.</p>
+    </div>
+</div>

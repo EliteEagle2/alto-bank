@@ -20,7 +20,7 @@ namespace AltoBank.Areas.Admin.Services;
 /// so balance/amount totals and range filters are done in memory after the other filters run in SQL.
 /// That's fine at demo scale; a production database (SQL Server/Postgres) would do it in the query.
 /// </summary>
-public class AdminService : IAdminService
+public partial class AdminService : IAdminService
 {
     private const int MinReasonLength = 5;
 
@@ -30,10 +30,12 @@ public class AdminService : IAdminService
     private readonly IBankService _bank;
     private readonly ICardService _cards;
     private readonly IHttpContextAccessor _http;
+    private readonly IAlertService _alerts;
 
     public AdminService(ApplicationDbContext db, UserManager<ApplicationUser> users, IAuditLogger audit,
-                        IBankService bank, ICardService cards, IHttpContextAccessor http)
+                        IBankService bank, ICardService cards, IHttpContextAccessor http, IAlertService alerts)
     {
+        _alerts = alerts;
         _db = db;
         _users = users;
         _audit = audit;
@@ -51,13 +53,13 @@ public class AdminService : IAdminService
     public async Task<OverviewViewModel> GetOverviewAsync()
     {
         var settings = await _db.GetSettingsAsync();
-        var today = DateTime.UtcNow.Date;
+        var today = BankTime.StartOfTodayUtc;   // bank midnight, in UTC
         var openAccounts = await _db.Accounts.AsNoTracking()
             .Where(a => a.Status != AccountStatus.Closed)
             .Select(a => new { a.AccountType, a.Balance }).ToListAsync();
 
         // "Large transactions": last 30 days at or above the threshold (amounts compared in memory).
-        var since = today.AddDays(-30);
+        var since = BankTime.StartOfDayUtc(BankTime.Today.AddDays(-30));
         var recentAmounts = await _db.Transactions.AsNoTracking().Where(t => t.Date >= since)
             .Select(t => new { t.Id, t.Amount }).ToListAsync();
         var largeIds = recentAmounts.Where(t => t.Amount >= settings.LargeTransactionThreshold).Select(t => t.Id).ToList();
@@ -89,22 +91,23 @@ public class AdminService : IAdminService
         var accounts = await _db.Accounts.AsNoTracking().Where(a => a.Status != AccountStatus.Closed)
             .Select(a => new { a.AccountType, a.Balance }).ToListAsync();
 
-        var since = DateTime.UtcNow.Date.AddDays(-(days - 1));
+        var firstDay = BankTime.Today.AddDays(-(days - 1));
+        var since = BankTime.StartOfDayUtc(firstDay);
         var recent = await _db.Transactions.AsNoTracking().Where(t => t.Date >= since)
             .Select(t => new { t.Date, t.Amount }).ToListAsync();
-        var byDay = recent.GroupBy(t => DateOnly.FromDateTime(t.Date))
+        var byDay = recent.GroupBy(t => BankTime.DateOf(t.Date))
             .ToDictionary(g => g.Key, g => (Count: g.Count(), Volume: g.Sum(x => x.Amount)));
-        var perDay = Enumerable.Range(0, days).Select(i => DateOnly.FromDateTime(since.AddDays(i)))
+        var perDay = Enumerable.Range(0, days).Select(i => firstDay.AddDays(i))
             .Select(d => new DailyActivityDto(d, byDay.GetValueOrDefault(d).Count, byDay.GetValueOrDefault(d).Volume))
             .ToList();
 
         // New accounts per week (last 12 weeks, weeks start on Monday).
-        var thisMonday = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(-(((int)DateTime.UtcNow.DayOfWeek + 6) % 7)));
+        var thisMonday = BankTime.Today.AddDays(-(((int)BankTime.Today.DayOfWeek + 6) % 7));
         var firstWeek = thisMonday.AddDays(-7 * 11);
         var opened = await _db.Accounts.AsNoTracking()
-            .Where(a => a.OpenedAt >= firstWeek.ToDateTime(TimeOnly.MinValue)).Select(a => a.OpenedAt).ToListAsync();
+            .Where(a => a.OpenedAt >= BankTime.StartOfDayUtc(firstWeek)).Select(a => a.OpenedAt).ToListAsync();
         var perWeek = Enumerable.Range(0, 12).Select(i => firstWeek.AddDays(7 * i))
-            .Select(w => new WeeklyCountDto(w, opened.Count(o => DateOnly.FromDateTime(o) >= w && DateOnly.FromDateTime(o) < w.AddDays(7))))
+            .Select(w => new WeeklyCountDto(w, opened.Count(o => BankTime.DateOf(o) >= w && BankTime.DateOf(o) < w.AddDays(7))))
             .ToList();
 
         return new AdminStatsDto(
@@ -412,6 +415,8 @@ public class AdminService : IAdminService
         {
             if (account.Status != AccountStatus.Active) return Fail($"Only an active account can be frozen (this one is {account.Status}).");
             SetStatus(account, AccountStatus.Frozen, reason);
+            Notify(account, AlertType.AccountFrozen, "Account frozen",
+                $"{account.DisplayName} ••{account.Last4} was frozen: withdrawals, transfers and payments out are blocked. Deposits still work. Please contact support.");
             return Ok($"{account.DisplayName} ••{account.Last4} is frozen. Withdrawals and transfers out are blocked; deposits still work.");
         });
 
@@ -420,6 +425,7 @@ public class AdminService : IAdminService
         {
             if (account.Status != AccountStatus.Frozen) return Fail("Only a frozen account can be unfrozen.");
             SetStatus(account, AccountStatus.Active, null);
+            Notify(account, AlertType.AccountUnfrozen, "Account unfrozen", $"{account.DisplayName} ••{account.Last4} is active again. Everything works as normal.");
             return Ok($"{account.DisplayName} ••{account.Last4} is active again.");
         });
 
@@ -543,8 +549,8 @@ public class AdminService : IAdminService
     private IQueryable<Transaction> FilterTransactions(TransactionListQuery query)
     {
         var q = _db.Transactions.AsNoTracking().Include(t => t.Account!).ThenInclude(a => a.User).AsQueryable();
-        if (query.From is DateTime from) q = q.Where(t => t.Date >= from.Date);
-        if (query.To is DateTime to) { var end = to.Date.AddDays(1); q = q.Where(t => t.Date < end); }
+        if (query.From is DateTime from) { var start = BankTime.StartOfDayUtc(from); q = q.Where(t => t.Date >= start); }
+        if (query.To is DateTime to) { var end = BankTime.StartOfDayUtc(to.AddDays(1)); q = q.Where(t => t.Date < end); }
         if (query.Type is TransactionType type) q = q.Where(t => t.Type == type);
         if (query.AccountId is int accountId) q = q.Where(t => t.AccountId == accountId);
         if (!string.IsNullOrWhiteSpace(query.Customer))
@@ -611,6 +617,11 @@ public class AdminService : IAdminService
             }
             await _db.SaveChangesAsync();
             foreach (var (original, reversal) in reversals) original.ReversedByTransactionId = reversal.Id;
+
+            // A Send & Request payment: mark the payment itself Reversed too.
+            var legIds = legs.Select(l => l.Id).ToList();
+            foreach (var p in await _db.Payments.Where(p => legIds.Contains(p.SentTransactionId!.Value) || legIds.Contains(p.ReceivedTransactionId!.Value)).ToListAsync())
+                p.Status = PaymentStatus.Reversed;
 
             _audit.Add("Transaction.Reverse", $"Reversed transaction #{tx.Id} ({tx.TypeLabel} {tx.Amount:C})" + (linked != null ? $" and its transfer leg #{linked.Id}" : ""),
                        "Transaction", tx.Id.ToString(),
@@ -777,8 +788,8 @@ public class AdminService : IAdminService
         var q = _db.AuditLogs.AsNoTracking().AsQueryable();
         if (!string.IsNullOrWhiteSpace(query.User)) q = q.Where(l => EF.Functions.Like(l.ActorEmail!, $"%{query.User.Trim()}%"));
         if (!string.IsNullOrWhiteSpace(query.Action)) q = q.Where(l => l.Action == query.Action);
-        if (query.From is DateTime from) q = q.Where(l => l.Timestamp >= from.Date);
-        if (query.To is DateTime to) { var end = to.Date.AddDays(1); q = q.Where(l => l.Timestamp < end); }
+        if (query.From is DateTime from) { var start = BankTime.StartOfDayUtc(from); q = q.Where(l => l.Timestamp >= start); }
+        if (query.To is DateTime to) { var end = BankTime.StartOfDayUtc(to.AddDays(1)); q = q.Where(l => l.Timestamp < end); }
         return q.OrderByDescending(l => l.Timestamp).ThenByDescending(l => l.Id);
     }
 
@@ -847,6 +858,10 @@ public class AdminService : IAdminService
             return result;
         });
 
+    // Alert the account owner (saved with the rest of the admin change, in the same transaction).
+    private void Notify(Account account, AlertType type, string title, string message) =>
+        _alerts.Add(account.UserId, type, title, message, $"/accounts/{account.Id}");
+
     /// <summary>What the customer sees on an adjustment or reversal. The admin's reason is internal and stays in the AuditLog.</summary>
     private const string CustomerMemo = "Posted by Alto Bank. Questions? Contact support.";
 
@@ -871,7 +886,7 @@ public class AdminService : IAdminService
         return t;
     }
 
-    private static DateTime MonthStart => new(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static DateTime MonthStart => BankTime.StartOfMonthUtc(BankTime.Today.Year, BankTime.Today.Month);   // bank month
 
     // Ids of accounts that already received (non-reversed) interest this calendar month.
     private async Task<HashSet<int>> AccountsPaidThisMonthAsync() =>

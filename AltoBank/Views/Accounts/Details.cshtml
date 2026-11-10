@@ -5,7 +5,8 @@
 @{
     var a = Model.Account;
     var groups = Model.FirstPage.GroupBy(t => t.LocalDate.Date);
-    string DayLabel(DateTime d) => d == DateTime.Today ? "Today" : d == DateTime.Today.AddDays(-1) ? "Yesterday" : d.ToString("dddd, MMM d, yyyy");
+    var bankToday = BankTime.Today.ToDateTime(TimeOnly.MinValue);   // "Today" = the bank's date (Services/BankTime.cs)
+    string DayLabel(DateTime d) => d == bankToday ? "Today" : d == bankToday.AddDays(-1) ? "Yesterday" : d.ToString("dddd, MMM d, yyyy");
     var numberUrl = Url.Action("GetAccountNumber", "AccountsApi", new { id = a.Id });
 }
 
@@ -16,7 +17,9 @@
      data-number-url="@numberUrl"
      data-page-size="@AccountDetailsViewModel.PageSize"
      data-total="@Model.TotalCount"
-     data-default-days="@AccountDetailsViewModel.DefaultDays">
+     data-default-days="@AccountDetailsViewModel.DefaultDays"
+     data-today="@BankTime.Today.ToString("yyyy-MM-dd")"
+     data-tz="@BankTime.Zone.Id">
 
     <partial name="_AccountHeader" model="Model" />
 
@@ -49,7 +52,7 @@
                         <div class="tx-date-head">@DayLabel(g.Key)</div>
                         @foreach (var t in g)
                         {
-                            <partial name="_TransactionRow" model='new TransactionRowViewModel(t, t.CounterpartyAccountId is int c ? Model.AccountLabels.GetValueOrDefault(c) : null)' />
+                            <partial name="_TransactionRow" model="new TransactionRowViewModel(t, t.CounterpartyName ?? (t.CounterpartyAccountId is int c ? Model.AccountLabels.GetValueOrDefault(c) : null))" />
                         }
                     </div>
                 }

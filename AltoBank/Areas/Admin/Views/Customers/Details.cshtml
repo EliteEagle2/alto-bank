@@ -151,7 +151,7 @@
                 @foreach (var n in Model.Notes)
                 {
                     <div class="note">
-                        <div class="note-meta mb-1"><i class="bi bi-person-badge me-1"></i>@n.AuthorName · @DateTime.SpecifyKind(n.CreatedAt, DateTimeKind.Utc).ToLocalTime().ToString("MMM d, yyyy h:mm tt")</div>
+                        <div class="note-meta mb-1"><i class="bi bi-person-badge me-1"></i>@n.AuthorName · @BankTime.ToLocal(n.CreatedAt).ToString("MMM d, yyyy h:mm tt")</div>
                         <div style="white-space: pre-wrap">@n.Text</div>
                     </div>
                 }

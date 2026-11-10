@@ -18,3 +18,15 @@ demo()  { local T=$(tok $1 /Auth/Login); curl -s -b $1 -c $1 -o /dev/null -w '%{
 # post <jar> <page-with-form> <url> [curl args...] -> prints "status redirect" and saves body to /tmp/post.html
 post()  { local J=$1 P=$2 U=$3; shift 3; local T=$(tok $J "$P"); curl -s -b $J -c $J -o /tmp/post.html -w '%{http_code} %{redirect_url}' "$@" --data-urlencode "__RequestVerificationToken=$T" "$B$U"; }
 summary() { echo; echo "RESULT: $PASS passed, $FAIL failed"; }
+# sql "<SQL>" — run SQL against the SCRATCH test database ($TEST_DB). Used only to "move time"
+# (e.g. make a request 15 days old). SqlTool refuses to open a file named altobank.db.
+SQLTOOL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/SqlTool"
+sql() {
+  : "${TEST_DB:?set TEST_DB to the scratch database file the test server uses}"
+  [ -f "$SQLTOOL/bin/out/SqlTool.dll" ] || dotnet build "$SQLTOOL" -nologo -v q -o "$SQLTOOL/bin/out" >/dev/null
+  dotnet "$SQLTOOL/bin/out/SqlTool.dll" "$TEST_DB" "$1"
+}
+# flash <jar> <url> — the TempData message shown after a redirect
+flash() { curl -s -b $1 -c $1 "$2" | tr -s ' \r\n' ' ' | grep -oE 'alert-alto-(success|error)[^>]*> *<i[^>]*></i>[^<]+' | sed 's/.*<\/i>//' | head -1; }
+# json_field <json> <field> — first value of "field" (numbers/strings), good enough for these tests
+json_field() { printf '%s' "$1" | grep -oE "\"$2\":(\"[^\"]*\"|[^,}]*)" | head -1 | cut -d: -f2- | tr -d '"'; }

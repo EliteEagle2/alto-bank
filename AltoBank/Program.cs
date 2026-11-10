@@ -17,9 +17,15 @@ CultureInfo.DefaultThreadCurrentUICulture = usCulture;
 
 // ===================== SERVICES (dependency injection container) =====================
 
+// The bank's time zone: "today", the daily limit window, due dates and budget months follow bank days.
+BankTime.Configure(builder.Configuration["Bank:TimeZone"]);
+
 // 1) Database: EF Core with SQLite (connection string lives in appsettings.json).
+//    The interceptor gives every connection a busy timeout so the background scheduler and web
+//    requests wait for each other instead of failing with "database is locked".
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"))
+           .AddInterceptors(new SqliteBusyTimeoutInterceptor()));
 
 // 2) ASP.NET Core Identity: password hashing, login cookies, users, and ROLES (for Admin).
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -62,6 +68,8 @@ builder.Services.AddScoped<IBankService, BankService>();
 builder.Services.AddScoped<ICardService, CardService>();     // virtual debit cards
 builder.Services.AddScoped<IAuditLogger, AuditLogger>();     // writes AuditLog rows
 builder.Services.AddScoped<IAdminService, AdminService>();   // everything the admin portal does
+builder.Services.AddScoped<IAlertService, AlertService>();   // the customer Alerts center (bell icon)
+builder.Services.AddScoped<IPaymentRequestService, PaymentRequestService>();   // Send & Request: requests (no money moves)
 builder.Services.AddHttpContextAccessor();                   // lets services see who's logged in (for the audit log)
 
 // The global filter sends users who must change their password (admin reset / new account) to that page first.

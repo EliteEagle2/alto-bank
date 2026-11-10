@@ -14,7 +14,7 @@ namespace AltoBank.Areas.Admin.Services;
 ///   3. destructive or money-moving actions REQUIRE a reason (5+ characters);
 ///   4. nothing is ever hard-deleted — status fields (Closed, Locked, Reversed, Cancelled, Denied) are used.
 /// </summary>
-public interface IAdminService
+public partial interface IAdminService
 {
     // ----- Overview -----
     Task<OverviewViewModel> GetOverviewAsync();

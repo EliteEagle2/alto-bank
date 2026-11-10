@@ -56,7 +56,7 @@ echo "== CSV download"
 TOTAL=$(curl -s -b $C "$B/api/accounts/$CHK/transactions?pageSize=1&kind=out" | grep -oE '"totalCount":[0-9]+' | cut -d: -f2)
 H=$(curl -s -D - -o /tmp/act.csv -b $C "$B/accounts/$CHK/activity.csv?kind=out")
 has "CSV content type" "$H" "text/csv"
-has "CSV header" "$(head -1 /tmp/act.csv)" "Date (UTC),Description,Type,Status,Amount"
+has "CSV header" "$(head -1 /tmp/act.csv)" "Date (bank time),Description,Type,Status,Amount"
 check "CSV rows = filtered total" "$(($(wc -l < /tmp/act.csv) - 1))" "$TOTAL"
 check "other user's CSV -> 404" "$(code -b $C "$B/accounts/$MAYA/activity.csv")" 404
 

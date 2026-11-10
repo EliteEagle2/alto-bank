@@ -1,0 +1,275 @@
+@model PaymentsPageViewModel
+@* SEND & REQUEST — /payments. Four tabs kept in the URL hash (#send, #request, #inbox, #activity).
+   Send is two steps: this form → "Review" page that shows who the money goes to → confirm.
+   payments.js adds the live recipient preview and the split-a-bill calculator; the server re-checks everything. *@
+@{
+    var o = Model.Overview;
+    var today = BankTime.Today;
+    string Status(string s) => s switch
+    {
+        "Paid" or "Completed" => "active",
+        "Pending" => "frozen",
+        _ => "closed"
+    };
+    string ExpiresIn(DateTime utc)
+    {
+        var days = BankTime.DateOf(utc).DayNumber - today.DayNumber;
+        return days <= 0 ? "expires today" : days == 1 ? "expires tomorrow" : $"expires in {days} days";
+    }
+    string Local(DateTime utc) => BankTime.ToLocal(utc).ToString("MMM d, h:mm tt");
+    string RequestStatus(MoneyRequest r) => r.Status == MoneyRequestStatus.Pending && r.ExpiresAt <= DateTime.UtcNow ? "Expired" : r.Status.ToString();
+    var canSend = Model.SourceAccounts.Any();
+}
+
+<div class="container py-4 payments-page" id="paymentsPage" data-recipient-url="@Url.Action("Recipient", "PaymentsApi")">
+    <div class="feature-head">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-send text-gradient me-2"></i>Send &amp; Request</h2>
+            <p class="text-muted-alto mb-0">Pay or request money from other Alto customers with just their email or mobile number.</p>
+        </div>
+        <div class="small text-muted-alto text-md-end">
+            <i class="bi bi-shield-check text-success-alto me-1"></i>Payments count toward your <money amount="@Model.DailyLimit" /> daily transfer limit.
+        </div>
+    </div>
+
+    <ul class="nav acct-tabs" role="tablist">
+        <li class="nav-item" role="presentation"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#send" type="button" role="tab" aria-controls="send" aria-selected="true"><i class="bi bi-send me-1"></i>Send</button></li>
+        <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#request" type="button" role="tab" aria-controls="request" aria-selected="false"><i class="bi bi-envelope-paper me-1"></i>Request</button></li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#inbox" type="button" role="tab" aria-controls="inbox" aria-selected="false">
+                <i class="bi bi-inbox me-1"></i>Inbox @if (o.Inbox.Any()) { <span class="tab-count" data-inbox-count>@o.Inbox.Count</span> }
+            </button>
+        </li>
+        <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#activity" type="button" role="tab" aria-controls="activity" aria-selected="false"><i class="bi bi-clock-history me-1"></i>Activity</button></li>
+    </ul>
+
+    <div class="tab-content">
+        @* ===================== SEND ===================== *@
+        <section class="tab-pane fade show active" id="send" role="tabpanel" aria-label="Send money">
+            <div class="glass pay-card">
+                @if (!canSend)
+                {
+                    <partial name="_EmptyState" model='new EmptyStateViewModel("bi-wallet2", "You need an active account to send money.", "Open an account", "Accounts", "Apply")' />
+                }
+                else
+                {
+                    <form asp-action="Review" method="post" id="sendForm" novalidate>
+                        <div class="mb-3">
+                            <label asp-for="Send.FromAccountId" class="form-label"></label>
+                            <select asp-for="Send.FromAccountId" asp-items="Model.SourceAccounts" class="form-select"></select>
+                        </div>
+                        <div class="mb-1">
+                            <label asp-for="Send.To" class="form-label"></label>
+                            <input asp-for="Send.To" class="form-control" autocomplete="off" placeholder="name@example.com or (555) 555-0100" data-recipient-input />
+                        </div>
+                        <div class="recipient-preview mb-3" data-recipient-preview aria-live="polite"></div>
+                        <div class="mb-3">
+                            <label asp-for="Send.Amount" class="form-label"></label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input asp-for="Send.Amount" class="form-control" type="number" step="0.01" min="0.01" value="" placeholder="0.00" required />
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <label asp-for="Send.Memo" class="form-label"></label>
+                            <input asp-for="Send.Memo" class="form-control" maxlength="80" placeholder="e.g. Concert tickets" />
+                        </div>
+                        <button type="submit" class="btn btn-alto"><i class="bi bi-arrow-right-circle me-1"></i>Review</button>
+                        <p class="small text-muted-alto mt-3 mb-0"><i class="bi bi-info-circle me-1"></i>Money arrives instantly in their primary checking account. You'll see who it's going to before anything is sent.</p>
+                    </form>
+                }
+            </div>
+        </section>
+
+        @* ===================== REQUEST / SPLIT A BILL ===================== *@
+        <section class="tab-pane fade" id="request" role="tabpanel" aria-label="Request money">
+            <div class="glass pay-card">
+                @if (!Model.HasCheckingToReceive)
+                {
+                    <partial name="_EmptyState" model='new EmptyStateViewModel("bi-wallet2", "You need an active checking account to receive money.", "Open checking", "Accounts", "Apply")' />
+                }
+                else
+                {
+                    <form asp-action="RequestMoney" method="post" id="requestForm" novalidate>
+                        <input type="hidden" name="Request.Mode" value="single" data-mode />
+
+                        <div class="seg-toggle mb-3" role="radiogroup" aria-label="Request type">
+                            <label><input type="radio" name="kind" value="single" checked data-kind /> <span><i class="bi bi-person me-1"></i>Request</span></label>
+                            <label><input type="radio" name="kind" value="split" data-kind /> <span><i class="bi bi-receipt me-1"></i>Split a bill</span></label>
+                        </div>
+
+                        <div class="split-box mb-3" data-split hidden>
+                            <div class="row g-2 align-items-end">
+                                <div class="col-sm-5">
+                                    <label class="form-label" for="splitTotal">Bill total</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        <input id="splitTotal" name="Request.SplitTotal" class="form-control" type="number" step="0.01" min="0.01" placeholder="0.00" data-total />
+                                    </div>
+                                </div>
+                                <div class="col-sm-7">
+                                    <div class="seg-toggle seg-toggle--sm" role="radiogroup" aria-label="How to split">
+                                        <label><input type="radio" name="how" value="even" checked data-how /> <span>Split evenly</span></label>
+                                        <label><input type="radio" name="how" value="custom" data-how /> <span>Custom amounts</span></label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" id="includeMe" name="Request.IncludeMe" value="true" checked data-include-me />
+                                <label class="form-check-label" for="includeMe">Include me in the split (I pay a share too)</label>
+                                <input type="hidden" name="Request.IncludeMe" value="false" />
+                            </div>
+                            <div class="small text-muted-alto mt-2" data-split-summary aria-live="polite"></div>
+                        </div>
+
+                        <div class="people" data-people>
+                            @for (int i = 0; i < PaymentRequestService.MaxPeople; i++)
+                            {
+                                <div class="person-row" data-person @(i == 0 ? "" : "hidden")>
+                                    <div class="flex-grow-1">
+                                        <label class="form-label small" for="p@(i)to">Person @(i + 1) (email or mobile)</label>
+                                        <input id="p@(i)to" name="Request.People[@i].To" class="form-control" autocomplete="off" placeholder="name@example.com" data-recipient-input />
+                                        <div class="recipient-preview small" data-recipient-preview aria-live="polite"></div>
+                                    </div>
+                                    <div class="person-amount">
+                                        <label class="form-label small" for="p@(i)amt">Amount</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text">$</span>
+                                            <input id="p@(i)amt" name="Request.People[@i].Amount" class="form-control" type="number" step="0.01" min="0" placeholder="0.00" data-amount />
+                                        </div>
+                                    </div>
+                                    @if (i > 0) { <button type="button" class="btn btn-alto-ghost btn-icon person-remove" data-remove aria-label="Remove person @(i + 1)"><i class="bi bi-x-lg"></i></button> }
+                                </div>
+                            }
+                        </div>
+                        <button type="button" class="btn btn-alto-ghost btn-sm mb-3" data-add-person><i class="bi bi-person-plus me-1"></i>Add person</button>
+
+                        <div class="mb-4">
+                            <label class="form-label" for="reqMemo">What's it for?</label>
+                            <input id="reqMemo" name="Request.Memo" class="form-control" maxlength="80" placeholder="e.g. Pizza night" />
+                        </div>
+                        <button type="submit" class="btn btn-alto"><i class="bi bi-envelope-paper me-1"></i>Send request</button>
+                        <p class="small text-muted-alto mt-3 mb-0"><i class="bi bi-clock me-1"></i>Requests expire after @MoneyRequest.ExpiryDays days. Up to @PaymentRequestService.MaxPeople people at a time.</p>
+                    </form>
+                }
+            </div>
+        </section>
+
+        @* ===================== INBOX (requests asked of me) ===================== *@
+        <section class="tab-pane fade" id="inbox" role="tabpanel" aria-label="Requests for you">
+            @if (!o.Inbox.Any())
+            {
+                <partial name="_EmptyState" model='new EmptyStateViewModel("bi-inbox", "No one is waiting on you. Requests sent to you show up here.")' />
+            }
+            else
+            {
+                <div class="request-list">
+                    @foreach (var r in o.Inbox)
+                    {
+                        <article class="glass request-card" data-request-id="@r.Id">
+                            <div class="request-main">
+                                <span class="avatar-sm" aria-hidden="true">@r.Requester?.FirstName.FirstOrDefault()</span>
+                                <div class="min-w-0">
+                                    <div class="fw-semibold">@BankService.ShortName(r.Requester!) requested <money amount="@r.Amount" /></div>
+                                    <div class="small text-muted-alto">
+                                        @(r.Memo ?? "No memo")
+                                        @if (r.SplitTotal is decimal total) { <span> · your share of a <money amount="@total" /> bill</span> }
+                                        · @Local(r.CreatedAt) · <span class="text-warning-alto">@ExpiresIn(r.ExpiresAt)</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="request-actions">
+                                @if (canSend)
+                                {
+                                    <form asp-action="Pay" asp-route-id="@r.Id" method="post" class="d-flex gap-2 flex-wrap">
+                                        <label class="visually-hidden" for="payFrom@(r.Id)">Pay from</label>
+                                        <select id="payFrom@(r.Id)" name="fromAccountId" class="form-select form-select-sm" asp-items="Model.SourceAccounts"></select>
+                                        <button type="submit" class="btn btn-alto btn-sm">Pay <money amount="@r.Amount" /></button>
+                                    </form>
+                                }
+                                <form asp-action="Decline" asp-route-id="@r.Id" method="post">
+                                    <button type="submit" class="btn btn-alto-ghost btn-sm">Decline</button>
+                                </form>
+                            </div>
+                        </article>
+                    }
+                </div>
+            }
+            @if (o.ClosedInbox.Any())
+            {
+                <h3 class="h6 text-muted-alto mt-4 mb-2">Earlier requests</h3>
+                <ul class="pay-list glass">
+                    @foreach (var r in o.ClosedInbox.Take(20))
+                    {
+                        var s = RequestStatus(r);
+                        <li><span>@BankService.ShortName(r.Requester!) · @(r.Memo ?? "No memo") <span class="small text-muted-alto">· @Local(r.CreatedAt)</span></span>
+                            <span class="d-flex gap-2 align-items-center"><money amount="@r.Amount" /><span class="acct-status acct-status--@Status(s)">@s</span></span></li>
+                    }
+                </ul>
+            }
+        </section>
+
+        @* ===================== ACTIVITY: Sent / Received / Requests ===================== *@
+        <section class="tab-pane fade" id="activity" role="tabpanel" aria-label="Payment activity">
+            <div class="row g-3">
+                <div class="col-lg-6">
+                    <h3 class="h6 mb-2"><i class="bi bi-arrow-up-right me-1 text-danger-alto"></i>Sent</h3>
+                    @if (!o.Sent.Any()) { <p class="text-muted-alto small">Nothing sent yet.</p> }
+                    else
+                    {
+                        <ul class="pay-list glass" data-list="sent">
+                            @foreach (var p in o.Sent)
+                            {
+                                <li><span>To @BankService.ShortName(p.Recipient!)@(p.Memo == null ? "" : " · " + p.Memo) <span class="small text-muted-alto d-block">@Local(p.CreatedAt) · from ••@p.FromAccount?.Last4</span></span>
+                                    <span class="d-flex gap-2 align-items-center"><money amount="@(-p.Amount)" colorize="true" show-sign="true" /><span class="acct-status acct-status--@Status(p.Status.ToString())">@p.Status</span></span></li>
+                            }
+                        </ul>
+                    }
+                </div>
+                <div class="col-lg-6">
+                    <h3 class="h6 mb-2"><i class="bi bi-arrow-down-left me-1 text-success-alto"></i>Received</h3>
+                    @if (!o.Received.Any()) { <p class="text-muted-alto small">Nothing received yet.</p> }
+                    else
+                    {
+                        <ul class="pay-list glass" data-list="received">
+                            @foreach (var p in o.Received)
+                            {
+                                <li><span>From @BankService.ShortName(p.Sender!)@(p.Memo == null ? "" : " · " + p.Memo) <span class="small text-muted-alto d-block">@Local(p.CreatedAt) · into ••@p.ToAccount?.Last4</span></span>
+                                    <span class="d-flex gap-2 align-items-center"><money amount="@p.Amount" colorize="true" show-sign="true" /><span class="acct-status acct-status--@Status(p.Status.ToString())">@p.Status</span></span></li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+
+            <h3 class="h6 mt-4 mb-2" id="requests"><i class="bi bi-envelope-paper me-1"></i>Requests you made</h3>
+            @if (!o.MyRequests.Any()) { <p class="text-muted-alto small">You haven't requested money yet.</p> }
+            else
+            {
+                <ul class="pay-list glass" data-list="requests">
+                    @foreach (var r in o.MyRequests)
+                    {
+                        var s = RequestStatus(r);
+                        <li>
+                            <span>@BankService.ShortName(r.Payer!) · @(r.Memo ?? "No memo")
+                                <span class="small text-muted-alto d-block">@Local(r.CreatedAt)@(r.SplitTotal is decimal t ? $" · split of {t:C}" : "")@(s == "Pending" ? " · " + ExpiresIn(r.ExpiresAt) : "")</span>
+                            </span>
+                            <span class="d-flex gap-2 align-items-center flex-wrap justify-content-end">
+                                <money amount="@r.Amount" />
+                                <span class="acct-status acct-status--@Status(s)">@s</span>
+                                @if (s == "Pending")
+                                {
+                                    <form asp-action="Cancel" asp-route-id="@r.Id" method="post">
+                                        <button type="submit" class="btn btn-alto-ghost btn-sm">Cancel</button>
+                                    </form>
+                                }
+                            </span>
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+    </div>
+</div>
+
+@section Scripts { <script src="~/js/payments.js" asp-append-version="true"></script> }

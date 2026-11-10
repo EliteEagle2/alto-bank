@@ -29,7 +29,7 @@
                 @foreach (var l in Model.Items)
                 {
                     <tr>
-                        <td class="text-nowrap">@DateTime.SpecifyKind(l.Timestamp, DateTimeKind.Utc).ToLocalTime().ToString("MMM d, h:mm:ss tt")</td>
+                        <td class="text-nowrap">@BankTime.ToLocal(l.Timestamp).ToString("MMM d, h:mm:ss tt")</td>
                         <td>@(l.ActorEmail ?? "—")<div class="small text-muted-alto">@l.ActorRole</div></td>
                         <td><code>@l.Action</code>@if (l.TargetType != null) { <div class="small text-muted-alto">@l.TargetType @l.TargetId</div> }</td>
                         <td>@l.Summary</td>

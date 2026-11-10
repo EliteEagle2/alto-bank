@@ -12,7 +12,7 @@
     var deny = new ConfirmModalViewModel("denyModal", $"Deny application ALTO-{app.Id:D6}",
         $"No account will be opened and no money moves. {name} will see the application as Denied, together with the reason you type below, so write it for the customer.",
         Url.Action("Deny", new { id = app.Id })!, "Deny application", "danger");
-    string Local(DateTime? d) => d == null ? "—" : DateTime.SpecifyKind(d.Value, DateTimeKind.Utc).ToLocalTime().ToString("MMM d, yyyy h:mm tt");
+    string Local(DateTime? d) => d == null ? "—" : BankTime.ToLocal(d.Value).ToString("MMM d, yyyy h:mm tt");
 }
 
 <div class="detail-head">

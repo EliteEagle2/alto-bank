@@ -41,7 +41,7 @@
             <dl class="detail-list text-start mx-auto mb-4" style="max-width: 420px">
                 <div><dt>Application #</dt><dd class="font-monospace">ALTO-@Model.Id.ToString("D6")</dd></div>
                 <div><dt>Product</dt><dd>@product</dd></div>
-                <div><dt>Submitted</dt><dd>@DateTime.SpecifyKind(Model.SubmittedAt, DateTimeKind.Utc).ToLocalTime().ToString("MMM d, yyyy h:mm tt")</dd></div>
+                <div><dt>Submitted</dt><dd>@BankTime.ToLocal(Model.SubmittedAt).ToString("MMM d, yyyy h:mm tt")</dd></div>
                 <div><dt>Status</dt><dd>@Model.Status</dd></div>
             </dl>
 

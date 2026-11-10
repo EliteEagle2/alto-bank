@@ -109,7 +109,7 @@
                 @foreach (var app in Model.RecentApplications)
                 {
                     <tr>
-                        <td class="text-nowrap">@DateTime.SpecifyKind(app.SubmittedAt, DateTimeKind.Utc).ToLocalTime().ToString("MMM d, h:mm tt")</td>
+                        <td class="text-nowrap">@BankTime.ToLocal(app.SubmittedAt).ToString("MMM d, h:mm tt")</td>
                         <td><a asp-controller="Applications" asp-action="Details" asp-route-id="@app.Id">@app.FirstName @app.LastName</a><div class="small text-muted-alto">@app.User?.Email</div></td>
                         <td>@app.AccountType</td>
                         <td class="text-end"><money amount="@app.OpeningDeposit" /></td>

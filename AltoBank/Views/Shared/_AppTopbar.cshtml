@@ -1,7 +1,9 @@
-@* Top bar for online banking: page title, secure-session badge, quick Transfer button, and user menu. *@
+@* Top bar for online banking: page title, secure-session badge, alerts bell (unread count), quick Transfer button, and user menu. *@
 @inject UserManager<ApplicationUser> UserManager
+@inject IAlertService Alerts
 @{
     var me = await UserManager.GetUserAsync(User);
+    var unread = me == null ? 0 : await Alerts.UnreadCountAsync(me.Id);
 }
 <header class="app-topbar">
     @* Menu button only shows on smaller screens, where the sidebar is a drawer *@
@@ -16,6 +18,11 @@
 
     <div class="ms-auto d-flex align-items-center gap-2">
         <span class="secure-pill d-none d-md-inline-flex"><i class="bi bi-shield-lock-fill"></i>Secure session</span>
+        <a class="btn btn-alto-ghost btn-icon bell-btn" asp-controller="Alerts" asp-action="Index"
+           aria-label="@(unread == 0 ? "Alerts, none unread" : $"Alerts, {unread} unread")" title="Alerts">
+            <i class="bi @(unread > 0 ? "bi-bell-fill" : "bi-bell")"></i>
+            @if (unread > 0) { <span class="bell-count" data-unread="@unread">@(unread > 99 ? "99+" : unread.ToString())</span> }
+        </a>
         <a class="btn btn-alto btn-sm d-none d-sm-inline-flex align-items-center" asp-controller="Transactions" asp-action="Transfer">
             <i class="bi bi-arrow-left-right me-1"></i>Transfer
         </a>

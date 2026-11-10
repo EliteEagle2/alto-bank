@@ -83,6 +83,10 @@ public static class SeedData
         // Apply any pending migrations (creates altobank.db on first run).
         await db.Database.MigrateAsync();
 
+        // WAL (write-ahead logging) journal mode: readers don't block the writer and vice versa, which matters
+        // once the background scheduler writes while people use the site. It's stored in the database file.
+        await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode = WAL;");
+
         await EnsureAdminAsync(userManager, roleManager);
         if (!await roleManager.RoleExistsAsync(CustomerRole))
             await roleManager.CreateAsync(new IdentityRole(CustomerRole));
@@ -99,6 +103,46 @@ public static class SeedData
 
         await EnsureDebitCardsAsync(db, services.GetRequiredService<AltoBank.Services.ICardService>());
         await EnsureReviewDemoDataAsync(db, userManager);
+        await EnsurePaymentsDemoDataAsync(services, db, userManager);
+    }
+
+    /// <summary>
+    /// SEND & REQUEST demo data (added once, through the real services so balances, alerts and audit rows are right):
+    /// payments between all three customers, a request waiting in Jordan's inbox, a split bill from Samuel
+    /// (Maya paid her share, Jordan hasn't), and a request Samuel declined.
+    /// </summary>
+    private static async Task EnsurePaymentsDemoDataAsync(IServiceProvider services, ApplicationDbContext db, UserManager<ApplicationUser> userManager)
+    {
+        if (await db.Payments.AnyAsync() || await db.MoneyRequests.AnyAsync()) return;
+        var jordan = await userManager.FindByEmailAsync(DemoEmail);
+        var maya = await userManager.FindByEmailAsync("maya@altobank.com");
+        var sam = await userManager.FindByEmailAsync("sam@altobank.com");
+        if (jordan == null || maya == null || sam == null) return;
+
+        async Task<int?> Checking(string number) => await db.Accounts.Where(a => a.AccountNumber == number && a.Status == AccountStatus.Active).Select(a => (int?)a.Id).FirstOrDefaultAsync();
+        var jChk = await Checking("4410274821");
+        var mChk = await Checking("5520831402");
+        var sChk = await Checking("6630412257");
+        if (jChk == null || mChk == null || sChk == null) return;
+
+        var bank = services.GetRequiredService<AltoBank.Services.IBankService>();
+        var requests = services.GetRequiredService<AltoBank.Services.IPaymentRequestService>();
+        await bank.SendPaymentAsync(jordan.Id, jChk.Value, maya.Email, 45.00m, "Concert tickets");
+        await bank.SendPaymentAsync(maya.Id, mChk.Value, sam.PhoneNumber, 18.50m, "Lunch at Noodle Lab");
+        await bank.SendPaymentAsync(sam.Id, sChk.Value, jordan.Email, 25.00m, "Gas money");
+
+        // Pending: Maya asks Jordan for pizza money (shows in Jordan's inbox with Pay / Decline).
+        await requests.CreateAsync(maya.Id, new AltoBank.Services.NewRequest(new() { new(jordan.Email, 30.00m) }, "Pizza night", null, false, false));
+
+        // Split a bill: Samuel splits  of utilities evenly with Jordan and Maya (and himself):  each. Maya pays hers.
+        var (_, split) = await requests.CreateAsync(sam.Id, new AltoBank.Services.NewRequest(
+            new() { new(jordan.Email, 0m), new(maya.Email, 0m) }, "Utilities - October", 90.00m, true, true));
+        var mayasShare = split.FirstOrDefault(r => r.PayerUserId == maya.Id);
+        if (mayasShare != null) await bank.PayRequestAsync(maya.Id, mayasShare.Id, mChk.Value);
+
+        // Declined: Jordan asked Samuel for movie money; Samuel declined.
+        var (_, movie) = await requests.CreateAsync(jordan.Id, new AltoBank.Services.NewRequest(new() { new(sam.Email, 15.00m) }, "Movie tickets", null, false, false));
+        if (movie.FirstOrDefault() is { } m) await requests.DeclineAsync(sam.Id, m.Id);
     }
 
     /// <summary>

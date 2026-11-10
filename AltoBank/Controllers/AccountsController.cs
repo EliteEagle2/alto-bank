@@ -54,7 +54,7 @@ public class AccountsController : Controller
         var account = await _bank.GetAccountDetailsAsync(id, UserId);   // eager: owner + cards
         if (account == null) return NotFound();
 
-        var from = DateTime.UtcNow.Date.AddDays(-(AccountDetailsViewModel.DefaultDays - 1));
+        var from = BankTime.Today.AddDays(-(AccountDetailsViewModel.DefaultDays - 1)).ToDateTime(TimeOnly.MinValue);   // bank-local date
         var activity = await _bank.GetActivityAsync(UserId, id, new ActivityFilter(null, null, from, null), 1, AccountDetailsViewModel.PageSize);
         var settings = await _bank.GetSettingsAsync();
         var (limit, used) = await _bank.GetDailyTransferUsageAsync(account);
@@ -62,8 +62,9 @@ public class AccountsController : Controller
 
         // Monthly statements: every month since the account opened (newest first, up to 12).
         var months = new List<DateOnly>();
-        for (var m = new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
-             m >= new DateOnly(account.OpenedAt.Year, account.OpenedAt.Month, 1) && months.Count < 12; m = m.AddMonths(-1))
+        var opened = BankTime.DateOf(account.OpenedAt);
+        for (var m = BankTime.FirstOfThisMonth;
+             m >= new DateOnly(opened.Year, opened.Month, 1) && months.Count < 12; m = m.AddMonths(-1))
             months.Add(m);
 
         ViewData["Title"] = account.DisplayName;
@@ -105,13 +106,13 @@ public class AccountsController : Controller
         var result = await _bank.GetActivityAsync(UserId, id, new ActivityFilter(search, kind, from, to), 1, 50_000);
         var labels = await _bank.GetAccountLabelsAsync(UserId);
         var csv = Csv.Build(
-            new[] { "Date (UTC)", "Description", "Type", "Status", "Amount", "Balance after", "Memo", "Counterparty", "Transaction ID" },
+            new[] { "Date (bank time)", "Description", "Type", "Status", "Amount", "Balance after", "Memo", "Counterparty", "Transaction ID" },
             result.Items.Select(t => new object?[]
             {
-                t.Date, t.Description, t.TypeLabel, t.Status.ToString(), t.SignedAmount, t.BalanceAfter, t.Memo,
-                t.CounterpartyAccountId is int c ? labels.GetValueOrDefault(c) : null, t.Id
+                t.LocalDate, t.Description, t.TypeLabel, t.Status.ToString(), t.SignedAmount, t.BalanceAfter, t.Memo,
+                t.CounterpartyName ?? (t.CounterpartyAccountId is int c ? labels.GetValueOrDefault(c) : null), t.Id
             }));
-        return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", $"alto-{account.Last4}-activity-{DateTime.UtcNow:yyyyMMdd}.csv");
+        return File(System.Text.Encoding.UTF8.GetBytes(csv), "text/csv", $"alto-{account.Last4}-activity-{BankTime.Today:yyyyMMdd}.csv");
     }
 
     // Old URL from earlier versions — send people to the new application.

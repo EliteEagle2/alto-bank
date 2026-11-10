@@ -3,9 +3,11 @@
 @{
     var icon = Model switch
     {
-        "Active" or "Approved" or "Posted" => "bi-check-circle",
+        "Active" or "Approved" or "Posted" or "Completed" or "Paid" or "Succeeded" => "bi-check-circle",
         "Frozen" => "bi-snow",
-        "Pending" => "bi-hourglass-split",
+        "Pending" or "Submitted" or "UnderReview" or "Scheduled" => "bi-hourglass-split",
+        "Expired" or "Skipped" or "Removed" => "bi-clock-history",
+        "Failed" or "Rejected" or "Declined" => "bi-exclamation-octagon",
         "Locked" => "bi-lock",
         "Closed" or "Cancelled" => "bi-slash-circle",
         "Denied" => "bi-x-circle",
@@ -13,5 +15,6 @@
         _ => "bi-dot"
     };
     var css = Model == "Cancelled" ? "closed" : Model.ToLowerInvariant();
+    var label = Model == "UnderReview" ? "Under review" : Model;
 }
-<span class="status-pill status-@css"><i class="bi @icon"></i>@Model</span>
+<span class="status-pill status-@css"><i class="bi @icon"></i>@label</span>

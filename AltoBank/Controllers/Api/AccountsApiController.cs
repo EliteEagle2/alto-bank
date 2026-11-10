@@ -165,6 +165,6 @@ public class AccountsApiController : ControllerBase
     private static ActivityItemDto ToDto(Transaction t, IReadOnlyDictionary<int, string> labels) =>
         new(t.Id, DateTime.SpecifyKind(t.Date, DateTimeKind.Utc), t.Description, t.TypeLabel, t.Type.ToString(), t.IsCredit,
             t.Amount, t.SignedAmount, t.BalanceAfter, t.Status.ToString(), t.Memo,
-            t.CounterpartyAccountId is int c ? labels.GetValueOrDefault(c) : null,
-            t.ReversalOfTransactionId, t.ReversedByTransactionId);
+            t.CounterpartyName ?? (t.CounterpartyAccountId is int c ? labels.GetValueOrDefault(c) : null),
+            t.ReversalOfTransactionId, t.ReversedByTransactionId, BankTime.DateOf(t.Date));
 }

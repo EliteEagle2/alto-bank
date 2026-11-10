@@ -29,7 +29,8 @@ public record TransferResultDto(string Message, AccountDto From, AccountDto To);
 public record ActivityItemDto(
     int Id, DateTime Date, string Description, string Type, string Kind, bool IsCredit,
     decimal Amount, decimal SignedAmount, decimal BalanceAfter, string Status,
-    string? Memo, string? Counterparty, int? ReversalOfTransactionId, int? ReversedByTransactionId);
+    string? Memo, string? Counterparty, int? ReversalOfTransactionId, int? ReversedByTransactionId,
+    DateOnly BankDate);   // the day this falls on in the bank's time zone (for "Today" / "Yesterday" grouping)
 
 /// <summary>A page of activity plus the money in/out totals for the WHOLE filtered range.</summary>
 public record ActivityPageDto(
@@ -85,3 +86,54 @@ public class AdminReasonDto
 }
 
 public record AdminActionResultDto(bool Success, string Message, AdminAccountDto? Account);
+
+// ===================== Send & Request (/api/payments) =====================
+
+/// <summary>GET /api/payments/recipient?q= — who a payment would go to ("Maya C."), before sending.</summary>
+public record RecipientDto(string DisplayName);
+
+/// <summary>Body for POST /api/payments/send.</summary>
+public class SendPaymentDto
+{
+    [Required] public int FromAccountId { get; set; }
+    [Required, StringLength(100)] public string To { get; set; } = "";        // email or mobile number
+    [Range(typeof(decimal), "0.01", "1000000", ErrorMessage = "Amount must be between $0.01 and $1,000,000.")]
+    public decimal Amount { get; set; }
+    [StringLength(80)] public string? Memo { get; set; }
+}
+
+/// <summary>A payment as the signed-in customer sees it: Direction is "sent" or "received"; Counterparty is "Maya C.".</summary>
+public record PaymentDto(int Id, string Direction, string Counterparty, decimal Amount, string? Memo, string Status, DateTime CreatedAt, int? RequestId);
+
+public class RequestPersonDto
+{
+    [Required, StringLength(100)] public string To { get; set; } = "";
+    [Range(typeof(decimal), "0", "1000000")] public decimal Amount { get; set; }
+}
+
+/// <summary>
+/// Body for POST /api/payments/request. Plain request: give each person an amount.
+/// Split a bill: set SplitTotal, and SplitEvenly=true to have the server divide it (IncludeMe = you pay a share too).
+/// </summary>
+public class RequestMoneyDto
+{
+    [Required, MinLength(1), MaxLength(5)] public List<RequestPersonDto> Recipients { get; set; } = new();
+    [StringLength(80)] public string? Memo { get; set; }
+    [Range(typeof(decimal), "0.01", "1000000")] public decimal? SplitTotal { get; set; }
+    public bool SplitEvenly { get; set; }
+    public bool IncludeMe { get; set; } = true;
+}
+
+/// <summary>A money request as the signed-in customer sees it. Direction: "incoming" (asked of you) or "outgoing" (you asked).</summary>
+public record MoneyRequestDto(int Id, string Direction, string Counterparty, decimal Amount, string? Memo, string Status,
+    DateTime CreatedAt, DateTime ExpiresAt, decimal? SplitTotal, int? PaymentId);
+
+public record MoneyRequestListDto(List<MoneyRequestDto> Incoming, List<MoneyRequestDto> Outgoing);
+
+/// <summary>Body for POST /api/payments/requests/{id}/pay.</summary>
+public class PayRequestDto
+{
+    [Required] public int FromAccountId { get; set; }
+}
+
+public record ActionResultDto(bool Success, string Message);

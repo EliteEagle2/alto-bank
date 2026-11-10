@@ -1,0 +1,109 @@
+@model PaymentAdminViewModel
+@* /admin/payments — every Send & Request payment and money request. Read-only: a payment is undone with the
+   normal transaction reversal (open the payment's transaction → Reverse), which also marks the payment Reversed. *@
+@{
+    var q = Model.Query;
+    var tiles = new[]
+    {
+        new KpiTileViewModel("p2pToday", "Payments today", "bi-send", Model.PaymentsToday.ToString("N0")),
+        new KpiTileViewModel("p2pVolume", "Volume (30 days)", "bi-cash-stack", Model.VolumeLast30Days.ToString("C0"), "completed payments"),
+        new KpiTileViewModel("p2pPending", "Open requests", "bi-hourglass-split", Model.PendingRequests.ToString("N0"), Tone: Model.PendingRequests > 0 ? "warn" : null),
+        new KpiTileViewModel("p2pExpired", "Expired requests", "bi-clock-history", Model.ExpiredRequests.ToString("N0")),
+    };
+    string Who(ApplicationUser? u) => u == null ? "—" : $"{u.FirstName} {u.LastName}";
+}
+
+<div class="row g-3 mb-3">
+    @foreach (var tile in tiles)
+    {
+        <div class="col-6 col-xl-3"><partial name="_KpiTile" model="tile" /></div>
+    }
+</div>
+
+<ul class="nav admin-tabs mb-3" role="tablist">
+    <li class="nav-item"><a class="nav-link @(q.IsRequests ? "" : "active")" asp-action="Index" asp-route-view="payments">Payments</a></li>
+    <li class="nav-item"><a class="nav-link @(q.IsRequests ? "active" : "")" asp-action="Index" asp-route-view="requests">Requests</a></li>
+</ul>
+
+<form method="get" class="filter-bar" role="search">
+    <input type="hidden" name="view" value="@(q.IsRequests ? "requests" : "payments")" />
+    <div><label for="from">From</label><input id="from" name="from" type="date" class="form-control" value="@q.From?.ToString("yyyy-MM-dd")" /></div>
+    <div><label for="to">To</label><input id="to" name="to" type="date" class="form-control" value="@q.To?.ToString("yyyy-MM-dd")" /></div>
+    <div>
+        <label for="status">Status</label>
+        @if (q.IsRequests)
+        {
+            <select id="status" name="requestStatus" class="form-select">
+                <option value="">All</option>
+                @foreach (var s in Enum.GetValues<MoneyRequestStatus>()) { <option value="@s" selected="@(q.RequestStatus == s)">@s</option> }
+            </select>
+        }
+        else
+        {
+            <select id="status" name="paymentStatus" class="form-select">
+                <option value="">All</option>
+                @foreach (var s in Enum.GetValues<PaymentStatus>()) { <option value="@s" selected="@(q.PaymentStatus == s)">@s</option> }
+            </select>
+        }
+    </div>
+    <div><label for="customer">Customer</label><input id="customer" name="customer" class="form-control" value="@q.Customer" placeholder="sender or recipient" /></div>
+    <button type="submit" class="btn btn-admin"><i class="bi bi-funnel"></i> Filter</button>
+    <a class="btn btn-admin-ghost" asp-action="Index" asp-route-view="@(q.IsRequests ? "requests" : "payments")">Reset</a>
+</form>
+
+<div class="admin-card p-0">
+    <div class="table-responsive">
+        @if (q.IsRequests)
+        {
+            <table class="table admin-table table-hover mb-0">
+                <thead><tr><th>#</th><th>Created</th><th>Requested by</th><th>Asked of</th><th>Memo</th><th>Split</th><th>Expires</th><th>Status</th><th class="text-end">Amount</th></tr></thead>
+                <tbody>
+                    @if (!Model.Requests.Items.Any()) { <tr><td colspan="9" class="text-center text-muted-alto py-4">No requests match these filters.</td></tr> }
+                    @foreach (var r in Model.Requests.Items)
+                    {
+                        var expired = r.Status == MoneyRequestStatus.Pending && r.ExpiresAt <= DateTime.UtcNow;
+                        <tr>
+                            <td>@r.Id</td>
+                            <td class="text-nowrap">@BankTime.ToLocal(r.CreatedAt).ToString("MMM d, yyyy h:mm tt")</td>
+                            <td><a asp-controller="Customers" asp-action="Details" asp-route-id="@r.RequesterUserId">@Who(r.Requester)</a></td>
+                            <td><a asp-controller="Customers" asp-action="Details" asp-route-id="@r.PayerUserId">@Who(r.Payer)</a></td>
+                            <td>@(r.Memo ?? "—")</td>
+                            <td>@(r.SplitTotal is decimal total ? $"of {total:C}" : "—")</td>
+                            <td class="text-nowrap">@BankTime.ToLocal(r.ExpiresAt).ToString("MMM d, yyyy")</td>
+                            <td><partial name="_StatusPill" model="@(expired ? "Expired" : r.Status.ToString())" /></td>
+                            <td class="text-end"><money amount="@r.Amount" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <partial name="_Pager" model="Model.Requests.Pager" />
+        }
+        else
+        {
+            <table class="table admin-table table-hover mb-0">
+                <thead><tr><th>#</th><th>Date</th><th>From</th><th>To</th><th>Memo</th><th>Transactions</th><th>Status</th><th class="text-end">Amount</th></tr></thead>
+                <tbody>
+                    @if (!Model.Payments.Items.Any()) { <tr><td colspan="8" class="text-center text-muted-alto py-4">No payments match these filters.</td></tr> }
+                    @foreach (var p in Model.Payments.Items)
+                    {
+                        <tr class="@(p.Status == PaymentStatus.Reversed ? "is-muted" : "")">
+                            <td>@p.Id</td>
+                            <td class="text-nowrap">@BankTime.ToLocal(p.CreatedAt).ToString("MMM d, yyyy h:mm tt")</td>
+                            <td><a asp-controller="Customers" asp-action="Details" asp-route-id="@p.SenderUserId">@Who(p.Sender)</a> <span class="small text-muted-alto">••@p.FromAccount?.Last4</span></td>
+                            <td><a asp-controller="Customers" asp-action="Details" asp-route-id="@p.RecipientUserId">@Who(p.Recipient)</a> <span class="small text-muted-alto">••@p.ToAccount?.Last4</span></td>
+                            <td>@(p.Memo ?? "—")@(p.MoneyRequestId != null ? " (request #" + p.MoneyRequestId + ")" : "")</td>
+                            <td class="text-nowrap">
+                                @if (p.SentTransactionId != null) { <a asp-controller="Transactions" asp-action="Details" asp-route-id="@p.SentTransactionId">#@p.SentTransactionId</a> }
+                                @if (p.ReceivedTransactionId != null) { <span>·</span> <a asp-controller="Transactions" asp-action="Details" asp-route-id="@p.ReceivedTransactionId">#@p.ReceivedTransactionId</a> }
+                            </td>
+                            <td><partial name="_StatusPill" model="p.Status.ToString()" /></td>
+                            <td class="text-end"><money amount="@p.Amount" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <partial name="_Pager" model="Model.Payments.Pager" />
+        }
+    </div>
+</div>
+<p class="small text-muted-alto mt-2"><i class="bi bi-info-circle me-1"></i>To undo a payment, open one of its transactions and use <strong>Reverse</strong>. Both sides are reversed together and the payment is marked Reversed.</p>

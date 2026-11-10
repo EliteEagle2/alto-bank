@@ -19,6 +19,9 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<CustomerNote> CustomerNotes => Set<CustomerNote>();
     public DbSet<BankSetting> BankSettings => Set<BankSetting>();
+    public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<MoneyRequest> MoneyRequests => Set<MoneyRequest>();
+    public DbSet<Alert> Alerts => Set<Alert>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -81,6 +84,37 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             l.HasIndex(x => x.Timestamp);
             l.HasIndex(x => x.Action);
             l.HasIndex(x => x.ActorUserId);
+        });
+
+        // ----- Send & Request -----
+        builder.Entity<Payment>(p =>
+        {
+            p.Property(x => x.Status).HasConversion<string>().HasMaxLength(10).HasDefaultValue(PaymentStatus.Completed);
+            p.HasOne(x => x.Sender).WithMany().HasForeignKey(x => x.SenderUserId).OnDelete(DeleteBehavior.Restrict);
+            p.HasOne(x => x.Recipient).WithMany().HasForeignKey(x => x.RecipientUserId).OnDelete(DeleteBehavior.Restrict);
+            p.HasOne(x => x.FromAccount).WithMany().HasForeignKey(x => x.FromAccountId).OnDelete(DeleteBehavior.Restrict);
+            p.HasOne(x => x.ToAccount).WithMany().HasForeignKey(x => x.ToAccountId).OnDelete(DeleteBehavior.Restrict);
+            p.HasIndex(x => new { x.SenderUserId, x.CreatedAt });
+            p.HasIndex(x => new { x.RecipientUserId, x.CreatedAt });
+        });
+
+        builder.Entity<MoneyRequest>(r =>
+        {
+            r.Property(x => x.Status).HasConversion<string>().HasMaxLength(10).HasDefaultValue(MoneyRequestStatus.Pending);
+            r.HasOne(x => x.Requester).WithMany().HasForeignKey(x => x.RequesterUserId).OnDelete(DeleteBehavior.Restrict);
+            r.HasOne(x => x.Payer).WithMany().HasForeignKey(x => x.PayerUserId).OnDelete(DeleteBehavior.Restrict);
+            r.HasOne(x => x.Payment).WithMany().HasForeignKey(x => x.PaymentId).OnDelete(DeleteBehavior.Restrict);
+            r.HasIndex(x => new { x.PayerUserId, x.Status });
+            r.HasIndex(x => new { x.RequesterUserId, x.Status });
+            r.HasIndex(x => new { x.Status, x.ExpiresAt });   // the scheduler's "what expired?" query
+        });
+
+        builder.Entity<Alert>(a =>
+        {
+            a.Property(x => x.Type).HasConversion<string>().HasMaxLength(30);
+            a.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            a.HasIndex(x => new { x.UserId, x.ReadAt });
+            a.HasIndex(x => new { x.UserId, x.DedupeKey }).IsUnique();   // NULL keys never clash in SQLite
         });
 
         // Exactly one settings row, created by the migration with the default values.

@@ -21,6 +21,13 @@ public record ActivityFilter(string? Search, string? Kind, DateTime? From, DateT
 /// <summary>A page of activity, the total matching rows, and money in/out for ALL matching rows.</summary>
 public record ActivityResult(List<Transaction> Items, int TotalCount, decimal MoneyIn, decimal MoneyOut);
 
+/// <summary>Result of looking up a payment recipient by email or phone. Found => UserId + "Maya C."; otherwise Error.</summary>
+public record RecipientLookup(string? UserId, string? ShortName, string? Error)
+{
+    public bool Found => UserId != null;
+    public static RecipientLookup Fail(string error) => new(null, null, error);
+}
+
 /// <summary>Everything a monthly statement shows.</summary>
 public record StatementData(Account Account, ApplicationUser Owner, int Year, int Month,
     decimal OpeningBalance, decimal ClosingBalance, decimal TotalIn, decimal TotalOut, List<Transaction> Transactions);
@@ -52,6 +59,11 @@ public interface IBankService
     Task<BankResult> DepositAsync(string userId, int accountId, decimal amount, string? description);
     Task<BankResult> WithdrawAsync(string userId, int accountId, decimal amount, string? description);
     Task<BankResult> TransferAsync(string userId, int fromId, int toId, decimal amount, string? memo);
+
+    // ----- Send & Request (money side; BankService.Payments.cs) -----
+    Task<RecipientLookup> FindRecipientAsync(string senderUserId, string? query);
+    Task<(BankResult Result, Payment? Payment)> SendPaymentAsync(string userId, int fromAccountId, string? recipient, decimal amount, string? memo);
+    Task<(BankResult Result, Payment? Payment)> PayRequestAsync(string userId, int requestId, int fromAccountId);
 
     // ----- Opening accounts -----
     Task<(BankResult Result, Account? Account)> OpenAccountAsync(string userId, OpenAccountRequest request);
