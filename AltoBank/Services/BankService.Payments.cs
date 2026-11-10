@@ -33,13 +33,18 @@ public partial class BankService
             if (digits.Length != 10) return RecipientLookup.Fail("Enter a 10-digit mobile number or an email address.");
             // Phone numbers are stored formatted ("(215) 555-0187"), so compare the digits in memory (few customers).
             var withPhones = await _db.Users.AsNoTracking().Where(u => u.PhoneNumber != null).ToListAsync();
-            user = withPhones.FirstOrDefault(u => PhoneDigits(u.PhoneNumber!) == digits);
+            var matches = withPhones.Where(u => PhoneDigits(u.PhoneNumber!) == digits).ToList();
+            // Phone numbers aren't unique. Never guess: if two people share one, ask for an email instead.
+            if (matches.Count > 1) return RecipientLookup.Fail("More than one person uses that number. Please use their email address instead.");
+            user = matches.FirstOrDefault();
         }
 
-        if (user == null || !await IsCustomerAsync(user.Id)) return RecipientLookup.Fail("We couldn't find an Alto customer with that email or phone number.");
-        if (user.Id == senderUserId) return RecipientLookup.Fail("You can't send money to yourself. Use Transfer to move money between your own accounts.");
-        if (user.LockoutEnd > DateTimeOffset.UtcNow || await PrimaryCheckingQuery(user.Id).AnyAsync() == false)
-            return RecipientLookup.Fail($"{ShortName(user)} can't receive payments right now.");
+        if (user != null && user.Id == senderUserId)
+            return RecipientLookup.Fail("You can't send money to yourself. Use Transfer to move money between your own accounts.");
+        // One message for "no such customer" AND "can't receive right now" (locked, no open checking), so this
+        // lookup can't be used to discover who banks here or whose login is locked.
+        if (user == null || !await IsCustomerAsync(user.Id) || user.LockoutEnd > DateTimeOffset.UtcNow || !await PrimaryCheckingQuery(user.Id).AnyAsync())
+            return RecipientLookup.Fail(NotFoundMessage);
         return new RecipientLookup(user.Id, ShortName(user), null);
     }
 
@@ -90,10 +95,15 @@ public partial class BankService
         }), () => made);
     }
 
-    /// <summary>The recipient's primary checking: their oldest Active checking account.</summary>
+    public const string NotFoundMessage = "We couldn't find an Alto customer who can receive payments at that email or phone number.";
+
+    /// <summary>
+    /// The recipient's primary checking: their oldest open checking account, preferring Active ones.
+    /// A Frozen account can still RECEIVE money (same rule as CanReceive: only Closed accounts can't).
+    /// </summary>
     private IQueryable<Account> PrimaryCheckingQuery(string userId) =>
-        _db.Accounts.Where(a => a.UserId == userId && a.AccountType == AccountType.Checking && a.Status == AccountStatus.Active)
-                    .OrderBy(a => a.OpenedAt).ThenBy(a => a.Id);
+        _db.Accounts.Where(a => a.UserId == userId && a.AccountType == AccountType.Checking && a.Status != AccountStatus.Closed)
+                    .OrderBy(a => a.Status != AccountStatus.Active).ThenBy(a => a.OpenedAt).ThenBy(a => a.Id);
 
     /// <summary>Moves the money for a payment. Must run inside InTransactionAsync.</summary>
     private async Task<(BankResult, Payment?)> SendCoreAsync(string senderId, int fromAccountId, string recipientId,
@@ -109,7 +119,7 @@ public partial class BankService
         var recipient = await _db.Users.FirstAsync(u => u.Id == recipientId);
         var to = await PrimaryCheckingQuery(recipientId).FirstOrDefaultAsync();
         if (to == null || recipient.LockoutEnd > DateTimeOffset.UtcNow)
-            return (new(false, $"{ShortName(recipient)} can't receive payments right now."), null);
+            return (new(false, NotFoundMessage), null);
 
         string senderName = ShortName(sender), recipientName = ShortName(recipient);
         from.Balance -= amount;

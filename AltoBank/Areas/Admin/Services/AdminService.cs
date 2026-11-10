@@ -620,8 +620,18 @@ public partial class AdminService : IAdminService
 
             // A Send & Request payment: mark the payment itself Reversed too.
             var legIds = legs.Select(l => l.Id).ToList();
-            foreach (var p in await _db.Payments.Where(p => legIds.Contains(p.SentTransactionId!.Value) || legIds.Contains(p.ReceivedTransactionId!.Value)).ToListAsync())
+            // The request it paid (if any) becomes Reversed too, and both customers are told.
+            foreach (var p in await _db.Payments.Include(p => p.Sender).Include(p => p.Recipient)
+                         .Where(p => legIds.Contains(p.SentTransactionId!.Value) || legIds.Contains(p.ReceivedTransactionId!.Value)).ToListAsync())
+            {
                 p.Status = PaymentStatus.Reversed;
+                if (p.MoneyRequestId is int rid && await _db.MoneyRequests.FirstOrDefaultAsync(r => r.Id == rid) is { } paidRequest)
+                    paidRequest.Status = MoneyRequestStatus.Reversed;
+                _alerts.Add(p.SenderUserId, AlertType.PaymentReversed, "Payment reversed",
+                    $"Your {p.Amount:C} payment to {BankService.ShortName(p.Recipient!)} was reversed and the money returned to your account.", "/payments#activity");
+                _alerts.Add(p.RecipientUserId, AlertType.PaymentReversed, "Payment reversed",
+                    $"The {p.Amount:C} payment from {BankService.ShortName(p.Sender!)} was reversed and taken back out of your account.", "/payments#activity");
+            }
 
             _audit.Add("Transaction.Reverse", $"Reversed transaction #{tx.Id} ({tx.TypeLabel} {tx.Amount:C})" + (linked != null ? $" and its transfer leg #{linked.Id}" : ""),
                        "Transaction", tx.Id.ToString(),

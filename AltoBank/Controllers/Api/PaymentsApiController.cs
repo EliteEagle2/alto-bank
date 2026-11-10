@@ -39,6 +39,7 @@ public class PaymentsApiController : ControllerBase
 
     /// <summary>GET /api/payments/recipient?q= — the recipient preview. 404 if no eligible customer matches; 400 for yourself.</summary>
     [HttpGet("recipient")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("recipient-lookup")]   // 60 lookups a minute per user (Program.cs)
     [ProducesResponseType(typeof(RecipientDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<RecipientDto>> Recipient([FromQuery] string? q)
@@ -83,7 +84,7 @@ public class PaymentsApiController : ControllerBase
     [ProducesResponseType(typeof(MoneyRequestListDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<MoneyRequestListDto>> Requests()
     {
-        await _requests.ExpireDueAsync();
+        await _requests.TryExpireDueAsync();
         var o = await _requests.GetOverviewAsync(UserId);
         return new MoneyRequestListDto(
             o.Inbox.Concat(o.ClosedInbox).OrderByDescending(r => r.CreatedAt).Select(r => ToDto(r, UserId)).ToList(),

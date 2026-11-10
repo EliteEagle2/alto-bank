@@ -8,7 +8,8 @@
 #   $env:ConnectionStrings__DefaultConnection = "Data Source=C:\temp\alto-test.db"
 #   dotnet run -- --reset-db
 #   $env:ASPNETCORE_URLS = "http://localhost:5299"; dotnet run --no-launch-profile
-# Suites that "move time" (p2p, scheduler, ...) also need TEST_DB=<that scratch .db file> (see lib.sh sql()).
+# Suites that "move time" (p2p, scheduler, ...) also need TEST_DB=<that scratch .db file> (see lib.sh sql()),
+# and the server started with $env:Scheduler__IntervalSeconds = "5" so background jobs run quickly.
 # The suites build on each other's data, so run them in this order on a freshly reset database.
 B=${B:?set B to the TEST server url (never the real app on 5264)}
 export B

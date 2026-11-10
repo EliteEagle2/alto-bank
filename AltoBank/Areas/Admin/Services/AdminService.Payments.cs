@@ -24,7 +24,15 @@ public partial class AdminService
         if (query.IsRequests)
         {
             var q = _db.MoneyRequests.AsNoTracking().Include(r => r.Requester).Include(r => r.Payer).AsQueryable();
-            if (query.RequestStatus is MoneyRequestStatus rs) q = q.Where(r => r.Status == rs);
+            // A Pending request past its ExpiresAt counts as Expired even if the scheduler hasn't marked it yet.
+            var now0 = DateTime.UtcNow;
+            if (query.RequestStatus is MoneyRequestStatus rs)
+                q = rs switch
+                {
+                    MoneyRequestStatus.Expired => q.Where(r => r.Status == MoneyRequestStatus.Expired || (r.Status == MoneyRequestStatus.Pending && r.ExpiresAt <= now0)),
+                    MoneyRequestStatus.Pending => q.Where(r => r.Status == MoneyRequestStatus.Pending && r.ExpiresAt > now0),
+                    _ => q.Where(r => r.Status == rs)
+                };
             if (start != null) q = q.Where(r => r.CreatedAt >= start);
             if (end != null) q = q.Where(r => r.CreatedAt < end);
             if (like != null)
@@ -51,7 +59,7 @@ public partial class AdminService
                                                 .Select(p => p.Amount).ToListAsync()).Sum();   // SQLite can't SUM decimals
         var now = DateTime.UtcNow;
         vm.PendingRequests = await _db.MoneyRequests.CountAsync(r => r.Status == MoneyRequestStatus.Pending && r.ExpiresAt > now);
-        vm.ExpiredRequests = await _db.MoneyRequests.CountAsync(r => r.Status == MoneyRequestStatus.Expired);
+        vm.ExpiredRequests = await _db.MoneyRequests.CountAsync(r => r.Status == MoneyRequestStatus.Expired || (r.Status == MoneyRequestStatus.Pending && r.ExpiresAt <= now));
         return vm;
     }
 }

@@ -43,7 +43,7 @@ public class Payment
 }
 
 /// <summary>Pending until the payer pays or declines, the requester cancels, or 14 days pass (Expired).</summary>
-public enum MoneyRequestStatus { Pending, Paid, Declined, Cancelled, Expired }
+public enum MoneyRequestStatus { Pending, Paid, Declined, Cancelled, Expired, Reversed }   // Reversed = it was paid, then an admin reversed that payment
 
 /// <summary>
 /// A request for money from one customer to another. "Split a bill" creates one request per person,

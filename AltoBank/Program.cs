@@ -70,7 +70,21 @@ builder.Services.AddScoped<IAuditLogger, AuditLogger>();     // writes AuditLog 
 builder.Services.AddScoped<IAdminService, AdminService>();   // everything the admin portal does
 builder.Services.AddScoped<IAlertService, AlertService>();   // the customer Alerts center (bell icon)
 builder.Services.AddScoped<IPaymentRequestService, PaymentRequestService>();   // Send & Request: requests (no money moves)
+
+// Background scheduler: a hosted service (singleton) that runs every minute; each run gets its own scope.
+builder.Services.AddScoped<AltoBank.Services.Scheduling.ISchedulerRunner, AltoBank.Services.Scheduling.SchedulerRunner>();
+builder.Services.AddHostedService<AltoBank.Services.Scheduling.SchedulerService>();
 builder.Services.AddHttpContextAccessor();                   // lets services see who's logged in (for the audit log)
+
+// RATE LIMITING (built into .NET 8): the payment recipient lookup could otherwise be used to test thousands of
+// emails/phone numbers. Each signed-in user gets 60 lookups a minute; more returns 429 Too Many Requests.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("recipient-lookup", ctx => System.Threading.RateLimiting.RateLimitPartition.GetFixedWindowLimiter(
+        ctx.User.Identity?.Name ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "anonymous",
+        _ => new System.Threading.RateLimiting.FixedWindowRateLimiterOptions { PermitLimit = 60, Window = TimeSpan.FromMinutes(1) }));
+});
 
 // The global filter sends users who must change their password (admin reset / new account) to that page first.
 builder.Services.AddControllersWithViews(options => options.Filters.Add<ForcePasswordChangeFilter>());
@@ -133,6 +147,7 @@ app.UseRouting();
 
 app.UseAuthentication(); // who are you?
 app.UseAuthorization();  // are you allowed here?
+app.UseRateLimiter();    // per-user limits on the endpoints marked [EnableRateLimiting]
 
 // AREA route (must come first): /admin/... goes to controllers marked [Area("Admin")]
 // in Areas/Admin/Controllers. "area:exists" only matches names of real areas.

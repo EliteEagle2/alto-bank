@@ -44,12 +44,13 @@ public class PaymentsController : Controller
     public async Task<IActionResult> Index()
     {
         ViewData["Title"] = "Send & Request";
-        await _requests.ExpireDueAsync();   // the scheduler does this too; this keeps the page exact between runs
+        await _requests.TryExpireDueAsync();   // the scheduler does this every minute; this keeps the page exact between runs
         return View(await BuildPageAsync());
     }
 
     // Step 1: look up the recipient and show who the money is going to. No money moves here.
     [HttpPost("send/review")]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("recipient-lookup")]
     public async Task<IActionResult> Review([Bind(Prefix = "Send")] SendPaymentInput input)
     {
         if (!ModelState.IsValid) return Flash(false, FirstError(), "send");

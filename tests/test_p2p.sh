@@ -94,8 +94,11 @@ has "frozen sender can't send (API)" "$(curl -s -b $C -H "$J" -d "{\"fromAccount
 apost "/admin/accounts/details/$JCHK" "/admin/accounts/unfreeze/$JCHK" --data-urlencode "reason=Done testing" >/dev/null
 has "unfreeze creates an 'Account unfrozen' alert" "$(curl -s -b $C $B/alerts)" 'Account unfrozen'
 apost "/admin/accounts/details/$SCHK" "/admin/accounts/freeze/$SCHK" --data-urlencode "reason=Testing recipient freeze" >/dev/null
-has "recipient whose only checking is frozen can't receive" "$(send $C $JCHK sam@altobank.com 1)" "receive payments right now"
-check "preview says so too" "$(code -b $C "$B/api/payments/recipient?q=sam@altobank.com")" 404
+SF0=$(bal $S $SCHK)
+check "preview still finds a recipient whose checking is frozen" "$(code -b $C "$B/api/payments/recipient?q=sam@altobank.com")" 200
+has "a frozen checking can still RECEIVE (same rule as deposits)" "$(send $C $JCHK sam@altobank.com 1)" "Sent [$]1.00 to Samuel O."
+check "...and the money landed in it" "$(bal $S $SCHK)" "$(add $SF0 1)"
+has "but the frozen recipient can't send" "$(send $S $SCHK demo@altobank.com 1)" "frozen"
 apost "/admin/accounts/details/$SCHK" "/admin/accounts/unfreeze/$SCHK" --data-urlencode "reason=Done testing" >/dev/null
 used() { curl -s -b $C $B/accounts/$JCHK | tr -s ' \n' ' ' | grep -oE '\(<span class="money[^>]*>\$[0-9.,]+</span> used today' | grep -oE '[0-9][0-9.,]*' | head -1 | tr -d ,; }
 U0=$(used); send $C $JCHK maya@altobank.com 1.00 'limit check' >/dev/null; U1=$(used)
@@ -216,5 +219,28 @@ has "reversing a payment uses the existing reversal" "$(curl -s -b $A $B/admin/t
 check "recipient's leg reversed too (balance back)" "$(bal $M $MCHK)" "$(add $M1 -12.34)"
 has "payment marked Reversed on the P2P page" "$(curl -s -b $A "$B/admin/payments?paymentStatus=Reversed")" "Coffee run"
 check "audit: Payment.Send rows" "$(curl -s -b $A "$B/admin/auditlog?action=Payment.Send" | grep -c '<code>Payment.Send</code>' | awk '{print ($1>0)?"yes":"no"}')" yes
+
+
+echo "== Review fixes"
+# Browsers post every person row, including hidden/blank ones (Amount=""): that must not break the form.
+post $C /payments /payments/request --data-urlencode "Request.People[0].To=maya@altobank.com" -d "Request.People[0].Amount=6" -d "Request.People[1].To=" -d "Request.People[1].Amount=" -d "Request.People[2].To=" -d "Request.People[2].Amount=" -d "Request.Mode=single" -d "Request.SplitTotal=" -d "Request.IncludeMe=true" -d "Request.IncludeMe=false" --data-urlencode "Request.Memo=Blank rows" >/dev/null
+has "blank person rows (as a browser sends them) are ignored" "$(flash $C $B/payments)" 'Request sent to Maya C. ($6.00)'
+has "unknown and can't-receive share one message (no customer discovery)" "$(curl -s -b $C "$B/api/payments/recipient?q=nobody@example.com")" "who can receive payments"
+MAYA_PHONE=$(sql "SELECT PhoneNumber FROM AspNetUsers WHERE NormalizedEmail = 'MAYA@ALTOBANK.COM'")
+sql "UPDATE AspNetUsers SET PhoneNumber = '(717) 555-0119' WHERE NormalizedEmail = 'MAYA@ALTOBANK.COM'" >/dev/null
+has "a phone number two customers share is refused (never guesses)" "$(curl -s -b $C "$B/api/payments/recipient?q=7175550119")" "More than one person"
+sql "UPDATE AspNetUsers SET PhoneNumber = '$MAYA_PHONE' WHERE NormalizedEmail = 'MAYA@ALTOBANK.COM'" >/dev/null
+SNACK=$(curl -s -b $S "$B/api/accounts/$SCHK/transactions?kind=payment&pageSize=50" | grep -oE '"id":[0-9]+,"date":"[^"]*","description":"Payment to Jordan R. - Snacks"' | grep -oE '"id":[0-9]+' | cut -d: -f2)
+apost "/admin/transactions/details/$SNACK" "/admin/transactions/reverse/$SNACK" --data-urlencode "reason=Paid by mistake" >/dev/null
+check "reversing the payment that paid a request marks the request Reversed" "$(req_status $C $RID)" Reversed
+has "payer told it was reversed" "$(curl -s -b $S $B/alerts)" "Payment reversed"
+has "requester told it was reversed" "$(curl -s -b $C $B/alerts)" "was reversed and taken back"
+BG=$(curl -s -b $S -H "$J" -d '{"recipients":[{"to":"maya@altobank.com","amount":3}],"memo":"Background expiry"}' $B/api/payments/request | grep -oE '"id":[0-9]+' | head -1 | cut -d: -f2)
+sql "UPDATE MoneyRequests SET ExpiresAt = datetime('now','-1 hours') WHERE Id = $BG" >/dev/null
+for i in $(seq 1 40); do [ "$(sql "SELECT Status FROM MoneyRequests WHERE Id = $BG")" = Expired ] && break; sleep 1; done
+check "the background scheduler expires requests on its own (no page visit)" "$(sql "SELECT Status FROM MoneyRequests WHERE Id = $BG")" Expired
+check "admin 'Expired' filter" "$(curl -s -b $A "$B/admin/payments?view=requests&requestStatus=Expired" | grep -c 'Background expiry')" 1
+RL=$(for i in $(seq 1 70); do code -b $S "$B/api/payments/recipient?q=maya@altobank.com"; echo; done | grep -c 429)
+check "recipient lookup is rate-limited (60/min per user)" "$([ "$RL" -ge 5 ] && echo yes)" yes
 
 summary

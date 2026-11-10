@@ -66,8 +66,11 @@
     const kind = () => ($('[data-kind]:checked', form) || {}).value;
     const how = () => ($('[data-how]:checked', form) || {}).value;
     const visible = () => rows.filter(r => !r.hidden);
+    // Inputs in hidden rows are DISABLED so the browser doesn't submit them at all.
+    const sync = () => rows.forEach(r => $$('input', r).forEach(i => { i.disabled = r.hidden; }));
 
     function recalc() {
+        sync();
         const split = kind() === 'split';
         splitBox.hidden = !split;
         modeInput.value = split ? how() : 'single';

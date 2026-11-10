@@ -29,7 +29,8 @@ public class SendPaymentInput
 public class RequestPersonInput
 {
     [StringLength(100)] public string? To { get; set; }
-    [Range(typeof(decimal), "0", "1000000")] public decimal Amount { get; set; }
+    // Nullable: empty rows (hidden on the page, or left blank) post "" and must not fail model binding.
+    [Range(typeof(decimal), "0", "1000000")] public decimal? Amount { get; set; }
 }
 
 /// <summary>
@@ -54,7 +55,7 @@ public class RequestMoneyInput
     public bool IncludeMe { get; set; } = true;
 
     public NewRequest ToNewRequest() => new(
-        People.Select(p => new RequestLine(p.To, p.Amount)).ToList(), Memo,
+        People.Select(p => new RequestLine(p.To, p.Amount ?? 0m)).ToList(), Memo,
         Mode is "even" or "custom" ? SplitTotal : null, Mode == "even", IncludeMe);
 }
 

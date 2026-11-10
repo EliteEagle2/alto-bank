@@ -19,7 +19,8 @@ public enum AlertType
     CheckRejected,
     DisputeUpdate,
     AccountFrozen,
-    AccountUnfrozen
+    AccountUnfrozen,
+    PaymentReversed
 }
 
 /// <summary>
@@ -63,6 +64,7 @@ public class Alert
         AlertType.DisputeUpdate => "bi-shield-exclamation",
         AlertType.AccountFrozen => "bi-snow",
         AlertType.AccountUnfrozen => "bi-sun",
+        AlertType.PaymentReversed => "bi-arrow-counterclockwise",
         _ => "bi-bell"
     };
 }

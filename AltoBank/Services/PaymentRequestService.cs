@@ -35,6 +35,7 @@ public interface IPaymentRequestService
     Task<PaymentsOverview> GetOverviewAsync(string userId);
     /// <summary>Marks every Pending request past its ExpiresAt as Expired and alerts the requester. Returns how many.</summary>
     Task<int> ExpireDueAsync();
+    Task TryExpireDueAsync();
 }
 
 public class PaymentRequestService : IPaymentRequestService
@@ -175,6 +176,13 @@ public class PaymentRequestService : IPaymentRequestService
             return Fail("This request changed while we were processing it. Please reload.");
         }
         return new BankResult(true, message);
+    }
+
+    /// <summary>The page-load sweep: like ExpireDueAsync, but never lets a database hiccup break the page (the scheduler retries next minute).</summary>
+    public async Task TryExpireDueAsync()
+    {
+        try { await ExpireDueAsync(); }
+        catch (Exception) { _db.ChangeTracker.Clear(); }
     }
 
     public Task<MoneyRequest?> GetForUserAsync(string userId, int requestId) =>
