@@ -38,13 +38,13 @@ check "demo admin -> /admin" "$(demo $A admin)" "$B/admin"
 AP=$(curl -s -b $A $B/admin)
 has "admin layout branding" "$AP" "Alto Bank Admin"
 has "admin stylesheet" "$AP" "/css/admin.css"
-for item in Overview Customers Accounts Transactions Applications Settings "Audit Log"; do has "sidebar: $item" "$AP" "<span>$item</span>"; done
+for item in Overview Customers Accounts Transactions Applications Staff Settings "Audit Log"; do has "sidebar: $item" "$AP" "<span>$item</span>"; done
 check "stat strip cells (partial)" "$(printf '%s' "$AP" | grep -c 'class="kpi-cell')" 6
 has "overview recent applications" "$AP" "Recent applications"
 check "admin /api/admin/stats -> 200" "$(code -b $A $B/api/admin/stats)" 200
-has "stats JSON" "$(curl -s -b $A $B/api/admin/stats)" '"totalCustomers":3'
-check "admin GET /dashboard -> denied" "$(curl -s -o /dev/null -w '%{redirect_url}' -b $A $B/dashboard | grep -c AccessDenied)" 1
-check "admin /api/accounts -> 403" "$(code -b $A $B/api/accounts)" 403
+has "stats JSON" "$(curl -s -b $A $B/api/admin/stats)" '"totalCustomers":4'
+check "admin GET /dashboard -> 200 (staff also bank here)" "$(code -b $A $B/dashboard)" 200
+check "admin /api/accounts -> 200 (their own accounts)" "$(code -b $A $B/api/accounts)" 200
 check "real admin login (password) -> /admin" "$(login $(mktemp) admin@altobank.com 'Admin123!')" "$B/admin"
 check "real customer login (password) -> /dashboard" "$(login $(mktemp) maya@altobank.com 'Demo123!')" "$B/dashboard"
 

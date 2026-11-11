@@ -20,7 +20,9 @@ public enum AlertType
     DisputeUpdate,
     AccountFrozen,
     AccountUnfrozen,
-    PaymentReversed
+    PaymentReversed,
+    LowBalance,
+    LargeDebit
 }
 
 /// <summary>
@@ -65,6 +67,8 @@ public class Alert
         AlertType.AccountFrozen => "bi-snow",
         AlertType.AccountUnfrozen => "bi-sun",
         AlertType.PaymentReversed => "bi-arrow-counterclockwise",
+        AlertType.LowBalance => "bi-battery-low",
+        AlertType.LargeDebit => "bi-cash-stack",
         _ => "bi-bell"
     };
 }

@@ -62,6 +62,19 @@ public class ProfileViewModel
     [Required, EmailAddress]
     public string Email { get; set; } = string.Empty;
 
+    [StringLength(30), Display(Name = "Preferred name")]
+    public string? PreferredName { get; set; }
+
+    [Display(Name = "Mobile phone")]
+    public string? Phone { get; set; }
+
+    [StringLength(100), Display(Name = "Street address")] public string? Street { get; set; }
+    [StringLength(50), Display(Name = "Apt, suite, unit")] public string? Apt { get; set; }
+    [StringLength(60)] public string? City { get; set; }
+    [StringLength(2)] public string? State { get; set; }
+    [RegularExpression(@"^\d{5}$", ErrorMessage = "ZIP code must be exactly 5 digits."), Display(Name = "ZIP code")]
+    public string? Zip { get; set; }
+
     // Past account applications, listed under the form (not posted back).
     [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
     public List<AltoBank.Models.AccountApplication> Applications { get; set; } = new();

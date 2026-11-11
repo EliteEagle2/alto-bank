@@ -1,13 +1,22 @@
 ﻿@* ONLINE BANKING layout (signed-in pages): sidebar navigation, app-style top bar,
    compact footer, and a bottom tab bar on phones. Used by Dashboard, Accounts,
    Transactions and Profile through the _ViewStart.cshtml file in each of those folders. *@
+@inject IPreferencesService Preferences
+@inject UserManager<ApplicationUser> Users
+@{
+    // Profile → Preferences: accent theme + privacy mode (balances blurred until tapped). The preferred name is
+    // handed to the top bar through ViewData.
+    var userId = Users.GetUserId(User);
+    var prefs = userId == null ? new UserPreferences() : await Preferences.GetAsync(userId);
+    ViewData["PreferredName"] = prefs.PreferredName;
+}
 <!DOCTYPE html>
 <html lang="en" data-bs-theme="dark">
 <head>
     <title>@ViewData["Title"] · Alto Online Banking</title>
     <partial name="_HeadAssets" />
 </head>
-<body class="app-body">
+<body class="app-body@(prefs.HideBalances ? " privacy-on" : "")" data-theme-accent="@prefs.Theme" data-privacy-default="@(prefs.HideBalances ? "on" : "off")">
     <div class="app-shell">
         <partial name="_AppSidebar" />
 

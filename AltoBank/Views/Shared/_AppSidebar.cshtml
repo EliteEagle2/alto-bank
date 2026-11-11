@@ -37,6 +37,12 @@
             <a class="side-link @Active("Alerts")" asp-controller="Alerts" asp-action="Index"><i class="bi bi-bell"></i>Alerts</a>
             <a class="side-link @Active("Profile")" asp-controller="Profile" asp-action="Index"><i class="bi bi-person"></i>Profile</a>
             <a class="side-link" asp-controller="Support" asp-action="Help"><i class="bi bi-question-circle"></i>Help Center</a>
+            @if (User.IsInRole(AltoBank.Data.SeedData.AdminRole))
+            {
+                @* Staff who also bank here: jump back to the admin console. *@
+                <div class="sidebar-label">Staff</div>
+                <a class="side-link side-link--admin" asp-area="Admin" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-speedometer2"></i>Admin console</a>
+            }
 
             <div class="mt-auto pt-4">
                 <div class="sidebar-promo mb-3">

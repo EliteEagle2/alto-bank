@@ -1041,6 +1041,51 @@ namespace AltoBank.Migrations
                     b.ToTable("Transactions");
                 });
 
+            modelBuilder.Entity("AltoBank.Models.UserPreferences", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("DefaultAccountId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("DiscoverableByPhone")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("HideBalances")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("LargeDebitAlert")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("LowBalanceAlert")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("MutedAlerts")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("Paperless")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PreferredName")
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Theme")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("UserPreferences");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
                 {
                     b.Property<string>("Id")
@@ -1356,6 +1401,17 @@ namespace AltoBank.Migrations
                         .IsRequired();
 
                     b.Navigation("Account");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.UserPreferences", b =>
+                {
+                    b.HasOne("AltoBank.Models.ApplicationUser", "User")
+                        .WithOne()
+                        .HasForeignKey("AltoBank.Models.UserPreferences", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

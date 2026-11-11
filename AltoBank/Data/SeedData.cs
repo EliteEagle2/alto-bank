@@ -21,6 +21,9 @@ public static class SeedData
 {
     public const string AdminRole = "Admin";
     public const string CustomerRole = "Customer";
+    /// <summary>The OWNER (founder): every admin permission plus managing staff. Exactly one, set in configuration
+    /// (Bank:OwnerEmail, e.g. Bank__OwnerEmail in .env). Not configured = the seeded admin is the owner.</summary>
+    public const string OwnerRole = "Owner";
     public const string DemoEmail = "demo@altobank.com";
     public const string DemoPassword = "Demo123!";
     public const string AdminEmail = "admin@altobank.com";
@@ -71,6 +74,17 @@ public static class SeedData
                 new("6630412257", AccountType.Checking, "Everyday Checking", 900m, 48, CardDesign: CardDesigns.Aurora),
                 new("6630418834", AccountType.Savings, "Summit Savings", 1500m, 19),
             }),
+        // The admin (staff) also banks here: their own accounts, used through the normal customer site.
+        // Admin tools refuse to act on these (AdminService.ExecuteAsync blocks self-service changes).
+        new(AdminEmail, "Alex", "J", "Morgan", new DateOnly(1985, 7, 22), "(814) 555-0108",
+            "88 Logan Blvd", null, "Altoona", "PA", "16602",
+            "Alto Bank", "Operations Manager", "$100,000 – $199,999",
+            Paycheck: 2650m, Rent: 1400m, RandomSeed: 44,
+            Accounts: new SeedAccount[]
+            {
+                new("7740315520", AccountType.Checking, "Personal Checking", 1800m, 60, CardDesign: CardDesigns.Onyx),
+                new("7740318841", AccountType.Savings, "Rainy Day Fund", 3000m, 45, GoalName: "Six months of expenses", GoalAmount: 15000m),
+            }),
     };
 
     // ---------- Entry point ----------
@@ -87,9 +101,10 @@ public static class SeedData
         // once the background scheduler writes while people use the site. It's stored in the database file.
         await db.Database.ExecuteSqlRawAsync("PRAGMA journal_mode = WAL;");
 
-        await EnsureAdminAsync(userManager, roleManager);
         if (!await roleManager.RoleExistsAsync(CustomerRole))
             await roleManager.CreateAsync(new IdentityRole(CustomerRole));
+        await EnsureAdminAsync(userManager, roleManager);
+        await EnsureOwnerAsync(userManager, roleManager, services.GetRequiredService<IConfiguration>());
 
         foreach (var customer in Customers)
             await EnsureCustomerAsync(db, userManager, customer);
@@ -105,6 +120,22 @@ public static class SeedData
         await EnsureReviewDemoDataAsync(db, userManager);
         await EnsurePaymentsDemoDataAsync(services, db, userManager);
         await EnsureBillPayDemoDataAsync(services, db, userManager);
+        await EnsurePreferencesDemoDataAsync(db, userManager);
+    }
+
+    /// <summary>PROFILE SETTINGS demo data (once): Jordan has balance alerts and a default account, Maya goes by "May"
+    /// with the violet theme and budget alerts muted. Samuel keeps the defaults.</summary>
+    private static async Task EnsurePreferencesDemoDataAsync(ApplicationDbContext db, UserManager<ApplicationUser> userManager)
+    {
+        if (await db.UserPreferences.AnyAsync()) return;
+        var jordan = await userManager.FindByEmailAsync(DemoEmail);
+        var maya = await userManager.FindByEmailAsync("maya@altobank.com");
+        if (jordan == null || maya == null) return;
+        var jChk = await db.Accounts.Where(a => a.AccountNumber == "4410274821").Select(a => (int?)a.Id).FirstOrDefaultAsync();
+        db.UserPreferences.AddRange(
+            new UserPreferences { UserId = jordan.Id, DefaultAccountId = jChk, LowBalanceAlert = 250m, LargeDebitAlert = 2500m },
+            new UserPreferences { UserId = maya.Id, PreferredName = "May", Theme = "violet", MutedAlerts = nameof(AlertCategory.Budgets) });
+        await db.SaveChangesAsync();
     }
 
     /// <summary>
@@ -305,12 +336,64 @@ public static class SeedData
         }
         if (!await userManager.IsInRoleAsync(admin, AdminRole))
             await userManager.AddToRoleAsync(admin, AdminRole);
+        // Staff can bank here too: the admin is ALSO a customer (own accounts on the customer site).
+        if (!await userManager.IsInRoleAsync(admin, CustomerRole))
+            await userManager.AddToRoleAsync(admin, CustomerRole);
+    }
+
+    /// <summary>
+    /// The OWNER comes from configuration, never from the website, so no admin can make themselves owner:
+    ///   Bank:OwnerEmail     who the owner is (default: the seeded admin, admin@altobank.com)
+    ///   Bank:OwnerPassword  only used to CREATE that login if it doesn't exist yet (min. 8 chars, upper, lower, digit)
+    ///   Bank:OwnerFirstName / Bank:OwnerLastName  (optional, for a newly created owner)
+    /// Runs at every startup: the configured person gets Owner + Admin, and anyone else holding Owner loses it
+    /// (they stay an Admin), so changing the setting and restarting hands ownership over.
+    /// </summary>
+    private static async Task EnsureOwnerAsync(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager, IConfiguration config)
+    {
+        if (!await roleManager.RoleExistsAsync(OwnerRole))
+            await roleManager.CreateAsync(new IdentityRole(OwnerRole));
+
+        var email = config["Bank:OwnerEmail"]?.Trim();
+        if (string.IsNullOrEmpty(email)) email = AdminEmail;
+
+        var owner = await userManager.FindByEmailAsync(email);
+        if (owner == null)
+        {
+            var password = config["Bank:OwnerPassword"];
+            if (string.IsNullOrEmpty(password))
+            {
+                Console.WriteLine($"  Owner: {email} has no login yet and Bank:OwnerPassword isn't set, so the seeded admin stays owner.");
+                owner = await userManager.FindByEmailAsync(AdminEmail);
+                if (owner == null) return;
+            }
+            else
+            {
+                owner = new ApplicationUser
+                {
+                    UserName = email, Email = email, EmailConfirmed = true, CreatedAt = DateTime.UtcNow,
+                    FirstName = config["Bank:OwnerFirstName"] ?? "Bank", LastName = config["Bank:OwnerLastName"] ?? "Owner"
+                };
+                var created = await userManager.CreateAsync(owner, password);
+                if (!created.Succeeded)
+                    throw new InvalidOperationException("Could not create the owner from Bank:OwnerEmail/OwnerPassword: " +
+                                                        string.Join(" ", created.Errors.Select(e => e.Description)));
+            }
+        }
+
+        foreach (var role in new[] { AdminRole, OwnerRole })
+            if (!await userManager.IsInRoleAsync(owner, role))
+                await userManager.AddToRoleAsync(owner, role);
+        foreach (var other in await userManager.GetUsersInRoleAsync(OwnerRole))
+            if (other.Id != owner.Id)
+                await userManager.RemoveFromRoleAsync(other, OwnerRole);
     }
 
     private static async Task EnsureCustomerAsync(ApplicationDbContext db, UserManager<ApplicationUser> userManager, SeedCustomer c)
     {
         var user = await userManager.FindByEmailAsync(c.Email);
-        var isNew = user == null;
+        // "New" = no accounts yet: a brand-new seed user, or the admin the first time they become a customer.
+        var isNew = user == null || !await db.Accounts.AnyAsync(a => a.UserId == user.Id);
         if (user == null)
         {
             user = new ApplicationUser { UserName = c.Email, Email = c.Email, EmailConfirmed = true };

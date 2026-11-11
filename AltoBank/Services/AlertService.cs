@@ -49,6 +49,11 @@ public class AlertService : IAlertService
             Link = link != null && link.StartsWith('/') && !link.StartsWith("//") ? Trim(link, 200) : null,   // only ever a local path
             CreatedAt = DateTime.UtcNow
         };
+        // Profile → Alerts: a MUTED category still goes to the Alerts history, but arrives already read, so it
+        // doesn't light up the bell. Security alerts (freezes, failed payments, reversals) can't be muted.
+        var prefs = _db.UserPreferences.Local.FirstOrDefault(p => p.UserId == userId)
+                    ?? _db.UserPreferences.AsNoTracking().FirstOrDefault(p => p.UserId == userId);
+        if (prefs?.IsMuted(type) == true) alert.ReadAt = alert.CreatedAt;
         _db.Alerts.Add(alert);
         return alert;
     }

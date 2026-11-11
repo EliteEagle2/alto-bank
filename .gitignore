@@ -23,3 +23,6 @@ test-logs/
 
 # Uploaded check images / dispute attachments (stored outside wwwroot)
 AltoBank/App_Data/
+
+# Local secrets (owner account etc.); see AltoBank/.env.example
+.env

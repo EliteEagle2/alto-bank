@@ -8,6 +8,11 @@ using AltoBank.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
+// Local secrets/settings from a git-ignored .env file (e.g. the OWNER account: Bank__OwnerEmail / Bank__OwnerPassword).
+// Loaded first so the configuration below sees them as environment variables. Looks next to the project, then the repo root.
+var dotEnv = AltoBank.Configuration.DotEnv.Load(Directory.GetCurrentDirectory(), Path.Combine(Directory.GetCurrentDirectory(), ".."));
+if (dotEnv != null) Console.WriteLine($"Loaded settings from {dotEnv}");   // the path only, never the values
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Use US formatting everywhere so money always shows as $1,234.56.
@@ -69,6 +74,7 @@ builder.Services.AddScoped<ICardService, CardService>();     // virtual debit ca
 builder.Services.AddScoped<IAuditLogger, AuditLogger>();     // writes AuditLog rows
 builder.Services.AddScoped<IAdminService, AdminService>();   // everything the admin portal does
 builder.Services.AddScoped<IAlertService, AlertService>();   // the customer Alerts center (bell icon)
+builder.Services.AddScoped<IPreferencesService, PreferencesService>();   // Profile settings (display, privacy, alert amounts)
 builder.Services.AddScoped<IPaymentRequestService, PaymentRequestService>();   // Send & Request: requests (no money moves)
 builder.Services.AddScoped<IBillPayService, BillPayService>();   // Bill Pay: payees + schedules (no money moves)
 

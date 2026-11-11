@@ -18,6 +18,16 @@
         search.focus();
     });
 
+    // Staff page: show the name fields only when creating a new staff login.
+    const create = document.getElementById("modeCreate");
+    if (create) {
+        document.querySelectorAll("[data-staff-mode]").forEach(r => r.addEventListener("change", () => {
+            document.querySelector("[data-create-only]").hidden = !create.checked;
+            document.getElementById("staffFirst").required = create.checked;
+            document.getElementById("staffLast").required = create.checked;
+        }));
+    }
+
     // Overview work queue: filter chips (All / Applications / Frozen / ...).
     const queue = document.querySelector('[data-queue]');
     if (queue) {

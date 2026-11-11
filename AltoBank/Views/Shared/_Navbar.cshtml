@@ -29,6 +29,10 @@
                 {
                     var me = await UserManager.GetUserAsync(User);
                     <a class="btn btn-alto-ghost @(controller == "Dashboard" ? "active" : "")" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-grid-1x2 me-1"></i>Dashboard</a>
+                    @if (User.IsInRole(AltoBank.Data.SeedData.AdminRole))
+                    {
+                        <a class="btn btn-alto-ghost text-accent-admin" asp-area="Admin" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-speedometer2 me-1"></i>Admin console</a>
+                    }
                     <div class="dropdown">
                         <button class="btn btn-alto-ghost dropdown-toggle w-100" data-bs-toggle="dropdown" aria-expanded="false">
                             <span class="avatar-sm me-1">@(me?.FirstName.FirstOrDefault())</span>@me?.FirstName

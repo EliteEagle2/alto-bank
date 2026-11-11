@@ -235,3 +235,7 @@ a.cs-item:hover { color: #b49cff; }
 /* JSON diff cells in the audit log */
 .audit-json { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .74rem; color: var(--muted); max-width: 320px; white-space: pre-wrap; word-break: break-word; }
 
+
+/* Staff page */
+.status-owner { color: #ffd66b; border-color: rgba(255, 214, 107, 0.45); background: rgba(255, 214, 107, 0.08); }
+.status-staff { color: #b49cff; border-color: rgba(124, 77, 255, 0.45); background: var(--admin-accent-soft); }

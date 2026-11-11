@@ -33,8 +33,8 @@ echo "Jordan checking=$JCHK vacation=$JVAC; Maya checking=$MCHK; Sam checking=$S
 echo "== Access"
 check "anon /payments -> login" "$(curl -s -o /dev/null -w '%{redirect_url}' $B/payments | grep -c /Auth/Login)" 1
 check "anon API -> 401" "$(code $B/api/payments/requests)" 401
-check "admin -> customer API 403" "$(code -b $A $B/api/payments/requests)" 403
-check "admin -> /payments denied" "$(curl -s -o /dev/null -w '%{redirect_url}' -b $A $B/payments | grep -ci accessdenied)" 1
+check "admin (also a customer) -> own requests API 200" "$(code -b $A $B/api/payments/requests)" 200
+check "admin (also a customer) -> /payments 200" "$(code -b $A $B/payments)" 200
 P=$(curl -s -b $C $B/payments)
 has "sidebar link: Send & Request" "$P" 'href="/payments"'
 has "page: Send / Request / Inbox / Activity tabs" "$(echo "$P" | grep -oE 'data-bs-target="#(send|request|inbox|activity)"' | sort -u | wc -l | tr -d ' ')" 4
@@ -49,7 +49,7 @@ has "by phone (+1 digits) -> Samuel O." "$(curl -s -b $C "$B/api/payments/recipi
 has "email is case-insensitive" "$(curl -s -b $C "$B/api/payments/recipient?q=MAYA@AltoBank.com")" 'Maya C.'
 check "yourself -> 400" "$(code -b $C "$B/api/payments/recipient?q=demo@altobank.com")" 400
 check "unknown -> 404" "$(code -b $C "$B/api/payments/recipient?q=nobody@example.com")" 404
-check "an admin is not a recipient -> 404" "$(code -b $C "$B/api/payments/recipient?q=admin@altobank.com")" 404
+check "staff who bank here can receive money -> 200" "$(code -b $C "$B/api/payments/recipient?q=admin@altobank.com")" 200
 hasnt "preview never leaks a full last name" "$(curl -s -b $C "$B/api/payments/recipient?q=maya@altobank.com")" 'Chen'
 
 echo "== Send (two steps)"

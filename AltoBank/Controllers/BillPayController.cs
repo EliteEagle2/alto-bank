@@ -27,9 +27,11 @@ public class BillPayController : Controller
     private readonly IBankService _bank;
     private readonly IBillPayService _bills;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IPreferencesService _prefs;
 
-    public BillPayController(IBankService bank, IBillPayService bills, UserManager<ApplicationUser> userManager)
+    public BillPayController(IBankService bank, IBillPayService bills, UserManager<ApplicationUser> userManager, IPreferencesService prefs)
     {
+        _prefs = prefs;
         _bank = bank;
         _bills = bills;
         _userManager = userManager;
@@ -48,7 +50,7 @@ public class BillPayController : Controller
         {
             Payees = await _bills.GetPayeesAsync(UserId),
             FromAccounts = accounts.Select(a => new SelectListItem($"{a.DisplayName} ••{a.Last4} — {a.Balance:C}", a.Id.ToString())).ToList(),
-            Pay = new SchedulePaymentInput { PayeeId = payee, FromAccountId = accounts.FirstOrDefault(a => a.AccountType == AccountType.Checking)?.Id ?? 0, Date = today },
+            Pay = new SchedulePaymentInput { PayeeId = payee, FromAccountId = await DefaultFromAsync(accounts), Date = today },
             UpcomingBills = (await _bills.GetUpcomingAsync(UserId, today, today.AddDays(30))).Where(u => u.Item.Kind == ScheduleKind.BillPay).Take(8).ToList(),
             ActiveSchedulesByPayee = schedules.Where(s => s.Status == ScheduleStatus.Active && s.PayeeId != null)
                 .GroupBy(s => s.PayeeId!.Value).ToDictionary(g => g.Key, g => g.Count())
@@ -92,6 +94,14 @@ public class BillPayController : Controller
         if (await _bills.GetPayeeAsync(UserId, id) == null) return NotFound();
         var result = await _bills.RemovePayeeAsync(UserId, id);
         return Flash(result.Success, result.Message, "#payees");
+    }
+
+    // The customer's default account (Profile → Preferences) if it can pay, else their first checking.
+    private async Task<int> DefaultFromAsync(List<Account> active)
+    {
+        var preferred = await _prefs.DefaultAccountIdAsync(UserId);
+        return active.FirstOrDefault(a => a.Id == preferred)?.Id
+               ?? active.FirstOrDefault(a => a.AccountType == AccountType.Checking)?.Id ?? 0;
     }
 
     // TempData + Post/Redirect/Get.

@@ -33,7 +33,9 @@ public partial class BankService
             if (digits.Length != 10) return RecipientLookup.Fail("Enter a 10-digit mobile number or an email address.");
             // Phone numbers are stored formatted ("(215) 555-0187"), so compare the digits in memory (few customers).
             var withPhones = await _db.Users.AsNoTracking().Where(u => u.PhoneNumber != null).ToListAsync();
-            var matches = withPhones.Where(u => PhoneDigits(u.PhoneNumber!) == digits).ToList();
+            // Profile → Preferences: people who turned off "find me by phone" only match by email.
+            var hidden = await _db.UserPreferences.Where(p => !p.DiscoverableByPhone).Select(p => p.UserId).ToListAsync();
+            var matches = withPhones.Where(u => PhoneDigits(u.PhoneNumber!) == digits && !hidden.Contains(u.Id)).ToList();
             // Phone numbers aren't unique. Never guess: if two people share one, ask for an email instead.
             if (matches.Count > 1) return RecipientLookup.Fail("More than one person uses that number. Please use their email address instead.");
             user = matches.FirstOrDefault();

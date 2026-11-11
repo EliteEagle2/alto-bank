@@ -1,0 +1,114 @@
+@model StaffPageViewModel
+@* STAFF (/admin/staff): everyone with admin access. Only the owner sees the add/remove controls; the owner
+   comes from configuration (Bank:OwnerEmail), so it's shown here but can't be changed from the website. *@
+@{
+    var temp = ViewBag.TempPassword as string;
+}
+
+@section PageActions {
+    <span class="admin-env"><i class="bi bi-person-badge"></i>@Model.Staff.Count with admin access</span>
+}
+
+@if (temp != null)
+{
+    @* Shown ONCE: the value lives only in TempData for this single page view. *@
+    <div class="admin-card mb-3" style="border-color: rgba(255,181,71,.5)">
+        <div class="fw-semibold mb-2"><i class="bi bi-key me-1 text-warning"></i>Temporary password (shown only once)</div>
+        <span class="temp-password" data-temp-password>@temp</span>
+        <p class="small text-muted-alto mt-2 mb-0">Give this to the new admin securely. They must change it when they first log in.</p>
+    </div>
+}
+
+<div class="row g-3">
+    <div class="@(Model.CanManage ? "col-xl-8" : "col-12")">
+        <div class="admin-card p-0">
+            <div class="admin-card-head px-3 pt-3"><h2>People with admin access</h2></div>
+            <div class="table-responsive">
+                <table class="table admin-table mb-0">
+                    <thead><tr><th>Name</th><th>Email</th><th>Access</th><th class="d-none d-md-table-cell">Since</th>@if (Model.CanManage) { <th class="text-end">Actions</th> }</tr></thead>
+                    <tbody>
+                        @foreach (var s in Model.Staff)
+                        {
+                            <tr>
+                                <td class="fw-semibold">@s.Name</td>
+                                <td>@s.Email</td>
+                                <td>
+                                    @if (s.IsOwner) { <span class="status-pill status-owner"><i class="bi bi-gem"></i>Owner</span> }
+                                    else { <span class="status-pill status-staff"><i class="bi bi-shield-check"></i>Admin</span> }
+                                    @if (s.IsCustomer) { <span class="status-pill ms-1" title="Also banks here (own accounts)">Customer</span> }
+                                    @if (s.IsLocked) { <partial name="_StatusPill" model='"Locked"' /> }
+                                    @if (s.MustChangePassword) { <span class="small text-muted-alto ms-1">temp password</span> }
+                                </td>
+                                <td class="d-none d-md-table-cell text-nowrap">@(s.CreatedAt is DateTime c ? BankTime.ToLocal(c).ToString("MMM d, yyyy") : "—")</td>
+                                @if (Model.CanManage)
+                                {
+                                    <td class="text-end">
+                                        @if (s.IsOwner)
+                                        {
+                                            <span class="small text-muted-alto">set in configuration</span>
+                                        }
+                                        else
+                                        {
+                                            <button type="button" class="btn btn-admin-danger btn-sm" data-bs-toggle="modal" data-bs-target="#revoke-@s.UserId">Remove admin</button>
+                                        }
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="admin-card mt-3">
+            <div class="admin-card-head"><h2><i class="bi bi-diagram-3 me-1 text-accent-admin"></i>Access levels</h2></div>
+            <dl class="kv mb-0">
+                <dt>Customer</dt><dd>Online banking for their own accounts. Staff can be customers too, but admin tools never work on their own accounts.</dd>
+                <dt>Admin</dt><dd>The admin console: customers, accounts, transactions, applications, payments, settings, audit log. Every action needs a reason and is audited.</dd>
+                <dt>Owner</dt><dd>Everything an admin can do, plus adding and removing admins. There is exactly one owner, set on the server with <code>Bank__OwnerEmail</code> (for example in the <code>.env</code> file), so no one can make themselves owner from the website.</dd>
+            </dl>
+        </div>
+    </div>
+
+    @if (Model.CanManage)
+    {
+        <div class="col-xl-4">
+            <form class="admin-card" method="post" asp-action="Add" id="addStaff">
+                <div class="admin-card-head"><h2><i class="bi bi-person-plus me-1 text-accent-admin"></i>Add an admin</h2></div>
+                <div class="mb-3" role="radiogroup" aria-label="How to add">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="Add.Mode" id="modePromote" value="@AddStaffInput.Promote" checked data-staff-mode />
+                        <label class="form-check-label" for="modePromote">Give an existing user admin access</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="Add.Mode" id="modeCreate" value="@AddStaffInput.Create" data-staff-mode />
+                        <label class="form-check-label" for="modeCreate">Create a new staff login</label>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="staffEmail">Email</label>
+                    <input class="form-control" id="staffEmail" name="Add.Email" type="email" required maxlength="256" placeholder="e.g. maya@altobank.com" />
+                </div>
+                <div class="row g-2 mb-3" data-create-only hidden>
+                    <div class="col-6"><label class="form-label" for="staffFirst">First name</label><input class="form-control" id="staffFirst" name="Add.FirstName" maxlength="50" /></div>
+                    <div class="col-6"><label class="form-label" for="staffLast">Last name</label><input class="form-control" id="staffLast" name="Add.LastName" maxlength="50" /></div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="staffReason">Reason *</label>
+                    <textarea class="form-control" id="staffReason" name="Add.Reason" rows="2" required minlength="5" maxlength="500" placeholder="e.g. New operations hire"></textarea>
+                    <div class="form-text">Saved in the audit log.</div>
+                </div>
+                <button type="submit" class="btn btn-admin w-100"><i class="bi bi-shield-plus me-1"></i>Add admin</button>
+            </form>
+        </div>
+
+        foreach (var s in Model.Staff.Where(s => !s.IsOwner))
+        {
+            <partial name="_ConfirmModal" model='new ConfirmModalViewModel($"revoke-{s.UserId}", $"Remove admin access: {s.Name}",
+                $"{s.Name} ({s.Email}) will no longer be able to open the admin console, starting with their next page load. " +
+                (s.IsCustomer ? "Their own bank accounts and login are unaffected." : "Their login is kept (nothing is deleted)."),
+                Url.Action("Revoke", new { id = s.UserId })!, "Remove admin access", "danger",
+                new[] { new ConfirmField("reason", "Reason", "textarea", Required: true) })' />
+        }
+    }
+</div>

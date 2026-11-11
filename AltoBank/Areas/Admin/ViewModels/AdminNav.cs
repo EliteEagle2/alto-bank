@@ -29,6 +29,7 @@ public static class AdminNav
         }),
         new("System", new[]
         {
+            new AdminNavLink("Staff", "bi-person-badge", "Staff"),
             new AdminNavLink("Settings", "bi-sliders", "Settings"),
             new AdminNavLink("AuditLog", "bi-journal-text", "Audit Log"),
         }),

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Security.Cryptography;
 using AltoBank.Areas.Admin.ViewModels;
 using AltoBank.Data;
@@ -788,7 +789,7 @@ public partial class AdminService : IAdminService
                        "BankSetting", BankSetting.SingletonId.ToString(),
                        after: new { accounts = summary.AccountsCredited, total = summary.TotalPaid, apy = settings.SavingsApy }, reason: reason);
             return Ok($"Monthly interest posted: {summary.AccountsCredited} accounts credited, {summary.TotalPaid:C} paid in total.");
-        });
+        }, bankWide: true);   // every savings account, staff ones included
         return (result, result.Success ? summary : null);
     }
 
@@ -829,16 +830,30 @@ public partial class AdminService : IAdminService
     /// Runs one admin change: checks the reason, opens a DB transaction, runs the work,
     /// saves + commits on success (including the AuditLog row the work added), otherwise rolls back.
     /// </summary>
-    private async Task<AdminResult> ExecuteAsync(string? reason, bool reasonRequired, Func<Task<AdminResult>> work)
+    private async Task<AdminResult> ExecuteAsync(string? reason, bool reasonRequired, Func<Task<AdminResult>> work, bool bankWide = false)
     {
         if (reasonRequired && (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < MinReasonLength))
             return Fail($"A reason of at least {MinReasonLength} characters is required for this action.");
         if (reason?.Length > 500) return Fail("Reason can be at most 500 characters.");
 
+        // SEPARATION OF DUTIES: staff can bank here too, but an admin may not use admin tools on their OWN
+        // profile or accounts (freeze, adjust, reverse, approve their own application...). Every record the work
+        // changes (including saves made part-way through, e.g. by UserManager) is collected and checked before
+        // commit. Bank-wide jobs (monthly interest for every savings account) are exempt.
+        var touched = new TouchedOwners();
+        void Capture(object? sender, SavingChangesEventArgs e) => touched.Collect(_db.ChangeTracker);
+        if (!bankWide) _db.SavingChanges += Capture;
+
         await using var tx = await _db.Database.BeginTransactionAsync();
         try
         {
             var result = await work();
+            if (result.Success && !bankWide)
+            {
+                touched.Collect(_db.ChangeTracker);   // changes not saved yet
+                if (await TouchesOwnRecordsAsync(touched))
+                    result = Fail("You can't use admin tools on your own profile or accounts. Ask another admin to do this.");
+            }
             if (result.Success)
             {
                 await _db.SaveChangesAsync();
@@ -863,6 +878,47 @@ public partial class AdminService : IAdminService
             _db.ChangeTracker.Clear();
             throw;
         }
+        finally
+        {
+            if (!bankWide) _db.SavingChanges -= Capture;
+        }
+    }
+
+    /// <summary>Whose records an admin action changed: customer user ids and account ids.</summary>
+    private sealed class TouchedOwners
+    {
+        public HashSet<string> UserIds { get; } = new();
+        public HashSet<int> AccountIds { get; } = new();
+
+        // Who OWNS a changed row: ApplicationUser.Id, Account.Id, and any *UserId / *AccountId column
+        // (UserId, CustomerUserId, FromAccountId, CounterpartyAccountId...). Columns that name the ACTOR
+        // (the admin writing a note, the audit row's author) aren't ownership, so they're skipped.
+        public void Collect(Microsoft.EntityFrameworkCore.ChangeTracking.ChangeTracker tracker)
+        {
+            foreach (var e in tracker.Entries().Where(x => x.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
+            {
+                if (e.Entity is AuditLog) continue;
+                if (e.Entity is ApplicationUser u) UserIds.Add(u.Id);
+                if (e.Entity is Account a && a.Id > 0) AccountIds.Add(a.Id);
+                foreach (var p in e.Properties)
+                {
+                    var name = p.Metadata.Name;
+                    if (name is "AuthorUserId" or "ActorUserId") continue;
+                    if (name.EndsWith("UserId") && p.CurrentValue is string uid) UserIds.Add(uid);
+                    else if (name.EndsWith("AccountId") && p.CurrentValue is int aid) AccountIds.Add(aid);
+                }
+            }
+        }
+    }
+
+    private async Task<bool> TouchesOwnRecordsAsync(TouchedOwners touched)
+    {
+        var me = _http.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (me == null) return false;
+        if (touched.UserIds.Contains(me)) return true;
+        if (touched.AccountIds.Count == 0) return false;
+        var ids = touched.AccountIds.ToList();
+        return await _db.Accounts.AsNoTracking().AnyAsync(a => ids.Contains(a.Id) && a.UserId == me);
     }
 
     // Load (tracked) → change → audit with before/after. Used by the simple account status/settings actions.

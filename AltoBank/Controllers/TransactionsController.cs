@@ -17,12 +17,14 @@ public class TransactionsController : Controller
     private readonly IBankService _bank;
     private readonly UserManager<ApplicationUser> _userManager;
 
-    public TransactionsController(IBankService bank, UserManager<ApplicationUser> userManager)
+    public TransactionsController(IBankService bank, UserManager<ApplicationUser> userManager, IPreferencesService prefs)
     {
+        _prefs = prefs;
         _bank = bank;
         _userManager = userManager;
     }
 
+    private readonly IPreferencesService _prefs;
     private string UserId => _userManager.GetUserId(User)!;
 
     // ---------- Deposit ----------
@@ -84,7 +86,8 @@ public class TransactionsController : Controller
     [HttpGet]
     public async Task<IActionResult> Transfer(int? fromAccountId)
     {
-        var model = new TransferViewModel { FromAccountId = fromAccountId ?? 0 };
+        // Pre-select: the account the link came from, else the customer's default account (Profile → Preferences).
+        var model = new TransferViewModel { FromAccountId = fromAccountId ?? await _prefs.DefaultAccountIdAsync(UserId) ?? 0 };
         model.AccountOptions = await BuildOptionsAsync();
         return View(model);
     }

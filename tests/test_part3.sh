@@ -19,7 +19,7 @@ check "own account details 200" "$(code -b $C $B/accounts/$CHK)" 200
 check "someone else's account -> 404 (IDOR)" "$(code -b $C $B/accounts/$MAYA)" 404
 check "non-existent account -> 404" "$(code -b $C $B/accounts/999999)" 404
 check "anonymous -> login" "$(code $B/accounts/$CHK)" 302
-check "admin can't use customer page (role)" "$(curl -s -o /dev/null -w '%{redirect_url}' -b $A $B/accounts/$CHK | grep -ci accessdenied)" 1
+check "admin (also a customer) can't open JORDAN's account page -> 404" "$(code -b $A $B/accounts/$CHK)" 404
 has "header: _AccountHeader with masked number" "$D" '\*\*\*\*  4821'
 has "header: current + available balance" "$D" 'Available balance'
 has "tabs: Activity / Account Info / Direct Deposit / Card" "$(echo "$D" | grep -oE 'data-bs-target="#(activity|info|direct-deposit|card)"' | sort -u | wc -l | tr -d ' ')" 4

@@ -100,7 +100,13 @@ public class AuditLogger : IAuditLogger
         if (user?.Identity?.IsAuthenticated != true)
             return new AuditActor(null, null, _http.HttpContext == null ? "System" : "Anonymous");
 
-        var role = user.IsInRole(SeedData.AdminRole) ? "Admin" : user.IsInRole(SeedData.CustomerRole) ? "Customer" : "User";
+        // Staff can also bank here, so the role is what they're doing NOW: admin pages/APIs → "Admin";
+        // their own banking on the customer site → "Customer".
+        var path = _http.HttpContext!.Request.Path;
+        var inAdmin = path.StartsWithSegments("/admin", StringComparison.OrdinalIgnoreCase)
+                      || path.StartsWithSegments("/api/admin", StringComparison.OrdinalIgnoreCase);
+        var role = user.IsInRole(SeedData.AdminRole) && (inAdmin || !user.IsInRole(SeedData.CustomerRole)) ? "Admin"
+                 : user.IsInRole(SeedData.CustomerRole) ? "Customer" : "User";
         return new AuditActor(user.FindFirstValue(ClaimTypes.NameIdentifier), user.Identity.Name, role);
     }
 }

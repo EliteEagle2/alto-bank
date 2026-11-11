@@ -14,9 +14,11 @@ public class DashboardController : Controller
 {
     private readonly IBankService _bank;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IPreferencesService _prefs;
 
-    public DashboardController(IBankService bank, UserManager<ApplicationUser> userManager)
+    public DashboardController(IBankService bank, UserManager<ApplicationUser> userManager, IPreferencesService prefs)
     {
+        _prefs = prefs;
         _bank = bank;
         _userManager = userManager;
     }
@@ -38,10 +40,11 @@ public class DashboardController : Controller
             .Take(8)
             .ToList();
 
-        var hour = DateTime.Now.Hour;
+        var hour = BankTime.ToLocal(DateTime.UtcNow).Hour;   // bank time, not the server clock
+        var prefs = await _prefs.GetAsync(user.Id);
         return View(new DashboardViewModel
         {
-            FirstName = user.FirstName,
+            FirstName = prefs.PreferredName ?? user.FirstName,   // Profile → preferred name
             Greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening",
             Accounts = accounts,
             TotalBalance = accounts.Sum(a => a.Balance), // summed in memory (SQLite can't SUM decimals)

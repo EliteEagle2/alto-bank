@@ -610,7 +610,29 @@ public partial class BankService : IBankService
             Date = DateTime.UtcNow
         };
         _db.Transactions.Add(t);
+        if (!Transaction.IsCreditType(type)) AddBalanceAlerts(account, amount);
         return t;
+    }
+
+    /// <summary>
+    /// Profile → Alerts amounts, checked on every debit the customer makes:
+    ///   • Large purchase: one debit of at least LargeDebitAlert.
+    ///   • Low balance: the debit takes the balance from at/above LowBalanceAlert to below it (only when it
+    ///     CROSSES the line, so a customer who stays low isn't alerted on every purchase).
+    /// The alerts are added to the same transaction as the money movement, so a rolled-back payment never alerts.
+    /// </summary>
+    private void AddBalanceAlerts(Account account, decimal amount)
+    {
+        var prefs = _db.UserPreferences.AsNoTracking().FirstOrDefault(p => p.UserId == account.UserId);
+        if (prefs == null) return;
+        var label = $"{account.DisplayName} ••{account.Last4}";
+        if (prefs.LargeDebitAlert is decimal large && amount >= large)
+            _alerts.Add(account.UserId, AlertType.LargeDebit, "Large purchase",
+                $"{amount:C} left {label}. You asked to be told about anything {large:C} or more.", $"/accounts/{account.Id}");
+        var before = account.Balance + amount;
+        if (prefs.LowBalanceAlert is decimal low && before >= low && account.Balance < low)
+            _alerts.Add(account.UserId, AlertType.LowBalance, "Low balance",
+                $"{label} is down to {account.Balance:C}, below your {low:C} alert.", $"/accounts/{account.Id}");
     }
 
     // Point the two legs of a transfer at each other (needs their Ids, so call after SaveChanges).

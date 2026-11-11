@@ -29,7 +29,7 @@ echo "today=$TODAY ($DOW); Jordan checking=$JCHK savings=$JSAV; Maya checking=$M
 
 echo "== Access + seeded demo"
 check "anon /bills -> login" "$(curl -s -o /dev/null -w '%{redirect_url}' $B/bills | grep -c /Auth/Login)" 1
-check "admin -> /bills denied" "$(curl -s -o /dev/null -w '%{redirect_url}' -b $A $B/bills | grep -ci accessdenied)" 1
+check "admin (also a customer) -> /bills 200" "$(code -b $A $B/bills)" 200
 BP=$(curl -s -b $C $B/bills)
 has "sidebar: Bill Pay" "$BP" 'href="/bills"'
 has "sidebar: Upcoming" "$BP" 'href="/scheduled"'

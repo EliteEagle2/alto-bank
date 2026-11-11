@@ -18,6 +18,8 @@
 
     <div class="ms-auto d-flex align-items-center gap-2">
         <span class="secure-pill d-none d-md-inline-flex"><i class="bi bi-shield-lock-fill"></i>Secure session</span>
+        @* Privacy mode: blur balances on this screen (the default comes from Profile → Preferences). *@
+        <button type="button" class="btn btn-alto-ghost btn-icon" data-privacy-toggle aria-pressed="false" title="Hide balances" aria-label="Hide balances"><i class="bi bi-eye"></i></button>
         <a class="btn btn-alto-ghost btn-icon bell-btn" asp-controller="Alerts" asp-action="Index"
            aria-label="@(unread == 0 ? "Alerts, none unread" : $"Alerts, {unread} unread")" title="Alerts">
             <i class="bi @(unread > 0 ? "bi-bell-fill" : "bi-bell")"></i>
@@ -30,7 +32,7 @@
         <div class="dropdown">
             <button class="btn btn-alto-ghost user-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu">
                 <span class="avatar-sm">@(me?.FirstName.FirstOrDefault())</span>
-                <span class="d-none d-md-inline ms-1">@me?.FirstName</span>
+                <span class="d-none d-md-inline ms-1">@(ViewData["PreferredName"] as string ?? me?.FirstName)</span>
             </button>
             <ul class="dropdown-menu dropdown-menu-end alto-dropdown">
                 <li class="px-3 py-2">
@@ -38,6 +40,11 @@
                     <div class="small text-muted-alto">@me?.Email</div>
                 </li>
                 <li><hr class="dropdown-divider" /></li>
+                @if (User.IsInRole(AltoBank.Data.SeedData.AdminRole))
+                {
+                    <li><a class="dropdown-item text-accent-admin" asp-area="Admin" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-speedometer2 me-2"></i>Admin console</a></li>
+                    <li><hr class="dropdown-divider" /></li>
+                }
                 <li><a class="dropdown-item" asp-controller="Profile" asp-action="Index"><i class="bi bi-person me-2"></i>Profile</a></li>
                 <li><a class="dropdown-item" asp-controller="Support" asp-action="Security"><i class="bi bi-shield-check me-2"></i>Security</a></li>
                 <li><a class="dropdown-item" asp-controller="Home" asp-action="Index"><i class="bi bi-house me-2"></i>Alto home page</a></li>

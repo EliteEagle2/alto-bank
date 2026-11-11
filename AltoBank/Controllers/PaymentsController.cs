@@ -30,9 +30,11 @@ public class PaymentsController : Controller
     private readonly IBankService _bank;
     private readonly IPaymentRequestService _requests;
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IPreferencesService _prefs;
 
-    public PaymentsController(IBankService bank, IPaymentRequestService requests, UserManager<ApplicationUser> userManager)
+    public PaymentsController(IBankService bank, IPaymentRequestService requests, UserManager<ApplicationUser> userManager, IPreferencesService prefs)
     {
+        _prefs = prefs;
         _bank = bank;
         _requests = requests;
         _userManager = userManager;
@@ -111,7 +113,8 @@ public class PaymentsController : Controller
     {
         var accounts = await _bank.GetAccountsAsync(UserId);
         var canSend = accounts.Where(a => a.Status == AccountStatus.Active).ToList();
-        var first = canSend.FirstOrDefault(a => a.AccountType == AccountType.Checking) ?? canSend.FirstOrDefault();
+        var preferred = await _prefs.DefaultAccountIdAsync(UserId);   // Profile → Preferences
+        var first = canSend.FirstOrDefault(a => a.Id == preferred) ?? canSend.FirstOrDefault(a => a.AccountType == AccountType.Checking) ?? canSend.FirstOrDefault();
         var settings = await _bank.GetSettingsAsync();
         return new PaymentsPageViewModel
         {

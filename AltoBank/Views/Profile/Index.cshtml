@@ -1,97 +1,256 @@
-@model ProfileViewModel
+@model ProfilePageViewModel
+@* PROFILE & SETTINGS (/profile). One page, one section per topic, each with its own form that saves just that
+   section and comes back to it (#anchor). Section nav: a sticky list on desktop, scrolling chips on phones. *@
 @{
-    ViewData["Title"] = "Profile";
+    var p = Model.Personal;
+    var prefs = Model.Prefs;
+    var muted = prefs.Muted;
+    var sections = new[]
+    {
+        ("personal", "bi-person", "Personal info"),
+        ("security", "bi-shield-lock", "Security"),
+        ("alerts", "bi-bell", "Alerts"),
+        ("preferences", "bi-sliders", "Preferences"),
+        ("applications", "bi-file-earmark-text", "Applications"),
+    };
+    var themes = new[]
+    {
+        ("aurora", "Aurora", "linear-gradient(135deg,#00E5FF,#7C4DFF)"),
+        ("violet", "Violet", "linear-gradient(135deg,#B49CFF,#7C4DFF)"),
+        ("emerald", "Emerald", "linear-gradient(135deg,#2EF2B0,#00A8A0)"),
+        ("sunset", "Sunset", "linear-gradient(135deg,#FFB547,#FF4D9A)"),
+    };
+    var displayName = prefs.PreferredName ?? p.FirstName;
 }
 
-<div class="container py-5">
-    <div class="glass form-card">
-        <div class="d-flex align-items-center gap-3 mb-4">
-            <span class="avatar-sm" style="width:56px;height:56px;font-size:1.4rem">@(Model.FirstName.FirstOrDefault())</span>
-            <div>
-                <h2 class="mb-0">@Model.FirstName @Model.LastName</h2>
-                <div class="text-muted-alto">@Model.Email</div>
-            </div>
+<div class="container-fluid py-4 settings-page">
+    @* ----- Header: who you are + profile strength ----- *@
+    <section class="glass settings-hero mb-4">
+        <span class="settings-avatar" aria-hidden="true">@(displayName.FirstOrDefault())</span>
+        <div class="min-w-0 flex-grow-1">
+            <h2 class="mb-0 text-truncate">@p.FirstName @p.LastName</h2>
+            <div class="text-muted-alto small text-truncate">@p.Email@(Model.MemberSince is DateTime since ? $" · member since {BankTime.ToLocal(since):MMMM yyyy}" : "")</div>
         </div>
-
-        <form asp-action="Index" method="post">
-            <div asp-validation-summary="ModelOnly" class="mb-3"></div>
-
-            <div class="row g-3 mb-3">
-                <div class="col-sm-6">
-                    <label asp-for="FirstName" class="form-label"></label>
-                    <input asp-for="FirstName" class="form-control" />
-                    <span asp-validation-for="FirstName" class="field-validation-error"></span>
-                </div>
-                <div class="col-sm-6">
-                    <label asp-for="LastName" class="form-label"></label>
-                    <input asp-for="LastName" class="form-control" />
-                    <span asp-validation-for="LastName" class="field-validation-error"></span>
-                </div>
+        <div class="settings-strength" title="@(Model.Missing.Any() ? "Add " + string.Join(", ", Model.Missing) : "All set")">
+            <div class="d-flex justify-content-between small mb-1"><span>Profile strength</span><strong>@Model.CompletionPercent%</strong></div>
+            <div class="progress alto-progress" role="progressbar" aria-valuenow="@Model.CompletionPercent" aria-valuemin="0" aria-valuemax="100" aria-label="Profile strength">
+                <div class="progress-bar" style="width: @Model.CompletionPercent%"></div>
             </div>
-            <div class="mb-4">
-                <label asp-for="Email" class="form-label"></label>
-                <input asp-for="Email" class="form-control" />
-                <div class="form-text text-muted-alto">Your email is also your login.</div>
-                <span asp-validation-for="Email" class="field-validation-error"></span>
-            </div>
-            <button type="submit" class="btn btn-alto">Save changes</button>
-        </form>
-    </div>
-
-    @* ----- Past account applications ----- *@
-    <div class="form-card px-0 mt-5" id="applications">
-        <div class="d-flex justify-content-between align-items-end mb-3">
-            <h2 class="h4 mb-0">Applications</h2>
-            <a class="btn btn-alto-ghost btn-sm" asp-controller="Accounts" asp-action="Apply"><i class="bi bi-plus-lg me-1"></i>New application</a>
+            @if (Model.Missing.Any()) { <div class="small text-muted-alto mt-1 text-truncate">Add @string.Join(", ", Model.Missing)</div> }
         </div>
-        <div class="glass overflow-hidden">
-            @if (!Model.Applications.Any())
+    </section>
+
+    <div class="settings-layout">
+        <nav class="settings-nav" aria-label="Settings sections">
+            @foreach (var (id, icon, label) in sections)
             {
-                <partial name="_EmptyState" model='new EmptyStateViewModel("bi-file-earmark-text", "No applications yet.", "Open an account", "Accounts", "Apply")' />
+                <a href="#@id"><i class="bi @icon" aria-hidden="true"></i>@label</a>
             }
-            else
-            {
-                <div class="table-responsive">
-                    <table class="table alto-table table-hover">
-                        <thead>
-                            <tr><th>Submitted</th><th>Account</th><th class="d-none d-sm-table-cell">Opening deposit</th><th>Status</th></tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var app in Model.Applications)
+        </nav>
+
+        <div class="settings-body">
+            @* ===================== PERSONAL ===================== *@
+            <section class="glass settings-section" id="personal" aria-labelledby="personalTitle">
+                <h3 id="personalTitle"><i class="bi bi-person text-gradient me-2"></i>Personal info</h3>
+                <p class="text-muted-alto small">Your name, how we greet you, and how to reach you.</p>
+                <form asp-action="Index" method="post" novalidate>
+                    <div asp-validation-summary="ModelOnly" class="mb-3"></div>
+                    <div class="row g-3">
+                        <div class="col-sm-6"><label asp-for="Personal.FirstName" class="form-label"></label><input asp-for="Personal.FirstName" class="form-control" /><span asp-validation-for="Personal.FirstName" class="field-validation-error"></span></div>
+                        <div class="col-sm-6"><label asp-for="Personal.LastName" class="form-label"></label><input asp-for="Personal.LastName" class="form-control" /><span asp-validation-for="Personal.LastName" class="field-validation-error"></span></div>
+                        <div class="col-sm-6">
+                            <label asp-for="Personal.PreferredName" class="form-label"></label>
+                            <input asp-for="Personal.PreferredName" class="form-control" placeholder="@p.FirstName" maxlength="30" />
+                            <div class="form-text">Used in greetings, e.g. "Good morning, @displayName".</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label" for="dob">Date of birth</label>
+                            <input id="dob" class="form-control" value="@(Model.DateOfBirth?.ToString("MMMM d, yyyy") ?? "Not on file")" disabled />
+                            <div class="form-text">To correct this, contact support.</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <label asp-for="Personal.Email" class="form-label"></label>
+                            <input asp-for="Personal.Email" class="form-control" />
+                            <div class="form-text">Your email is also your login.</div>
+                            <span asp-validation-for="Personal.Email" class="field-validation-error"></span>
+                        </div>
+                        <div class="col-sm-6">
+                            <label asp-for="Personal.Phone" class="form-label"></label>
+                            <input asp-for="Personal.Phone" class="form-control" type="tel" inputmode="tel" placeholder="(814) 555-0123" />
+                            <span asp-validation-for="Personal.Phone" class="field-validation-error"></span>
+                        </div>
+                        <div class="col-sm-8"><label asp-for="Personal.Street" class="form-label"></label><input asp-for="Personal.Street" class="form-control" autocomplete="address-line1" /></div>
+                        <div class="col-sm-4"><label asp-for="Personal.Apt" class="form-label"></label><input asp-for="Personal.Apt" class="form-control" autocomplete="address-line2" /></div>
+                        <div class="col-sm-5"><label asp-for="Personal.City" class="form-label"></label><input asp-for="Personal.City" class="form-control" autocomplete="address-level2" /></div>
+                        <div class="col-7 col-sm-4">
+                            <label asp-for="Personal.State" class="form-label"></label>
+                            <select asp-for="Personal.State" asp-items="Model.States" class="form-select"><option value="">Choose…</option></select>
+                            <span asp-validation-for="Personal.State" class="field-validation-error"></span>
+                        </div>
+                        <div class="col-5 col-sm-3"><label asp-for="Personal.Zip" class="form-label"></label><input asp-for="Personal.Zip" class="form-control" inputmode="numeric" maxlength="5" /><span asp-validation-for="Personal.Zip" class="field-validation-error"></span></div>
+                    </div>
+                    <button type="submit" class="btn btn-alto mt-4">Save personal info</button>
+                </form>
+            </section>
+
+            @* ===================== SECURITY ===================== *@
+            <section class="glass settings-section" id="security" aria-labelledby="securityTitle">
+                <h3 id="securityTitle"><i class="bi bi-shield-lock text-gradient me-2"></i>Security</h3>
+                <div class="row g-4">
+                    <div class="col-lg-7">
+                        <h4 class="h6">Change password</h4>
+                        <form asp-action="Password" method="post" class="row g-2">
+                            <div class="col-12"><label class="form-label small" for="curPw">Current password</label><input id="curPw" name="CurrentPassword" type="password" class="form-control" autocomplete="current-password" required /></div>
+                            <div class="col-sm-6"><label class="form-label small" for="newPw">New password</label><input id="newPw" name="NewPassword" type="password" class="form-control" autocomplete="new-password" minlength="8" required /></div>
+                            <div class="col-sm-6"><label class="form-label small" for="newPw2">Confirm new password</label><input id="newPw2" name="ConfirmPassword" type="password" class="form-control" autocomplete="new-password" minlength="8" required /></div>
+                            <div class="col-12 form-text">At least 8 characters with an upper-case letter, a lower-case letter and a number.</div>
+                            <div class="col-12"><button type="submit" class="btn btn-alto-outline">Change password</button></div>
+                        </form>
+                    </div>
+                    <div class="col-lg-5">
+                        <h4 class="h6">Recent sign-ins</h4>
+                        @if (!Model.RecentSignIns.Any()) { <p class="small text-muted-alto">No sign-ins recorded yet.</p> }
+                        <ul class="pay-list glass mb-3">
+                            @foreach (var s in Model.RecentSignIns)
                             {
-                                <tr>
-                                    <td class="text-muted-alto text-nowrap">@BankTime.ToLocal(app.SubmittedAt).ToString("MMM d, yyyy")</td>
-                                    <td>
-                                        @(app.AccountType == AccountType.Checking ? "Alto Checking" : "Summit Savings")
-                                        @if (app.Account != null)
-                                        {
-                                            <a class="small d-block" asp-controller="Accounts" asp-action="Details" asp-route-id="@app.Account.Id">@app.Account.DisplayName ••@app.Account.Last4</a>
-                                        }
-                                    </td>
-                                    <td class="d-none d-sm-table-cell"><money amount="@app.OpeningDeposit" /></td>
-                                    <td>
-                                        @{
-                                            var (css, icon) = app.Status switch
-                                            {
-                                                ApplicationStatus.Approved => ("credit", "bi-check-circle"),
-                                                ApplicationStatus.Pending => ("pending", "bi-hourglass-split"),
-                                                _ => ("debit", "bi-x-circle")
-                                            };
-                                        }
-                                        <a class="type-badge @css text-decoration-none" asp-controller="Accounts" asp-action="Decision" asp-route-id="@app.Id">
-                                            <i class="bi @icon me-1"></i>@(app.Status == ApplicationStatus.Pending ? "In review" : app.Status.ToString())
-                                        </a>
-                                        @if (app.Status == ApplicationStatus.Denied && !string.IsNullOrWhiteSpace(app.DenialReason))
-                                        {
-                                            <div class="small text-muted-alto mt-1">Reason: @app.DenialReason</div>
-                                        }
-                                    </td>
-                                </tr>
+                                <li><span>@BankTime.ToLocal(s.At).ToString("MMM d, h:mm tt")<span class="small text-muted-alto d-block">@s.Method@(s.IpAddress != null ? " · " + s.IpAddress : "")</span></span><i class="bi bi-box-arrow-in-right text-muted-alto"></i></li>
                             }
-                        </tbody>
-                    </table>
+                        </ul>
+                        <form asp-action="SignOutOthers" method="post">
+                            <button type="submit" class="btn btn-alto-ghost btn-sm"><i class="bi bi-door-closed me-1"></i>Sign out of all other sessions</button>
+                            <div class="form-text">Don't recognize a sign-in? Do this, then change your password.</div>
+                        </form>
+                    </div>
                 </div>
-            }
+            </section>
+
+            @* ===================== ALERTS ===================== *@
+            <section class="glass settings-section" id="alerts" aria-labelledby="alertsTitle">
+                <h3 id="alertsTitle"><i class="bi bi-bell text-gradient me-2"></i>Alerts</h3>
+                <p class="text-muted-alto small">Choose what lights up the bell. Turned-off alerts are still kept on your <a asp-controller="Alerts" asp-action="Index">Alerts page</a>, just already marked read.</p>
+                <form asp-action="Alerts" method="post">
+                    <div class="alert-toggles">
+                        @foreach (var c in Enum.GetValues<AlertCategory>())
+                        {
+                            var (label, help) = UserPreferences.Describe(c);
+                            var locked = c == AlertCategory.Security;
+                            <div class="form-check form-switch alert-toggle">
+                                <input class="form-check-input" type="checkbox" role="switch" id="al-@c" name="Enabled" value="@c"
+                                       checked="@(locked || !muted.Contains(c))" disabled="@locked" />
+                                <label class="form-check-label" for="al-@c"><span class="fw-semibold d-block">@label@(locked ? " " : "")@if (locked) { <i class="bi bi-lock-fill small text-muted-alto" aria-label="always on"></i> }</span><span class="small text-muted-alto">@help</span></label>
+                            </div>
+                        }
+                    </div>
+                    <div class="row g-3 mt-1">
+                        <div class="col-sm-6">
+                            <label class="form-label" for="lowBal">Alert me when a balance drops below</label>
+                            <div class="input-group"><span class="input-group-text">$</span><input id="lowBal" name="LowBalanceAlert" class="form-control" type="number" min="0.01" max="100000" step="0.01" placeholder="Off" value="@prefs.LowBalanceAlert?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)" /></div>
+                            <div class="form-text">Checked on every account. Leave blank to turn off.</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label" for="largeDebit">Alert me about any purchase or payment of</label>
+                            <div class="input-group"><span class="input-group-text">$</span><input id="largeDebit" name="LargeDebitAlert" class="form-control" type="number" min="0.01" max="100000" step="0.01" placeholder="Off" value="@prefs.LargeDebitAlert?.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)" /><span class="input-group-text">or more</span></div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-alto mt-4">Save alert settings</button>
+                </form>
+            </section>
+
+            @* ===================== PREFERENCES ===================== *@
+            <section class="glass settings-section" id="preferences" aria-labelledby="prefsTitle">
+                <h3 id="prefsTitle"><i class="bi bi-sliders text-gradient me-2"></i>Preferences</h3>
+                <form asp-action="Preferences" method="post">
+                    <h4 class="h6 mt-3">Look &amp; feel</h4>
+                    <div class="theme-swatches mb-3" role="radiogroup" aria-label="Accent theme">
+                        @foreach (var (key, name, swatch) in themes)
+                        {
+                            <div class="theme-swatch">
+                                <input type="radio" name="Theme" id="theme-@key" value="@key" checked="@(prefs.Theme == key)" />
+                                <label for="theme-@key"><span class="sw" style="background:@swatch"></span>@name</label>
+                            </div>
+                        }
+                    </div>
+                    <div class="form-check form-switch mb-4">
+                        <input class="form-check-input" type="checkbox" role="switch" id="hideBal" name="HideBalances" value="true" checked="@prefs.HideBalances" />
+                        <label class="form-check-label" for="hideBal"><span class="fw-semibold d-block">Privacy mode</span><span class="small text-muted-alto">Blur balances and amounts until you tap or hover them. The <i class="bi bi-eye"></i> button in the top bar switches it for the current visit.</span></label>
+                    </div>
+
+                    <h4 class="h6">Payments</h4>
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-7">
+                            <label class="form-label" for="defAcct">Default "from" account</label>
+                            <select id="defAcct" name="DefaultAccountId" asp-items="Model.AccountOptions" class="form-select"><option value="">Choose automatically (first checking)</option></select>
+                            <div class="form-text">Pre-selected on Transfer, Send &amp; Request and Bill Pay.</div>
+                        </div>
+                    </div>
+                    <div class="form-check form-switch mb-4">
+                        <input class="form-check-input" type="checkbox" role="switch" id="byPhone" name="DiscoverableByPhone" value="true" checked="@prefs.DiscoverableByPhone" />
+                        <label class="form-check-label" for="byPhone"><span class="fw-semibold d-block">Let people find me by mobile number</span><span class="small text-muted-alto">When off, people can only send you money or requests using your email address.</span></label>
+                    </div>
+
+                    <h4 class="h6">Statements</h4>
+                    <div class="form-check form-switch mb-1">
+                        <input class="form-check-input" type="checkbox" role="switch" id="paperless" name="Paperless" value="true" checked="@prefs.Paperless" />
+                        <label class="form-check-label" for="paperless"><span class="fw-semibold d-block">Paperless statements</span><span class="small text-muted-alto">Get statements online only. They're on each account's page under Statements.</span></label>
+                    </div>
+                    <button type="submit" class="btn btn-alto mt-4">Save preferences</button>
+                </form>
+            </section>
+
+            @* ===================== APPLICATIONS ===================== *@
+            <section class="settings-section settings-section--plain" id="applications" aria-labelledby="appsTitle">
+                <div class="d-flex justify-content-between align-items-end mb-3">
+                    <h3 class="mb-0" id="appsTitle"><i class="bi bi-file-earmark-text text-gradient me-2"></i>Applications</h3>
+                    <a class="btn btn-alto-ghost btn-sm" asp-controller="Accounts" asp-action="Apply"><i class="bi bi-plus-lg me-1"></i>New application</a>
+                </div>
+                <div class="glass overflow-hidden">
+                    @if (!p.Applications.Any())
+                    {
+                        <partial name="_EmptyState" model='new EmptyStateViewModel("bi-file-earmark-text", "No applications yet.", "Open an account", "Accounts", "Apply")' />
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table alto-table table-hover mb-0">
+                                <thead><tr><th>Submitted</th><th>Account</th><th class="d-none d-sm-table-cell">Opening deposit</th><th>Status</th></tr></thead>
+                                <tbody>
+                                    @foreach (var app in p.Applications)
+                                    {
+                                        <tr>
+                                            <td class="text-muted-alto text-nowrap">@BankTime.ToLocal(app.SubmittedAt).ToString("MMM d, yyyy")</td>
+                                            <td>
+                                                @(app.AccountType == AccountType.Checking ? "Alto Checking" : "Summit Savings")
+                                                @if (app.Account != null)
+                                                {
+                                                    <a class="small d-block" asp-controller="Accounts" asp-action="Details" asp-route-id="@app.Account.Id">@app.Account.DisplayName ••@app.Account.Last4</a>
+                                                }
+                                            </td>
+                                            <td class="d-none d-sm-table-cell"><money amount="@app.OpeningDeposit" /></td>
+                                            <td>
+                                                @{
+                                                    var (css, icon) = app.Status switch
+                                                    {
+                                                        ApplicationStatus.Approved => ("credit", "bi-check-circle"),
+                                                        ApplicationStatus.Pending => ("pending", "bi-hourglass-split"),
+                                                        _ => ("debit", "bi-x-circle")
+                                                    };
+                                                }
+                                                <a class="type-badge @css text-decoration-none" asp-controller="Accounts" asp-action="Decision" asp-route-id="@app.Id">
+                                                    <i class="bi @icon me-1"></i>@(app.Status == ApplicationStatus.Pending ? "In review" : app.Status.ToString())
+                                                </a>
+                                                @if (app.Status == ApplicationStatus.Denied && !string.IsNullOrWhiteSpace(app.DenialReason))
+                                                {
+                                                    <div class="small text-muted-alto mt-1">Reason: @app.DenialReason</div>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </section>
         </div>
     </div>
 </div>

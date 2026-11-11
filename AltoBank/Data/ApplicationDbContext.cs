@@ -22,6 +22,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<MoneyRequest> MoneyRequests => Set<MoneyRequest>();
     public DbSet<Alert> Alerts => Set<Alert>();
+    public DbSet<UserPreferences> UserPreferences => Set<UserPreferences>();
     public DbSet<Payee> Payees => Set<Payee>();
     public DbSet<ScheduledPayment> ScheduledPayments => Set<ScheduledPayment>();
     public DbSet<ScheduledRun> ScheduledRuns => Set<ScheduledRun>();
@@ -156,6 +157,12 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         });
 
         builder.Entity<SchedulerRunLog>().HasIndex(x => x.StartedAt);
+
+        // Profile settings: one optional row per user (shares the user's key). Users are never deleted, so no cascade.
+        builder.Entity<UserPreferences>(p =>
+        {
+            p.HasOne(x => x.User).WithOne().HasForeignKey<UserPreferences>(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
 
         // Exactly one settings row, created by the migration with the default values.
         builder.Entity<BankSetting>().HasData(new BankSetting

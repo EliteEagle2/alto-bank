@@ -15,7 +15,7 @@ B=${B:?set B to the TEST server url (never the real app on 5264)}
 export B
 HERE="$(cd "$(dirname "$0")" && pwd)"
 LOGS="$HERE/../test-logs"; mkdir -p "$LOGS"
-ALL="part1 apply race part2 review2 part3 review3 p2p billpay"
+ALL="part1 apply race part2 review2 part3 review3 p2p billpay staff profile"
 SUITES="${*:-$ALL}"
 TOTAL_PASS=0; TOTAL_FAIL=0
 for s in $SUITES; do
