@@ -1401,3 +1401,25 @@ h1 span.text-gradient, h2 span.text-gradient, h3 span.text-gradient { color: inh
     .app-topbar .topbar-heading { display: none; }
     .app-topbar .ms-auto { margin-left: auto; gap: .4rem !important; }
 }
+
+/* Text over the contour lines gets a soft night-colored halo (like the card's shadow), so the lines never cut
+   through letters; see-through buttons get a solid fill so the lines don't show through them. */
+.hero h1, .hero p, .hero .stat-value, .hero .stat-label, .hero .eyebrow-pill,
+.page-hero h1, .page-hero p, .page-hero .eyebrow, .page-hero .tagline,
+.balance-hero p, .balance-hero .total-balance,
+.cta-band h2, .cta-band h3, .cta-band p {
+    text-shadow: 0 1px 2px rgba(16, 24, 38, 0.9), 0 0 14px rgba(16, 24, 38, 0.95), 0 0 32px rgba(16, 24, 38, 0.85);
+}
+.hero .btn-alto-ghost, .page-hero .btn-alto-ghost, .cta-band .btn-alto-ghost, .hero .eyebrow-pill { background-color: var(--surface-2); }
+/* ...on EVERY page with contour lines: the halo is inherited by all text inside these areas */
+.hero, .page-hero, .balance-hero, .cta-band {
+    text-shadow: 0 1px 2px rgba(16, 24, 38, 0.9), 0 0 14px rgba(16, 24, 38, 0.95), 0 0 32px rgba(16, 24, 38, 0.85);
+}
+.hero .btn, .page-hero .btn, .cta-band .btn, .hero .alto-card, .page-hero .alto-card,
+.hero .form-control, .page-hero .form-control, .page-hero .form-select { text-shadow: none; }
+.page-hero .form-control, .page-hero .input-group-text { background-color: #0E1522; }
+/* Stronger halo (requested): a tight dark shadow under each letter plus a wide night-colored glow */
+.hero, .page-hero, .balance-hero, .cta-band,
+.hero h1, .hero p, .page-hero h1, .page-hero p, .balance-hero p, .balance-hero .total-balance, .cta-band h2, .cta-band p {
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.75), 0 0 10px rgba(16, 24, 38, 1), 0 0 22px rgba(16, 24, 38, 1), 0 0 44px rgba(16, 24, 38, 0.95);
+}
