@@ -239,3 +239,14 @@ a.cs-item:hover { color: #b49cff; }
 /* Staff page */
 .status-owner { color: #ffd66b; border-color: rgba(255, 214, 107, 0.45); background: rgba(255, 214, 107, 0.08); }
 .status-staff { color: #b49cff; border-color: rgba(124, 77, 255, 0.45); background: var(--admin-accent-soft); }
+
+/* Narrower desktops: keep every nav link on one row (group dividers stay; the small group labels hide) */
+@media (min-width: 992px) and (max-width: 1599.98px) {
+    .cn-label, .cn-group:first-child .cn-label { display: none; }
+    .cn-group { padding: 0 .35rem; }
+    .admin-link { padding: .62rem .5rem; gap: .4rem; font-size: .84rem; }
+}
+@media (min-width: 992px) and (max-width: 1199.98px) { .admin-link i { display: none; } }
+
+/* Chart range picker: room for the arrow */
+#statsDays { min-width: 7.5rem; }
