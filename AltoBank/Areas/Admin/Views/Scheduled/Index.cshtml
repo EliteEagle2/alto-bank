@@ -1,0 +1,149 @@
+@model ScheduledAdminViewModel
+@* /admin/scheduled — all scheduled bill payments and transfers, failed runs, and the background scheduler's status. *@
+@{
+    var q = Model.Query;
+    string Local(DateTime? utc, string fmt = "MMM d, yyyy h:mm:ss tt") => utc == null ? "never" : BankTime.ToLocal(utc.Value).ToString(fmt);
+    var lastRunTone = Model.LastRunAt == null || DateTime.UtcNow - Model.LastRunAt.Value > TimeSpan.FromMinutes(5) ? "warn" : "good";
+    var tiles = new[]
+    {
+        new KpiTileViewModel("schedActive", "Active schedules", "bi-calendar-week", Model.ActiveCount.ToString("N0")),
+        new KpiTileViewModel("schedDue", "Due now", "bi-alarm", Model.DueToday.ToString("N0"), "runs within a minute", Model.DueToday > 0 ? "warn" : null),
+        new KpiTileViewModel("schedFailed", "Failed (7 days)", "bi-exclamation-triangle", Model.FailedLast7Days.ToString("N0"), Tone: Model.FailedLast7Days > 0 ? "danger" : null),
+        new KpiTileViewModel("schedLastRun", "Scheduler last ran", "bi-cpu", Local(Model.LastRunAt, "h:mm:ss tt"), Model.LastRunAt == null ? "not yet" : Local(Model.LastRunAt, "MMM d"), lastRunTone),
+    };
+    var runNow = new ConfirmModalViewModel("runSchedulerModal", "Run scheduler now",
+        "Pays every scheduled bill and transfer that is due today (or overdue), expires money requests older than 14 days, and records the run. Each payment is its own transaction and can only happen once per date, so running it again never pays twice.",
+        Url.Action("RunNow")!, "Run now", "primary");
+    string Who(ApplicationUser? u) => u == null ? "—" : $"{u.FirstName} {u.LastName}";
+}
+
+<div class="row g-3 mb-3">
+    @foreach (var tile in tiles)
+    {
+        <div class="col-6 col-xl-3"><partial name="_KpiTile" model="tile" /></div>
+    }
+</div>
+
+<div class="admin-card mb-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
+    <div>
+        <div class="fw-semibold"><i class="bi bi-cpu me-1"></i>Background scheduler</div>
+        <div class="small text-muted-alto" data-last-run>
+            Last run: <strong>@Local(Model.LastRunAt)</strong>@(Model.LastRunSummary == null ? "" : " · " + Model.LastRunSummary)
+        </div>
+        <div class="small text-muted-alto">Runs every minute in the background (a .NET BackgroundService). Times are bank time (@BankTime.Zone.Id).</div>
+    </div>
+    <button class="btn btn-admin" data-bs-toggle="modal" data-bs-target="#runSchedulerModal"><i class="bi bi-play-fill me-1"></i>Run scheduler now…</button>
+</div>
+
+<ul class="nav admin-tabs mb-3">
+    <li class="nav-item"><a class="nav-link @(q.Failures ? "" : "active")" asp-action="Index">Scheduled items</a></li>
+    <li class="nav-item"><a class="nav-link @(q.Failures ? "active" : "")" asp-action="Index" asp-route-failures="true">Failures</a></li>
+</ul>
+
+<form method="get" class="filter-bar" role="search">
+    @if (q.Failures) { <input type="hidden" name="failures" value="true" /> }
+    else
+    {
+        <div>
+            <label for="status">Status</label>
+            <select id="status" name="status" class="form-select">
+                <option value="">All</option>
+                @foreach (var s in Enum.GetValues<ScheduleStatus>()) { <option value="@s" selected="@(q.Status == s)">@s</option> }
+            </select>
+        </div>
+    }
+    <div>
+        <label for="kind">Kind</label>
+        <select id="kind" name="kind" class="form-select">
+            <option value="">All</option>
+            <option value="BillPay" selected="@(q.Kind == ScheduleKind.BillPay)">Bill payments</option>
+            <option value="Transfer" selected="@(q.Kind == ScheduleKind.Transfer)">Transfers</option>
+        </select>
+    </div>
+    <div><label for="customer">Customer</label><input id="customer" name="customer" class="form-control" value="@q.Customer" placeholder="name or email" /></div>
+    <button type="submit" class="btn btn-admin"><i class="bi bi-funnel"></i> Filter</button>
+    <a class="btn btn-admin-ghost" asp-action="Index" asp-route-failures="@(q.Failures ? "true" : null)">Reset</a>
+</form>
+
+<div class="admin-card p-0 mb-3">
+    <div class="table-responsive">
+        @if (q.Failures)
+        {
+            <table class="table admin-table mb-0">
+                <thead><tr><th>When</th><th>Customer</th><th>What</th><th>Due date</th><th>Reason</th><th class="text-end">Amount</th></tr></thead>
+                <tbody>
+                    @if (!Model.FailedRuns.Items.Any()) { <tr><td colspan="6" class="text-center text-muted-alto py-4">No failed runs. 🎉</td></tr> }
+                    @foreach (var r in Model.FailedRuns.Items)
+                    {
+                        var s = r.ScheduledPayment!;
+                        <tr>
+                            <td class="text-nowrap">@Local(r.ProcessedAt, "MMM d, h:mm tt")</td>
+                            <td><a asp-controller="Customers" asp-action="Details" asp-route-id="@s.UserId">@Who(s.User)</a></td>
+                            <td>@(s.Kind == ScheduleKind.BillPay ? "Bill" : "Transfer") → @s.Target <span class="small text-muted-alto">(#@s.Id, from ••@s.FromAccount?.Last4)</span></td>
+                            <td class="text-nowrap">@r.RunDate.ToString("MMM d, yyyy")</td>
+                            <td class="text-danger-alto">@r.FailureReason</td>
+                            <td class="text-end"><money amount="@r.Amount" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <partial name="_Pager" model="Model.FailedRuns.Pager" />
+        }
+        else
+        {
+            <table class="table admin-table table-hover mb-0">
+                <thead><tr><th>#</th><th>Customer</th><th>What</th><th>Schedule</th><th>Next</th><th>Last run</th><th>Status</th><th class="text-end">Amount</th></tr></thead>
+                <tbody>
+                    @if (!Model.Items.Items.Any()) { <tr><td colspan="8" class="text-center text-muted-alto py-4">No scheduled items match these filters.</td></tr> }
+                    @foreach (var s in Model.Items.Items)
+                    {
+                        <tr class="@(s.Status is ScheduleStatus.Cancelled ? "is-muted" : "")">
+                            <td>@s.Id</td>
+                            <td><a asp-controller="Customers" asp-action="Details" asp-route-id="@s.UserId">@Who(s.User)</a></td>
+                            <td>
+                                <i class="bi @(s.Kind == ScheduleKind.BillPay ? Payee.IconFor(s.Payee?.Category ?? PayeeCategory.Other) : "bi-arrow-left-right") me-1"></i>@s.Target
+                                <div class="small text-muted-alto">from <a asp-area="Admin" asp-controller="Accounts" asp-action="Details" asp-route-id="@s.FromAccountId">••@s.FromAccount?.Last4</a>@(s.Memo == null ? "" : " · " + s.Memo)</div>
+                            </td>
+                            <td class="text-nowrap">@s.ScheduleText@(s.EndDate is DateOnly end ? $" until {end:MMM d}" : "")</td>
+                            <td class="text-nowrap">@(s.NextRunDate?.ToString("MMM d, yyyy") ?? "—")@(s.SkipNext ? " (skip)" : "")</td>
+                            <td class="text-nowrap">
+                                @if (s.LastRunStatus is ScheduledRunStatus lrs)
+                                {
+                                    <partial name="_StatusPill" model="lrs.ToString()" />
+                                    @if (s.LastFailureReason != null) { <div class="small text-danger-alto">@s.LastFailureReason</div> }
+                                }
+                                else { <span class="text-muted-alto">—</span> }
+                            </td>
+                            <td><partial name="_StatusPill" model="s.Status.ToString()" /></td>
+                            <td class="text-end"><money amount="@s.Amount" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+            <partial name="_Pager" model="Model.Items.Pager" />
+        }
+    </div>
+</div>
+
+<div class="admin-card p-0">
+    <div class="admin-card-head px-3 pt-3"><h3 class="h6 mb-2">Recent scheduler runs that did something</h3></div>
+    <div class="table-responsive">
+        <table class="table admin-table mb-0">
+            <thead><tr><th>Started</th><th>Trigger</th><th class="text-end">Processed</th><th class="text-end">Paid</th><th class="text-end">Failed</th><th class="text-end">Skipped</th><th class="text-end">Requests expired</th></tr></thead>
+            <tbody>
+                @if (!Model.RecentRuns.Any()) { <tr><td colspan="7" class="text-center text-muted-alto py-3">No runs with activity yet.</td></tr> }
+                @foreach (var l in Model.RecentRuns)
+                {
+                    <tr>
+                        <td class="text-nowrap">@Local(l.StartedAt, "MMM d, h:mm:ss tt")</td>
+                        <td>@(l.Trigger == "admin" ? $"Admin ({l.TriggeredBy})" : "Timer")</td>
+                        <td class="text-end">@l.Processed</td><td class="text-end">@l.Succeeded</td><td class="text-end">@l.Failed</td>
+                        <td class="text-end">@l.Skipped</td><td class="text-end">@l.RequestsExpired</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<partial name="_ConfirmModal" model="runNow" />

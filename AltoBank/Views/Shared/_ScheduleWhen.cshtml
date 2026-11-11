@@ -1,0 +1,44 @@
+@model ScheduleWhenViewModel
+@* "When should this happen?" — shared by Pay a bill (/bills) and Schedule a transfer (/scheduled).
+   schedule-form.js shows only the fields for the chosen option; the server ignores the others. *@
+@{
+    var p = Model.Prefix;
+    var i = Model.Input;
+    var options = (Model.AllowNow ? new[] { ("now", "Now", "bi-lightning") } : Array.Empty<(string, string, string)>())
+        .Concat(new[] { ("once", "On a date", "bi-calendar-event"), ("weekly", "Weekly", "bi-arrow-repeat"), ("monthly", "Monthly", "bi-calendar3") });
+}
+<fieldset class="mb-3" data-when-group>
+    <legend class="form-label">When</legend>
+    <div class="seg-toggle seg-toggle--sm flex-wrap" role="radiogroup" aria-label="When">
+        @foreach (var (value, label, icon) in options)
+        {
+            <label><input type="radio" name="@(p).When" value="@value" checked="@(i.When == value)" data-when /> <span><i class="bi @icon me-1"></i>@label</span></label>
+        }
+    </div>
+</fieldset>
+<div class="row g-2 mb-3" data-when-fields>
+    <div class="col-sm-6" data-show="once weekly monthly">
+        <label class="form-label" for="@(p)_Date"><span data-label-once>Date</span><span data-label-repeat hidden>Starting</span></label>
+        <input id="@(p)_Date" name="@(p).Date" type="date" class="form-control" value="@i.Date?.ToString("yyyy-MM-dd")" min="@BankTime.Today.ToString("yyyy-MM-dd")" />
+    </div>
+    <div class="col-sm-6" data-show="weekly">
+        <label class="form-label" for="@(p)_DayOfWeek">Every</label>
+        <select id="@(p)_DayOfWeek" name="@(p).DayOfWeek" class="form-select">
+            @foreach (var d in new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday })
+            {
+                <option value="@d" selected="@(i.DayOfWeek == d)">@d</option>
+            }
+        </select>
+    </div>
+    <div class="col-sm-6" data-show="monthly">
+        <label class="form-label" for="@(p)_DayOfMonth">On day</label>
+        <select id="@(p)_DayOfMonth" name="@(p).DayOfMonth" class="form-select">
+            @for (int d = 1; d <= 28; d++) { <option value="@d" selected="@(i.DayOfMonth == d)">@ScheduledPayment.Ordinal(d)</option> }
+            <option value="31" selected="@(i.DayOfMonth >= 29)">Last day of the month</option>
+        </select>
+    </div>
+    <div class="col-sm-6" data-show="weekly monthly">
+        <label class="form-label" for="@(p)_EndDate">End date (optional)</label>
+        <input id="@(p)_EndDate" name="@(p).EndDate" type="date" class="form-control" value="@i.EndDate?.ToString("yyyy-MM-dd")" min="@BankTime.Today.ToString("yyyy-MM-dd")" />
+    </div>
+</div>

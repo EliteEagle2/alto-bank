@@ -104,6 +104,57 @@ public static class SeedData
         await EnsureDebitCardsAsync(db, services.GetRequiredService<AltoBank.Services.ICardService>());
         await EnsureReviewDemoDataAsync(db, userManager);
         await EnsurePaymentsDemoDataAsync(services, db, userManager);
+        await EnsureBillPayDemoDataAsync(services, db, userManager);
+    }
+
+    /// <summary>
+    /// BILL PAY demo data (added once, through the real services): payees for all three customers, monthly bills,
+    /// Jordan's "move $50 to savings every Friday", one bill that was paid today (Jordan) and one that FAILED for
+    /// insufficient funds (Samuel), so the alerts and the admin failures view have something to show.
+    /// </summary>
+    private static async Task EnsureBillPayDemoDataAsync(IServiceProvider services, ApplicationDbContext db, UserManager<ApplicationUser> userManager)
+    {
+        if (await db.Payees.AnyAsync()) return;
+        var jordan = await userManager.FindByEmailAsync(DemoEmail);
+        var maya = await userManager.FindByEmailAsync("maya@altobank.com");
+        var sam = await userManager.FindByEmailAsync("sam@altobank.com");
+        if (jordan == null || maya == null || sam == null) return;
+        async Task<int?> Acct(string number) => await db.Accounts.Where(a => a.AccountNumber == number && a.Status == AccountStatus.Active).Select(a => (int?)a.Id).FirstOrDefaultAsync();
+        var jChk = await Acct("4410274821"); var jSav = await Acct("4410279356");
+        var mBills = await Acct("5520836617"); var sChk = await Acct("6630412257");
+        if (jChk == null || jSav == null || mBills == null || sChk == null) return;
+
+        var bills = services.GetRequiredService<AltoBank.Services.IBillPayService>();
+        var bank = services.GetRequiredService<AltoBank.Services.IBankService>();
+        var today = AltoBank.Services.BankTime.Today;
+        async Task<int> Payee(ApplicationUser u, string name, PayeeCategory cat, string acct, string? nick = null) =>
+            (await bills.AddPayeeAsync(u.Id, new AltoBank.Services.PayeeData(name, cat, acct, nick))).Payee!.Id;
+        async Task<int?> Schedule(ApplicationUser u, ScheduleKind kind, int from, int? payee, int? to, decimal amount, string? memo,
+                                  ScheduleFrequency freq, DayOfWeek? dow = null, int? dom = null) =>
+            (await bills.CreateScheduleAsync(u.Id, new AltoBank.Services.ScheduleData(kind, from, payee, to, amount, memo, freq, today, dow, dom, null))).Item?.Id;
+
+        // Jordan
+        var water = await Payee(jordan, "Altoona Water Authority (demo)", PayeeCategory.Utilities, "AWA-20417", "Water");
+        var electric = await Payee(jordan, "Keystone Electric (demo)", PayeeCategory.Utilities, "KE-88120344", "Electric");
+        var phone = await Payee(jordan, "Summit Wireless (demo)", PayeeCategory.Phone, "SW-5521");
+        await Schedule(jordan, ScheduleKind.BillPay, jChk.Value, electric, null, 86.40m, null, ScheduleFrequency.Monthly, dom: 15);
+        await Schedule(jordan, ScheduleKind.BillPay, jChk.Value, water, null, 42.50m, null, ScheduleFrequency.Monthly, dom: 20);
+        await Schedule(jordan, ScheduleKind.Transfer, jChk.Value, null, jSav.Value, 50m, "Savings goal", ScheduleFrequency.Weekly, dow: DayOfWeek.Friday);
+        if (await Schedule(jordan, ScheduleKind.BillPay, jChk.Value, phone, null, 65.00m, "November bill", ScheduleFrequency.Once) is int paidToday)
+            await bank.ExecuteScheduledAsync(paidToday, today);                          // paid right away (Succeeded run + alert)
+
+        // Maya
+        var rent = await Payee(maya, "Liberty Property Mgmt (demo)", PayeeCategory.Rent, "LPM-1700-12", "Rent");
+        var mElectric = await Payee(maya, "Keystone Electric (demo)", PayeeCategory.Utilities, "KE-55310987");
+        await Schedule(maya, ScheduleKind.BillPay, mBills.Value, rent, null, 1650m, null, ScheduleFrequency.Monthly, dom: 1);
+        await Schedule(maya, ScheduleKind.BillPay, mBills.Value, mElectric, null, 74.10m, null, ScheduleFrequency.Monthly, dom: 12);
+
+        // Samuel
+        var insurance = await Payee(sam, "Keystone Mutual Insurance (demo)", PayeeCategory.Insurance, "KMI-77310", "Car insurance");
+        var sPhone = await Payee(sam, "Summit Wireless (demo)", PayeeCategory.Phone, "SW-9031");
+        await Schedule(sam, ScheduleKind.BillPay, sChk.Value, insurance, null, 128.00m, null, ScheduleFrequency.Monthly, dom: 24);
+        if (await Schedule(sam, ScheduleKind.BillPay, sChk.Value, sPhone, null, 4000.00m, "Phone upgrade", ScheduleFrequency.Once) is int tooBig)
+            await bank.ExecuteScheduledAsync(tooBig, today);                             // fails: insufficient funds (Failed run + alert)
     }
 
     /// <summary>

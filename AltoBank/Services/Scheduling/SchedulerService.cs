@@ -13,7 +13,7 @@ public record SchedulerRunSummary(string Trigger, DateTime StartedAt, DateTime F
 /// <summary>The work of one run. Scoped (it uses the DbContext), so the BackgroundService creates a scope per run.</summary>
 public interface ISchedulerRunner
 {
-    Task<SchedulerRunSummary> RunAsync(string trigger, CancellationToken cancellationToken = default);
+    Task<SchedulerRunSummary> RunAsync(string trigger, CancellationToken cancellationToken = default, string? triggeredBy = null);
 }
 
 /// <summary>
@@ -69,17 +69,3 @@ public class SchedulerService : BackgroundService
     }
 }
 
-/// <summary>One scheduler run. Feature 1: expire money requests older than 14 days (and alert the requester).</summary>
-public class SchedulerRunner : ISchedulerRunner
-{
-    private readonly IPaymentRequestService _requests;
-
-    public SchedulerRunner(IPaymentRequestService requests) => _requests = requests;
-
-    public async Task<SchedulerRunSummary> RunAsync(string trigger, CancellationToken cancellationToken = default)
-    {
-        var started = DateTime.UtcNow;
-        var expired = await _requests.ExpireDueAsync();
-        return new SchedulerRunSummary(trigger, started, DateTime.UtcNow, 0, 0, 0, 0, expired);
-    }
-}

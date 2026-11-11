@@ -103,8 +103,9 @@ apost "/admin/accounts/details/$SCHK" "/admin/accounts/unfreeze/$SCHK" --data-ur
 used() { curl -s -b $C $B/accounts/$JCHK | tr -s ' \n' ' ' | grep -oE '\(<span class="money[^>]*>\$[0-9.,]+</span> used today' | grep -oE '[0-9][0-9.,]*' | head -1 | tr -d ,; }
 U0=$(used); send $C $JCHK maya@altobank.com 1.00 'limit check' >/dev/null; U1=$(used)
 check "payments count toward the daily limit" "$U1" "$(add $U0 1)"
-apost "/admin/accounts/details/$JCHK" "/admin/accounts/updatesettings/$JCHK" --data-urlencode "nickname=Everyday Checking" -d dailyLimit=100 --data-urlencode "reason=Testing P2P limit" >/dev/null
-LEFT=$(awk -v u="$U1" 'BEGIN{printf "%.2f", 100-u}')
+LIM=$(awk -v u="$U1" 'BEGIN{printf "%.2f", u+100}')
+apost "/admin/accounts/details/$JCHK" "/admin/accounts/updatesettings/$JCHK" --data-urlencode "nickname=Everyday Checking" -d dailyLimit=$LIM --data-urlencode "reason=Testing P2P limit" >/dev/null
+LEFT=$(awk -v u="$U1" 'BEGIN{printf "%.2f", 100}')
 has "a payment over the remaining limit is refused" "$(send $C $JCHK maya@altobank.com $(add $LEFT 0.01))" "daily transfer limit"
 has "a payment within it works" "$(send $C $JCHK maya@altobank.com $(add $LEFT -1))" "Sent [$]"
 JSAV=$(first_id $C Savings 1)

@@ -503,6 +503,13 @@ namespace AltoBank.Migrations
                     b.Property<decimal>("SavingsApy")
                         .HasColumnType("decimal(9,6)");
 
+                    b.Property<DateTime?>("SchedulerLastRunAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SchedulerLastRunSummary")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("TEXT");
 
@@ -686,6 +693,55 @@ namespace AltoBank.Migrations
                     b.ToTable("MoneyRequests");
                 });
 
+            modelBuilder.Entity("AltoBank.Models.Payee", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AccountNumber")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Nickname")
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("RemovedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Active");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Status");
+
+                    b.ToTable("Payees");
+                });
+
             modelBuilder.Entity("AltoBank.Models.Payment", b =>
                 {
                     b.Property<int>("Id")
@@ -743,6 +799,183 @@ namespace AltoBank.Migrations
                     b.HasIndex("SenderUserId", "CreatedAt");
 
                     b.ToTable("Payments");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.ScheduledPayment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("DayOfMonth")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("DayOfWeek")
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Frequency")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("FromAccountId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastFailureReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastRunAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastRunStatus")
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Memo")
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("NextRunDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("PayeeId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("SkipNext")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Active");
+
+                    b.Property<int?>("ToAccountId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FromAccountId");
+
+                    b.HasIndex("PayeeId");
+
+                    b.HasIndex("ToAccountId");
+
+                    b.HasIndex("Status", "NextRunDate");
+
+                    b.HasIndex("UserId", "Status");
+
+                    b.ToTable("ScheduledPayments");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.ScheduledRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ProcessedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("RunDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ScheduledPaymentId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("TransactionId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScheduledPaymentId", "RunDate")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "ProcessedAt");
+
+                    b.ToTable("ScheduledRuns");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.SchedulerRunLog", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Failed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("FinishedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Processed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("RequestsExpired")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Skipped")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Succeeded")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TriggeredBy")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StartedAt");
+
+                    b.ToTable("SchedulerRunLogs");
                 });
 
             modelBuilder.Entity("AltoBank.Models.Transaction", b =>
@@ -1024,6 +1257,17 @@ namespace AltoBank.Migrations
                     b.Navigation("Requester");
                 });
 
+            modelBuilder.Entity("AltoBank.Models.Payee", b =>
+                {
+                    b.HasOne("AltoBank.Models.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("AltoBank.Models.Payment", b =>
                 {
                     b.HasOne("AltoBank.Models.Account", "FromAccount")
@@ -1057,6 +1301,50 @@ namespace AltoBank.Migrations
                     b.Navigation("Sender");
 
                     b.Navigation("ToAccount");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.ScheduledPayment", b =>
+                {
+                    b.HasOne("AltoBank.Models.Account", "FromAccount")
+                        .WithMany()
+                        .HasForeignKey("FromAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AltoBank.Models.Payee", "Payee")
+                        .WithMany()
+                        .HasForeignKey("PayeeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AltoBank.Models.Account", "ToAccount")
+                        .WithMany()
+                        .HasForeignKey("ToAccountId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("AltoBank.Models.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("FromAccount");
+
+                    b.Navigation("Payee");
+
+                    b.Navigation("ToAccount");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.ScheduledRun", b =>
+                {
+                    b.HasOne("AltoBank.Models.ScheduledPayment", "ScheduledPayment")
+                        .WithMany("Runs")
+                        .HasForeignKey("ScheduledPaymentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ScheduledPayment");
                 });
 
             modelBuilder.Entity("AltoBank.Models.Transaction", b =>
@@ -1135,6 +1423,11 @@ namespace AltoBank.Migrations
                     b.Navigation("Applications");
 
                     b.Navigation("Notes");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.ScheduledPayment", b =>
+                {
+                    b.Navigation("Runs");
                 });
 #pragma warning restore 612, 618
         }

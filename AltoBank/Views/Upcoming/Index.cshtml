@@ -1,0 +1,198 @@
+@model UpcomingPageViewModel
+@* UPCOMING — /scheduled: a month calendar plus a list of everything that will be paid or moved automatically,
+   every scheduled item (edit, skip next, cancel), recent runs, and "Schedule a transfer". *@
+@{
+    var month = Model.Month;
+    var gridStart = month.AddDays(-(((int)month.DayOfWeek + 6) % 7));               // the Monday on/before the 1st
+    var weeks = (int)Math.Ceiling(((month.AddMonths(1).DayNumber - gridStart.DayNumber)) / 7.0);
+    var byDay = Model.MonthItems.GroupBy(u => u.Date).ToDictionary(g => g.Key, g => g.ToList());
+    var monthTotal = Model.MonthItems.Where(u => !u.WillBeSkipped).Sum(u => u.Item.Amount);
+    string Icon(ScheduledPayment s) => s.Kind == ScheduleKind.BillPay ? Payee.IconFor(s.Payee?.Category ?? PayeeCategory.Other) : "bi-arrow-left-right";
+    string Pill(string status) => status switch { "Active" or "Succeeded" or "Completed" => "active", "Skipped" => "frozen", _ => "closed" };
+    var active = Model.Items.Where(i => i.Status == ScheduleStatus.Active).ToList();
+    var ended = Model.Items.Where(i => i.Status != ScheduleStatus.Active).Take(10).ToList();
+}
+
+<div class="container py-4 upcoming-page">
+    <div class="feature-head">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-calendar-week text-gradient me-2"></i>Upcoming</h2>
+            <p class="text-muted-alto mb-0">Scheduled bill payments and transfers. They go out automatically on these dates (bank time).</p>
+        </div>
+        <a class="btn btn-alto-outline btn-sm" asp-controller="BillPay" asp-action="Index"><i class="bi bi-receipt me-1"></i>Pay a bill</a>
+    </div>
+
+    @* ===================== CALENDAR ===================== *@
+    <section class="glass cal" aria-labelledby="calTitle">
+        <div class="cal-head">
+            <a class="btn btn-alto-ghost btn-icon btn-sm" asp-action="Index" asp-route-month="@month.AddMonths(-1).ToString("yyyy-MM")" aria-label="Previous month"><i class="bi bi-chevron-left"></i></a>
+            <h3 class="h5 mb-0" id="calTitle">@month.ToString("MMMM yyyy")</h3>
+            <a class="btn btn-alto-ghost btn-icon btn-sm" asp-action="Index" asp-route-month="@month.AddMonths(1).ToString("yyyy-MM")" aria-label="Next month"><i class="bi bi-chevron-right"></i></a>
+            <span class="ms-auto small text-muted-alto">@Model.MonthItems.Count(u => !u.WillBeSkipped) scheduled · <money amount="@monthTotal" /></span>
+        </div>
+        <div class="cal-grid" role="grid" aria-label="@month.ToString("MMMM yyyy")">
+            @foreach (var dn in new[] { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" }) { <div class="cal-dow" role="columnheader">@dn</div> }
+            @for (int i = 0; i < weeks * 7; i++)
+            {
+                var day = gridStart.AddDays(i);
+                var items = byDay.GetValueOrDefault(day);
+                var cls = (day.Month != month.Month ? " is-other" : "") + (day == Model.Today ? " is-today" : "") + (day < Model.Today ? " is-past" : "") + (items != null ? " has-items" : "");
+                <div class="cal-day@(cls)" role="gridcell" data-date="@day.ToString("yyyy-MM-dd")" aria-label="@day.ToString("dddd, MMMM d")@(items == null ? "" : $", {items.Count} scheduled")">
+                    <span class="cal-num">@day.Day</span>
+                    @if (items != null)
+                    {
+                        foreach (var u in items.Take(3))
+                        {
+                            <span class="cal-item @(u.WillBeSkipped ? "is-skipped" : "")" title="@u.Item.Target · @u.Item.Amount.ToString("C")@(u.WillBeSkipped ? " (skipped)" : "")">
+                                <i class="bi @Icon(u.Item)"></i><span class="cal-item-text">@u.Item.Amount.ToString("C0") @u.Item.Target</span>
+                            </span>
+                        }
+                        if (items.Count > 3) { <span class="cal-more">+@(items.Count - 3) more</span> }
+                    }
+                </div>
+            }
+        </div>
+    </section>
+
+    <div class="row g-4 mt-1">
+        <div class="col-lg-7">
+            @* ===================== NEXT 45 DAYS ===================== *@
+            <section aria-labelledby="listTitle">
+                <h3 class="h6 mb-2" id="listTitle"><i class="bi bi-list-ul me-1"></i>Next 45 days</h3>
+                @if (!Model.Next45Days.Any())
+                {
+                    <partial name="_EmptyState" model='new EmptyStateViewModel("bi-calendar-x", "Nothing scheduled. Pay a bill on a date or set up a repeating transfer.", "Pay a bill", "BillPay", "Index")' />
+                }
+                else
+                {
+                    <ul class="pay-list glass" data-upcoming>
+                        @foreach (var u in Model.Next45Days)
+                        {
+                            <li class="@(u.WillBeSkipped ? "is-skipped" : "")">
+                                <span class="d-flex gap-2 align-items-center min-w-0">
+                                    <i class="bi @Icon(u.Item) text-muted-alto"></i>
+                                    <span class="min-w-0">@u.Item.Target
+                                        <span class="small text-muted-alto d-block">@(u.Date == Model.Today ? "Today" : u.Date.ToString("ddd, MMM d")) · from ••@u.Item.FromAccount?.Last4@(u.WillBeSkipped ? " · skipped" : "")</span>
+                                    </span>
+                                </span>
+                                <money amount="@u.Item.Amount" />
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+
+            @* ===================== SCHEDULED ITEMS ===================== *@
+            <section class="mt-4" aria-labelledby="itemsTitle">
+                <h3 class="h6 mb-2" id="itemsTitle"><i class="bi bi-arrow-repeat me-1"></i>Scheduled (@active.Count active)</h3>
+                <div class="sched-list">
+                    @foreach (var s in active)
+                    {
+                        <article class="glass sched-card" data-schedule-id="@s.Id">
+                            <div class="d-flex gap-3 align-items-start">
+                                <span class="alert-icon" aria-hidden="true"><i class="bi @Icon(s)"></i></span>
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="d-flex justify-content-between gap-2">
+                                        <span class="fw-semibold text-truncate">@(s.Kind == ScheduleKind.Transfer ? "Transfer to " : "")@s.Target</span>
+                                        <money amount="@s.Amount" class="fw-semibold" />
+                                    </div>
+                                    <div class="small text-muted-alto">
+                                        @s.ScheduleText@(s.EndDate is DateOnly end ? $" until {end:MMM d, yyyy}" : "") · from @s.FromAccount?.DisplayName ••@s.FromAccount?.Last4
+                                        @if (s.Memo != null) { <span>· @s.Memo</span> }
+                                    </div>
+                                    <div class="small mt-1">
+                                        Next: <strong>@s.NextRunDate?.ToString("ddd, MMM d")</strong>
+                                        @if (s.SkipNext) { <span class="acct-status acct-status--frozen ms-1">Will skip</span> }
+                                        @if (s.LastRunStatus is ScheduledRunStatus lrs) { <span class="ms-2 text-muted-alto">Last: @lrs@(s.LastFailureReason == null ? "" : " — " + s.LastFailureReason)</span> }
+                                    </div>
+                                    <div class="sched-actions mt-2">
+                                        <a class="btn btn-alto-ghost btn-sm" asp-action="Edit" asp-route-id="@s.Id"><i class="bi bi-pencil me-1"></i>Edit</a>
+                                        @if (s.IsRecurring)
+                                        {
+                                            <form asp-action="@(s.SkipNext ? "Unskip" : "Skip")" asp-route-id="@s.Id" method="post">
+                                                <button type="submit" class="btn btn-alto-ghost btn-sm"><i class="bi @(s.SkipNext ? "bi-arrow-counterclockwise" : "bi-skip-forward") me-1"></i>@(s.SkipNext ? "Undo skip" : "Skip next")</button>
+                                            </form>
+                                        }
+                                        <details class="d-inline-block">
+                                            <summary class="btn btn-alto-ghost btn-sm text-danger-alto">Cancel</summary>
+                                            <form asp-action="Cancel" asp-route-id="@s.Id" method="post" class="remove-box mt-2">
+                                                <span class="small">Stop @(s.IsRecurring ? "all future payments" : "this payment") to @s.Target?</span>
+                                                <button type="submit" class="btn btn-alto-ghost btn-sm text-danger-alto">Yes, cancel</button>
+                                            </form>
+                                        </details>
+                                    </div>
+                                </div>
+                            </div>
+                        </article>
+                    }
+                    @if (!active.Any()) { <p class="text-muted-alto small">No active schedules.</p> }
+                </div>
+                @if (ended.Any())
+                {
+                    <details class="mt-3">
+                        <summary class="small text-muted-alto">Finished, failed and cancelled (@ended.Count)</summary>
+                        <ul class="pay-list glass mt-2">
+                            @foreach (var s in ended)
+                            {
+                                <li><span>@s.Target <span class="small text-muted-alto d-block">@s.ScheduleText@(s.LastFailureReason == null ? "" : " · " + s.LastFailureReason)</span></span>
+                                    <span class="d-flex gap-2 align-items-center"><money amount="@s.Amount" /><span class="acct-status acct-status--@Pill(s.Status.ToString())">@s.Status</span></span></li>
+                            }
+                        </ul>
+                    </details>
+                }
+            </section>
+        </div>
+
+        <div class="col-lg-5">
+            @* ===================== SCHEDULE A TRANSFER ===================== *@
+            <section class="glass pay-card" aria-labelledby="xferTitle">
+                <h3 class="h5 mb-1" id="xferTitle">Schedule a transfer</h3>
+                <p class="small text-muted-alto">Between your own accounts, e.g. “Move $50 to savings every Friday”.</p>
+                @if (Model.Accounts.Count < 2)
+                {
+                    <partial name="_EmptyState" model='new EmptyStateViewModel("bi-wallet2", "You need two open accounts to schedule a transfer.", "Open an account", "Accounts", "Apply")' />
+                }
+                else
+                {
+                    <form asp-action="ScheduleTransfer" method="post" novalidate>
+                        <div class="row g-2 mb-3">
+                            <div class="col-sm-6"><label class="form-label" for="Transfer_FromAccountId">From</label><select id="Transfer_FromAccountId" name="Transfer.FromAccountId" asp-items="Model.Accounts" class="form-select"></select></div>
+                            <div class="col-sm-6"><label class="form-label" for="Transfer_ToAccountId">To</label>
+                                <select id="Transfer_ToAccountId" name="Transfer.ToAccountId" class="form-select">
+                                    @for (int i = 0; i < Model.Accounts.Count; i++) { <option value="@Model.Accounts[i].Value" selected="@(i == 1)">@Model.Accounts[i].Text</option> }
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="Transfer_Amount">Amount</label>
+                            <div class="input-group"><span class="input-group-text">$</span><input id="Transfer_Amount" name="Transfer.Amount" class="form-control" type="number" step="0.01" min="0.01" placeholder="50.00" required /></div>
+                        </div>
+                        <partial name="_ScheduleWhen" model='new ScheduleWhenViewModel("Transfer", Model.Transfer, false)' />
+                        <div class="mb-3"><label class="form-label" for="Transfer_Memo">Memo (optional)</label><input id="Transfer_Memo" name="Transfer.Memo" class="form-control" maxlength="80" placeholder="e.g. Savings goal" /></div>
+                        <button type="submit" class="btn btn-alto" data-submit data-now="Schedule transfer" data-later="Schedule transfer">Schedule transfer</button>
+                    </form>
+                }
+            </section>
+
+            @* ===================== RECENT RUNS ===================== *@
+            <section class="mt-4" aria-labelledby="runsTitle">
+                <h3 class="h6 mb-2" id="runsTitle"><i class="bi bi-clock-history me-1"></i>Recent automatic payments</h3>
+                @if (!Model.RecentRuns.Any()) { <p class="small text-muted-alto">Nothing has run yet.</p> }
+                else
+                {
+                    <ul class="pay-list glass" data-runs>
+                        @foreach (var r in Model.RecentRuns)
+                        {
+                            <li>
+                                <span class="min-w-0">@r.ScheduledPayment?.Target <span class="small text-muted-alto d-block">@r.RunDate.ToString("MMM d")@(r.FailureReason == null ? "" : " · " + r.FailureReason)</span></span>
+                                <span class="d-flex gap-2 align-items-center"><money amount="@r.Amount" /><span class="acct-status acct-status--@Pill(r.Status.ToString())">@r.Status</span></span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+        </div>
+    </div>
+</div>
+
+@section Scripts { <script src="~/js/schedule-form.js" asp-append-version="true"></script> }

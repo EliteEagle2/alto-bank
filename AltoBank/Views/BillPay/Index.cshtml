@@ -1,0 +1,136 @@
+@model BillPayPageViewModel
+@* BILL PAY — /bills. Pay a payee now, on a date, or on a repeating schedule; manage payees.
+   Paying now moves money through IBankService; scheduling only plans it (the background scheduler pays it). *@
+@{
+    var payeeOptions = Model.Payees.Select(p => new SelectListItem($"{p.DisplayName} (••{p.Last4})", p.Id.ToString(), p.Id == Model.Pay.PayeeId)).ToList();
+    var categories = Enum.GetValues<PayeeCategory>().Select(c => new SelectListItem(Payee.LabelFor(c), c.ToString())).ToList();
+    var canPay = Model.Payees.Any() && Model.FromAccounts.Any();
+}
+
+<div class="container py-4 billpay-page">
+    <div class="feature-head">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-receipt text-gradient me-2"></i>Bill Pay</h2>
+            <p class="text-muted-alto mb-0">Pay your bills now or on a schedule. Scheduled payments go out automatically on the date you choose.</p>
+        </div>
+        <a class="btn btn-alto-outline btn-sm" asp-controller="Upcoming" asp-action="Index"><i class="bi bi-calendar-week me-1"></i>See everything upcoming</a>
+    </div>
+
+    <div class="row g-4">
+        @* ===================== PAY A BILL ===================== *@
+        <div class="col-lg-7">
+            <section class="glass pay-card" aria-labelledby="payTitle">
+                <h3 class="h5 mb-3" id="payTitle">Pay a bill</h3>
+                @if (!canPay)
+                {
+                    var empty = Model.Payees.Any()
+                        ? new EmptyStateViewModel("bi-wallet2", "You need an active account to pay bills.")
+                        : new EmptyStateViewModel("bi-person-plus", "Add a payee first (below), then you can pay them here.");
+                    <partial name="_EmptyState" model="empty" />
+                }
+                else
+                {
+                    <form asp-action="Pay" method="post" id="payForm" novalidate>
+                        <div class="row g-2 mb-3">
+                            <div class="col-sm-6">
+                                <label asp-for="Pay.PayeeId" class="form-label"></label>
+                                <select asp-for="Pay.PayeeId" asp-items="payeeOptions" class="form-select"><option value="">Choose a payee</option></select>
+                            </div>
+                            <div class="col-sm-6">
+                                <label asp-for="Pay.FromAccountId" class="form-label"></label>
+                                <select asp-for="Pay.FromAccountId" asp-items="Model.FromAccounts" class="form-select"></select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label asp-for="Pay.Amount" class="form-label"></label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input asp-for="Pay.Amount" class="form-control" type="number" step="0.01" min="0.01" value="" placeholder="0.00" required />
+                            </div>
+                        </div>
+                        <partial name="_ScheduleWhen" model='new ScheduleWhenViewModel("Pay", Model.Pay, true)' />
+                        <div class="mb-4">
+                            <label asp-for="Pay.Memo" class="form-label"></label>
+                            <input asp-for="Pay.Memo" class="form-control" maxlength="80" placeholder="e.g. November bill" />
+                        </div>
+                        <button type="submit" class="btn btn-alto" data-submit data-now="Pay now" data-later="Schedule payment">Pay now</button>
+                        <p class="small text-muted-alto mt-3 mb-0"><i class="bi bi-info-circle me-1"></i>Bill payments count toward your daily transfer limit. If a scheduled payment can't go through (not enough money, account frozen, over the limit), it's marked Failed and you get an alert. It isn't retried.</p>
+                    </form>
+                }
+            </section>
+
+            @if (Model.UpcomingBills.Any())
+            {
+                <section class="mt-4" aria-labelledby="upTitle">
+                    <h3 class="h6 mb-2" id="upTitle"><i class="bi bi-calendar-week me-1"></i>Coming up (next 30 days)</h3>
+                    <ul class="pay-list glass">
+                        @foreach (var u in Model.UpcomingBills)
+                        {
+                            <li>
+                                <span>@u.Item.Target <span class="small text-muted-alto d-block">@u.Date.ToString("ddd, MMM d") · @u.Item.ScheduleText</span></span>
+                                <span class="d-flex gap-2 align-items-center">
+                                    <money amount="@u.Item.Amount" />
+                                    @if (u.WillBeSkipped) { <span class="acct-status acct-status--frozen">Skipping</span> }
+                                </span>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            }
+        </div>
+
+        @* ===================== PAYEES ===================== *@
+        <div class="col-lg-5" id="payees">
+            <section aria-labelledby="payeesTitle">
+                <h3 class="h5 mb-3" id="payeesTitle">Payees <span class="text-muted-alto small">(@Model.Payees.Count)</span></h3>
+                <div class="payee-list">
+                    @foreach (var p in Model.Payees)
+                    {
+                        var schedules = Model.ActiveSchedulesByPayee.GetValueOrDefault(p.Id);
+                        <article class="glass payee-card" data-payee-id="@p.Id">
+                            <div class="d-flex gap-3 align-items-center">
+                                <span class="alert-icon" aria-hidden="true"><i class="bi @Payee.IconFor(p.Category)"></i></span>
+                                <div class="min-w-0 flex-grow-1">
+                                    <div class="fw-semibold text-truncate">@p.DisplayName</div>
+                                    <div class="small text-muted-alto">@(p.Nickname != null ? p.Name + " · " : "")@p.CategoryLabel · acct ••@p.Last4@(schedules > 0 ? $" · {schedules} scheduled" : "")</div>
+                                </div>
+                                <button type="button" class="btn btn-alto btn-sm" data-pay-payee="@p.Id">Pay</button>
+                            </div>
+                            <details class="payee-more mt-2">
+                                <summary class="small">Edit or remove</summary>
+                                <form asp-action="EditPayee" asp-route-id="@p.Id" method="post" class="row g-2 mt-1">
+                                    <div class="col-12"><label class="form-label small" for="n@(p.Id)">Name</label><input id="n@(p.Id)" name="Name" class="form-control form-control-sm" value="@p.Name" maxlength="60" required /></div>
+                                    <div class="col-6"><label class="form-label small" for="c@(p.Id)">Category</label>
+                                        <select id="c@(p.Id)" name="Category" class="form-select form-select-sm">
+                                            @foreach (var c in Enum.GetValues<PayeeCategory>()) { <option value="@c" selected="@(c == p.Category)">@Payee.LabelFor(c)</option> }
+                                        </select>
+                                    </div>
+                                    <div class="col-6"><label class="form-label small" for="a@(p.Id)">Account #</label><input id="a@(p.Id)" name="AccountNumber" class="form-control form-control-sm" value="@p.AccountNumber" maxlength="30" required /></div>
+                                    <div class="col-12"><label class="form-label small" for="k@(p.Id)">Nickname</label><input id="k@(p.Id)" name="Nickname" class="form-control form-control-sm" value="@p.Nickname" maxlength="30" /></div>
+                                    <div class="col-12"><button type="submit" class="btn btn-alto-outline btn-sm">Save</button></div>
+                                </form>
+                                <form asp-action="RemovePayee" asp-route-id="@p.Id" method="post" class="remove-box mt-2">
+                                    <span class="small">Remove @p.DisplayName?@(schedules > 0 ? $" Its {schedules} scheduled payment(s) will be cancelled." : "") Past payments stay in your history.</span>
+                                    <button type="submit" class="btn btn-alto-ghost btn-sm text-danger-alto">Remove payee</button>
+                                </form>
+                            </details>
+                        </article>
+                    }
+                </div>
+
+                <details class="glass add-payee mt-3" @(Model.Payees.Any() ? "" : "open")>
+                    <summary class="fw-semibold"><i class="bi bi-person-plus me-1"></i>Add a payee</summary>
+                    <form asp-action="AddPayee" method="post" class="row g-2 mt-2" novalidate>
+                        <div class="col-12"><label asp-for="NewPayee.Name" class="form-label small"></label><input asp-for="NewPayee.Name" class="form-control" placeholder="e.g. Keystone Electric" /></div>
+                        <div class="col-sm-6"><label asp-for="NewPayee.Category" class="form-label small"></label><select asp-for="NewPayee.Category" asp-items="categories" class="form-select"></select></div>
+                        <div class="col-sm-6"><label asp-for="NewPayee.AccountNumber" class="form-label small"></label><input asp-for="NewPayee.AccountNumber" class="form-control" placeholder="e.g. 88-1203-44" /></div>
+                        <div class="col-12"><label asp-for="NewPayee.Nickname" class="form-label small"></label><input asp-for="NewPayee.Nickname" class="form-control" placeholder="e.g. Electric" /></div>
+                        <div class="col-12"><button type="submit" class="btn btn-alto-outline">Add payee</button></div>
+                    </form>
+                </details>
+            </section>
+        </div>
+    </div>
+</div>
+
+@section Scripts { <script src="~/js/schedule-form.js" asp-append-version="true"></script> }

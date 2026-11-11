@@ -22,6 +22,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<MoneyRequest> MoneyRequests => Set<MoneyRequest>();
     public DbSet<Alert> Alerts => Set<Alert>();
+    public DbSet<Payee> Payees => Set<Payee>();
+    public DbSet<ScheduledPayment> ScheduledPayments => Set<ScheduledPayment>();
+    public DbSet<ScheduledRun> ScheduledRuns => Set<ScheduledRun>();
+    public DbSet<SchedulerRunLog> SchedulerRunLogs => Set<SchedulerRunLog>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -116,6 +120,42 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             a.HasIndex(x => new { x.UserId, x.ReadAt });
             a.HasIndex(x => new { x.UserId, x.DedupeKey }).IsUnique();   // NULL keys never clash in SQLite
         });
+
+        // ----- Bill Pay + scheduled transfers -----
+        builder.Entity<Payee>(p =>
+        {
+            p.Property(x => x.Category).HasConversion<string>().HasMaxLength(12);
+            p.Property(x => x.Status).HasConversion<string>().HasMaxLength(10).HasDefaultValue(PayeeStatus.Active);
+            p.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            p.HasIndex(x => new { x.UserId, x.Status });
+        });
+
+        builder.Entity<ScheduledPayment>(s =>
+        {
+            s.Property(x => x.Kind).HasConversion<string>().HasMaxLength(10);
+            s.Property(x => x.Frequency).HasConversion<string>().HasMaxLength(10);
+            s.Property(x => x.DayOfWeek).HasConversion<string>().HasMaxLength(10);
+            s.Property(x => x.Status).HasConversion<string>().HasMaxLength(10).HasDefaultValue(ScheduleStatus.Active);
+            s.Property(x => x.LastRunStatus).HasConversion<string>().HasMaxLength(10);
+            s.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            s.HasOne(x => x.FromAccount).WithMany().HasForeignKey(x => x.FromAccountId).OnDelete(DeleteBehavior.Restrict);
+            s.HasOne(x => x.ToAccount).WithMany().HasForeignKey(x => x.ToAccountId).OnDelete(DeleteBehavior.Restrict);
+            s.HasOne(x => x.Payee).WithMany().HasForeignKey(x => x.PayeeId).OnDelete(DeleteBehavior.Restrict);
+            s.HasIndex(x => new { x.Status, x.NextRunDate });   // the scheduler's "what's due?" query
+            s.HasIndex(x => new { x.UserId, x.Status });
+        });
+
+        builder.Entity<ScheduledRun>(r =>
+        {
+            r.Property(x => x.Status).HasConversion<string>().HasMaxLength(10);
+            r.HasOne(x => x.ScheduledPayment).WithMany(s => s.Runs).HasForeignKey(x => x.ScheduledPaymentId).OnDelete(DeleteBehavior.Restrict);
+            // IDEMPOTENCY: one row per item per date. The money moves in the same transaction that inserts this
+            // row, so the database itself refuses to pay the same date twice.
+            r.HasIndex(x => new { x.ScheduledPaymentId, x.RunDate }).IsUnique();
+            r.HasIndex(x => new { x.Status, x.ProcessedAt });
+        });
+
+        builder.Entity<SchedulerRunLog>().HasIndex(x => x.StartedAt);
 
         // Exactly one settings row, created by the migration with the default values.
         builder.Entity<BankSetting>().HasData(new BankSetting

@@ -65,6 +65,11 @@ public interface IBankService
     Task<(BankResult Result, Payment? Payment)> SendPaymentAsync(string userId, int fromAccountId, string? recipient, decimal amount, string? memo);
     Task<(BankResult Result, Payment? Payment)> PayRequestAsync(string userId, int requestId, int fromAccountId);
 
+    // ----- Bill Pay + scheduled items (money side; BankService.BillPay.cs) -----
+    Task<BankResult> PayBillAsync(string userId, int fromAccountId, int payeeId, decimal amount, string? memo);
+    /// <summary>Called by the background scheduler for one due item. Idempotent per (item, date).</summary>
+    Task<ScheduledOutcome> ExecuteScheduledAsync(int scheduledPaymentId, DateOnly today);
+
     // ----- Opening accounts -----
     Task<(BankResult Result, Account? Account)> OpenAccountAsync(string userId, OpenAccountRequest request);
     Task<(BankResult Result, Account? Account)> OpenAccountInCurrentTransactionAsync(string userId, OpenAccountRequest request);

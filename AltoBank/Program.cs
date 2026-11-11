@@ -70,6 +70,7 @@ builder.Services.AddScoped<IAuditLogger, AuditLogger>();     // writes AuditLog 
 builder.Services.AddScoped<IAdminService, AdminService>();   // everything the admin portal does
 builder.Services.AddScoped<IAlertService, AlertService>();   // the customer Alerts center (bell icon)
 builder.Services.AddScoped<IPaymentRequestService, PaymentRequestService>();   // Send & Request: requests (no money moves)
+builder.Services.AddScoped<IBillPayService, BillPayService>();   // Bill Pay: payees + schedules (no money moves)
 
 // Background scheduler: a hosted service (singleton) that runs every minute; each run gets its own scope.
 builder.Services.AddScoped<AltoBank.Services.Scheduling.ISchedulerRunner, AltoBank.Services.Scheduling.SchedulerRunner>();

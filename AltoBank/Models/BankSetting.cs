@@ -26,6 +26,10 @@ public class BankSetting
     // ON: applications are approved instantly. OFF: they wait as "Pending" for an admin.
     public bool AutoApproveApplications { get; set; } = true;
 
+    // The background scheduler writes these after EVERY run (shown on /admin/scheduled).
+    public DateTime? SchedulerLastRunAt { get; set; }
+    [StringLength(200)] public string? SchedulerLastRunSummary { get; set; }
+
     public DateTime? UpdatedAt { get; set; }
     [StringLength(256)] public string? UpdatedBy { get; set; }
 }

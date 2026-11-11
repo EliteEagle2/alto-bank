@@ -31,11 +31,14 @@ public partial class AdminService : IAdminService
     private readonly ICardService _cards;
     private readonly IHttpContextAccessor _http;
     private readonly IAlertService _alerts;
+    private readonly AltoBank.Services.Scheduling.ISchedulerRunner _scheduler;
 
     public AdminService(ApplicationDbContext db, UserManager<ApplicationUser> users, IAuditLogger audit,
-                        IBankService bank, ICardService cards, IHttpContextAccessor http, IAlertService alerts)
+                        IBankService bank, ICardService cards, IHttpContextAccessor http, IAlertService alerts,
+                        AltoBank.Services.Scheduling.ISchedulerRunner scheduler)
     {
         _alerts = alerts;
+        _scheduler = scheduler;
         _db = db;
         _users = users;
         _audit = audit;

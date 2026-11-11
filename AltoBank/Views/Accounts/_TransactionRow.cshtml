@@ -12,6 +12,7 @@
         TransactionType.AdjustmentCredit or TransactionType.AdjustmentDebit => "bi-sliders",
         TransactionType.PaymentSent => "bi-send",
         TransactionType.PaymentReceived => "bi-person-down",
+        TransactionType.BillPayment => "bi-receipt",
         _ => "bi-arrow-counterclockwise"
     };
     var reversed = t.Status == TransactionStatus.Reversed;

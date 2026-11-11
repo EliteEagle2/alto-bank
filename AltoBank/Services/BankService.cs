@@ -100,6 +100,7 @@ public partial class BankService : IBankService
             "withdrawal" => q.Where(t => t.Type == TransactionType.Withdrawal),
             "transfer" => q.Where(t => t.Type == TransactionType.TransferIn || t.Type == TransactionType.TransferOut),
             "payment" => q.Where(t => t.Type == TransactionType.PaymentSent || t.Type == TransactionType.PaymentReceived),
+            "bill" => q.Where(t => t.Type == TransactionType.BillPayment),
             "interest" => q.Where(t => t.Type == TransactionType.Interest),
             "adjustment" => q.Where(t => t.Type == TransactionType.AdjustmentCredit || t.Type == TransactionType.AdjustmentDebit),
             "reversal" => q.Where(t => t.Type == TransactionType.ReversalCredit || t.Type == TransactionType.ReversalDebit),
@@ -297,33 +298,39 @@ public partial class BankService : IBankService
         if (CheckAmount(amount) is { } invalid) return Task.FromResult(invalid);
         if (fromId == toId) return Task.FromResult(new BankResult(false, "Choose two different accounts."));
 
-        return InTransactionAsync(async () =>
-        {
-            var from = await GetAccountAsync(fromId, userId);
-            var to = await GetAccountAsync(toId, userId);
-            if (from == null || to == null) return new BankResult(false, "Account not found.");
-            if (CanSend(from) is { } cantSend) return cantSend;
-            if (CanReceive(to) is { } cantReceive) return cantReceive;
-            if (await CheckDailyLimitAsync(from, amount) is { } overLimit) return overLimit;
+        return InTransactionAsync(async () => (await TransferCoreAsync(userId, fromId, toId, amount, memo)).Result);
+    }
 
-            if (amount > from.Balance)
-                return new BankResult(false, $"Insufficient funds. {from.DisplayName} has {from.Balance:C} available.");
+    /// <summary>
+    /// The transfer itself (ownership, status, daily limit, balance, both legs, audit). Must run inside a DB
+    /// transaction: TransferAsync's own, or the scheduler's (so a scheduled transfer obeys exactly the same rules).
+    /// </summary>
+    private async Task<(BankResult Result, Transaction? OutLeg)> TransferCoreAsync(string userId, int fromId, int toId, decimal amount, string? memo)
+    {
+        var from = await GetAccountAsync(fromId, userId);
+        var to = await GetAccountAsync(toId, userId);
+        if (from == null || to == null) return (new BankResult(false, "Account not found."), null);
+        if (CanSend(from) is { } cantSend) return (cantSend, null);
+        if (CanReceive(to) is { } cantReceive) return (cantReceive, null);
+        if (await CheckDailyLimitAsync(from, amount) is { } overLimit) return (overLimit, null);
 
-            from.Balance -= amount;
-            to.Balance += amount;
+        if (amount > from.Balance)
+            return (new BankResult(false, $"Insufficient funds. {from.DisplayName} has {from.Balance:C} available."), null);
 
-            var cleanMemo = Clean(memo);
-            var note = cleanMemo == null ? "" : $" - {cleanMemo}";
-            var outLeg = AddTransaction(from, TransactionType.TransferOut, amount, $"Transfer to {to.DisplayName}{note}", cleanMemo, to.Id);
-            var inLeg = AddTransaction(to, TransactionType.TransferIn, amount, $"Transfer from {from.DisplayName}{note}", cleanMemo, from.Id);
-            await _db.SaveChangesAsync();
-            LinkLegs(outLeg, inLeg);
+        from.Balance -= amount;
+        to.Balance += amount;
 
-            _audit.Add("Transfer", $"Transferred {amount:C} from ••{from.Last4} to ••{to.Last4}",
-                       "Account", from.Id.ToString(), after: new { from = from.Id, to = to.Id, amount, memo = cleanMemo });
-            await _db.SaveChangesAsync();
-            return new BankResult(true, $"Transferred {amount:C} from {from.DisplayName} to {to.DisplayName}.");
-        });
+        var cleanMemo = Clean(memo);
+        var note = cleanMemo == null ? "" : $" - {cleanMemo}";
+        var outLeg = AddTransaction(from, TransactionType.TransferOut, amount, $"Transfer to {to.DisplayName}{note}", cleanMemo, to.Id);
+        var inLeg = AddTransaction(to, TransactionType.TransferIn, amount, $"Transfer from {from.DisplayName}{note}", cleanMemo, from.Id);
+        await _db.SaveChangesAsync();
+        LinkLegs(outLeg, inLeg);
+
+        _audit.Add("Transfer", $"Transferred {amount:C} from ••{from.Last4} to ••{to.Last4}",
+                   "Account", from.Id.ToString(), after: new { from = from.Id, to = to.Id, amount, memo = cleanMemo });
+        await _db.SaveChangesAsync();
+        return (new BankResult(true, $"Transferred {amount:C} from {from.DisplayName} to {to.DisplayName}."), outLeg);
     }
 
     // =====================================================================
