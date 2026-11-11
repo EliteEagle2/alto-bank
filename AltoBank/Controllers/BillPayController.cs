@@ -80,6 +80,7 @@ public class BillPayController : Controller
     [HttpPost("payees/{id:int}")]
     public async Task<IActionResult> EditPayee(int id, PayeeInput input)
     {
+        if (await _bills.GetPayeeAsync(UserId, id) == null) return NotFound();   // another user's (or removed) payee
         if (!ModelState.IsValid) return Flash(false, FirstError(), "#payees");
         var result = await _bills.UpdatePayeeAsync(UserId, id, input.ToData());
         return Flash(result.Success, result.Message, "#payees");
@@ -88,6 +89,7 @@ public class BillPayController : Controller
     [HttpPost("payees/{id:int}/remove")]
     public async Task<IActionResult> RemovePayee(int id)
     {
+        if (await _bills.GetPayeeAsync(UserId, id) == null) return NotFound();
         var result = await _bills.RemovePayeeAsync(UserId, id);
         return Flash(result.Success, result.Message, "#payees");
     }

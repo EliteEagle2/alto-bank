@@ -50,10 +50,8 @@ post $C /bills /bills/payees --data-urlencode "NewPayee.Name=Bad" -d "NewPayee.C
 has "account number validated" "$(flash $C $B/bills)" "4"
 post $C /bills "/bills/payees/$GAS" --data-urlencode "Name=Test Gas Co" -d "Category=Utilities" -d "AccountNumber=TG-1234" --data-urlencode "Nickname=Gas" >/dev/null
 has "edit payee" "$(flash $C $B/bills)" "Gas was updated"
-post $M /bills "/bills/payees/$GAS" --data-urlencode "Name=Hijack" -d "Category=Other" -d "AccountNumber=HJ-0000" >/dev/null
-has "another customer can't edit it" "$(flash $M $B/bills)" "Payee not found"
-post $M /bills "/bills/payees/$GAS/remove" >/dev/null
-has "another customer can't remove it" "$(flash $M $B/bills)" "Payee not found"
+check "another customer can't edit it -> 404" "$(post $M /bills "/bills/payees/$GAS" --data-urlencode "Name=Hijack" -d "Category=Other" -d "AccountNumber=HJ-0000" | cut -d' ' -f1)" 404
+check "another customer can't remove it -> 404" "$(post $M /bills "/bills/payees/$GAS/remove" | cut -d' ' -f1)" 404
 has "another customer can't pay it" "$(pay $M $GAS $MCHK 1 now)" "Payee not found"
 
 echo "== Pay now"
@@ -162,10 +160,17 @@ has "edit amount" "$(flash $C $B/scheduled)" 'Updated. Next: $8.88'
 post $C /scheduled "/scheduled/$TOM/edit" -d "FromAccountId=$JCHK" -d "Amount=8.88" -d "NextRunDate=2020-01-01" >/dev/null
 has "edit to a past date refused" "$(flash $C $B/scheduled)" "in the past"
 check "another customer's edit page -> 404" "$(code -b $M $B/scheduled/$TOM/edit)" 404
-post $M /scheduled "/scheduled/$TOM/edit" -d "FromAccountId=$MCHK" -d "Amount=1" -d "NextRunDate=$TOMORROW" >/dev/null
-has "another customer can't edit it" "$(flash $M $B/scheduled)" "not found"
-post $M /scheduled "/scheduled/$TOM/cancel" >/dev/null
-has "another customer can't cancel it" "$(flash $M $B/scheduled)" "not found"
+check "another customer's edit POST -> 404" "$(post $M /scheduled "/scheduled/$TOM/edit" -d "FromAccountId=$MCHK" -d "Amount=1" -d "NextRunDate=$TOMORROW" | cut -d' ' -f1)" 404
+check "another customer's skip -> 404" "$(post $M /scheduled "/scheduled/$TOM/skip" | cut -d' ' -f1)" 404
+check "another customer's unskip -> 404" "$(post $M /scheduled "/scheduled/$TOM/unskip" | cut -d' ' -f1)" 404
+check "another customer's cancel -> 404" "$(post $M /scheduled "/scheduled/$TOM/cancel" | cut -d' ' -f1)" 404
+check "...and it's untouched" "$(sql "SELECT Status || ' ' || Amount FROM ScheduledPayments WHERE Id = $TOM")" "Active 8.88"
+post $C /scheduled "/scheduled/$TOM/edit" -d "FromAccountId=$JCHK" -d "Amount=8.88" -d "NextRunDate=2099-01-01" >/dev/null
+has "edit more than a year ahead refused" "$(flash $C $B/scheduled)" "up to a year ahead"
+post $C /scheduled "/scheduled/$WK/edit" -d "FromAccountId=$JCHK" -d "Amount=3" -d "NextRunDate=$TOMORROW" >/dev/null
+has "weekly item: next date must stay on its weekday" "$(flash $C $B/scheduled)" "must be a $DOW"
+post $C /scheduled "/scheduled/$WK/edit" -d "FromAccountId=$JCHK" -d "Amount=3" -d "NextRunDate=$TODAY" >/dev/null
+has "a date that already ran can't be reused" "$(flash $C $B/scheduled)" "already processed"
 post $C /scheduled "/scheduled/$TOM/cancel" >/dev/null
 has "owner cancels" "$(flash $C $B/scheduled)" "Cancelled"
 check "status Cancelled, row kept" "$(sql "SELECT Status FROM ScheduledPayments WHERE Id = $TOM")" Cancelled
@@ -184,6 +189,24 @@ for i in $(seq 1 30); do [ "$(runs_for $TIMER)" = 1 ] && break; sleep 1; done
 check "paid by the 5-second timer (no admin click)" "$(sql "SELECT Status FROM ScheduledRuns WHERE ScheduledPaymentId = $TIMER")" Succeeded
 check "last run time is recent" "$(sql "SELECT (julianday('now') - julianday(SchedulerLastRunAt)) * 86400 < 30 FROM BankSettings")" 1
 has "admin page shows the last run" "$(curl -s -b $A $B/admin/scheduled)" "Last run:"
+
+echo "== Missed dates after downtime: only the latest is paid"
+NEXTWEEK=$(sql "SELECT date('now','localtime','+7 day')"); AGO21=$(sql "SELECT date('now','localtime','-21 day')")
+post $C /scheduled /scheduled/transfer -d "Transfer.FromAccountId=$JCHK" -d "Transfer.ToAccountId=$JSAV" -d "Transfer.Amount=2.00" -d "Transfer.When=weekly" -d "Transfer.Date=$NEXTWEEK" -d "Transfer.DayOfWeek=$DOW" --data-urlencode "Transfer.Memo=catch-up test" >/dev/null
+CU=$(last_sched); C1=$(bal $C $JCHK); MA=$(sql "SELECT COUNT(*) FROM Alerts WHERE UserId = '$JID' AND Title = 'Scheduled payments missed'")
+sql "UPDATE ScheduledPayments SET NextRunDate = '$AGO21' WHERE Id = $CU" >/dev/null   # time travel: the app was off for 3 weeks
+runnow "Catch-up test run"
+for i in $(seq 1 20); do [ "$(runs_for $CU)" = 2 ] && break; sleep 1; done
+check "two run rows: one 'missed', one paid" "$(runs_for $CU)" 2
+check "the older dates are recorded as missed (Skipped)" "$(sql "SELECT Status FROM ScheduledRuns WHERE ScheduledPaymentId = $CU AND RunDate = '$AGO21'")" Skipped
+has "...with the reason" "$(sql "SELECT FailureReason FROM ScheduledRuns WHERE ScheduledPaymentId = $CU AND RunDate = '$AGO21'")" "Missed while the scheduler was offline: 3 date(s)"
+check "only today's date was paid" "$(sql "SELECT Status FROM ScheduledRuns WHERE ScheduledPaymentId = $CU AND RunDate = '$TODAY'")" Succeeded
+check "money moved once, not 4 times" "$(bal $C $JCHK)" "$(add $C1 -2)"
+check "next date is next week" "$(sql "SELECT NextRunDate FROM ScheduledPayments WHERE Id = $CU")" "$NEXTWEEK"
+check "customer alerted about the missed dates" "$(sql "SELECT COUNT(*) FROM Alerts WHERE UserId = '$JID' AND Title = 'Scheduled payments missed'")" "$((MA + 1))"
+check "scheduler work is audited as System" "$(sql "SELECT ActorRole FROM AuditLogs WHERE Action = 'Schedule.Missed' ORDER BY Id DESC LIMIT 1")" System
+check "...including the money movement, even when an admin started the run" "$(sql "SELECT ActorRole FROM AuditLogs WHERE Action = 'Transfer' ORDER BY Id DESC LIMIT 1")" System
+has "the admin's request is audited under the admin, with the reason" "$(sql "SELECT ActorEmail || ' ' || Reason FROM AuditLogs WHERE Action = 'Scheduler.RunRequested' ORDER BY Id DESC LIMIT 1")" "admin@altobank.com Catch-up test run"
 
 echo "== Admin page"
 AP=$(curl -s -b $A $B/admin/scheduled)

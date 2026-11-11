@@ -86,19 +86,38 @@ public class UpcomingController : Controller
     [HttpPost("{id:int}/edit")]
     public async Task<IActionResult> Edit(int id, ScheduleEditInput input)
     {
+        if (!await OwnsAsync(id)) return NotFound();
         if (!ModelState.IsValid) return Flash(false, FirstError());
         var result = await _bills.UpdateScheduleAsync(UserId, id, new ScheduleEdit(input.FromAccountId, input.Amount, input.Memo, input.NextRunDate, input.EndDate));
         return Flash(result.Success, result.Message);
     }
 
     [HttpPost("{id:int}/skip")]
-    public async Task<IActionResult> Skip(int id) { var r = await _bills.SetSkipNextAsync(UserId, id, true); return Flash(r.Success, r.Message); }
+    public async Task<IActionResult> Skip(int id)
+    {
+        if (!await OwnsAsync(id)) return NotFound();
+        var r = await _bills.SetSkipNextAsync(UserId, id, true);
+        return Flash(r.Success, r.Message);
+    }
 
     [HttpPost("{id:int}/unskip")]
-    public async Task<IActionResult> Unskip(int id) { var r = await _bills.SetSkipNextAsync(UserId, id, false); return Flash(r.Success, r.Message); }
+    public async Task<IActionResult> Unskip(int id)
+    {
+        if (!await OwnsAsync(id)) return NotFound();
+        var r = await _bills.SetSkipNextAsync(UserId, id, false);
+        return Flash(r.Success, r.Message);
+    }
 
     [HttpPost("{id:int}/cancel")]
-    public async Task<IActionResult> Cancel(int id) { var r = await _bills.CancelScheduleAsync(UserId, id); return Flash(r.Success, r.Message); }
+    public async Task<IActionResult> Cancel(int id)
+    {
+        if (!await OwnsAsync(id)) return NotFound();
+        var r = await _bills.CancelScheduleAsync(UserId, id);
+        return Flash(r.Success, r.Message);
+    }
+
+    // Another customer's (or a made-up) id is a 404, same as everywhere else.
+    private async Task<bool> OwnsAsync(int id) => await _bills.GetScheduleAsync(UserId, id) != null;
 
     private async Task<List<SelectListItem>> ActiveAccountsAsync() =>
         (await _bank.GetAccountsAsync(UserId)).Where(a => a.Status != AccountStatus.Closed)

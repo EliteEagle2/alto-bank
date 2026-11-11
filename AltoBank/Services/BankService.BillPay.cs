@@ -1,11 +1,15 @@
 using AltoBank.Models;
 using AltoBank.Services.Scheduling;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace AltoBank.Services;
 
-/// <summary>What happened when the scheduler tried one item. Ran = false means nothing was due (or it was already done).</summary>
-public record ScheduledOutcome(bool Ran, ScheduledRunStatus? Status, DateOnly? RunDate, string Message);
+/// <summary>
+/// What happened when the scheduler tried one item. Ran = false means nothing was recorded for it this time
+/// (nothing due, already done, or a temporary problem that the next tick will retry). Error is kept for the log.
+/// </summary>
+public record ScheduledOutcome(bool Ran, ScheduledRunStatus? Status, DateOnly? RunDate, string Message, Exception? Error = null);
 
 /// <summary>
 /// BILL PAY + SCHEDULED TRANSFERS: the money side. Paying a bill now, and running one due scheduled item.
@@ -83,6 +87,30 @@ public partial class BankService
                 var run = new ScheduledRun { ScheduledPaymentId = s.Id, RunDate = due, Amount = s.Amount, ProcessedAt = DateTime.UtcNow };
                 _db.ScheduledRuns.Add(run);
 
+                // Several dates went by while the scheduler was off (e.g. the app wasn't running for weeks)?
+                // Don't pay them all at once on today's limit: record the older ones as missed (no money moves)
+                // and jump to the most recent due date, which the next pass pays normally.
+                var latest = due;
+                int missed = 0;
+                while (Recurrence.After(s, latest) is DateOnly later && later <= today) { latest = later; missed++; }
+                if (missed > 0)
+                {
+                    var reason = $"Missed while the scheduler was offline: {missed} date(s) from {due:MMM d} were not paid.";
+                    status = run.Status = ScheduledRunStatus.Skipped;
+                    run.FailureReason = reason;
+                    s.LastRunAt = DateTime.UtcNow;
+                    s.LastRunStatus = ScheduledRunStatus.Skipped;
+                    s.LastFailureReason = reason;
+                    s.NextRunDate = latest;
+                    _alerts.Add(s.UserId, AlertType.BillFailed, "Scheduled payments missed",
+                        $"{missed} {(s.Kind == ScheduleKind.BillPay ? "payment(s)" : "transfer(s)")} of {s.Amount:C} to {s.Target} from {due:MMM d} were not made while the scheduler was offline. " +
+                        $"The one due {latest:MMM d} is being made now.", "/scheduled");
+                    _audit.Add("Schedule.Missed", $"Scheduled {s.Kind} #{s.Id}: {missed} date(s) from {due:yyyy-MM-dd} missed (not paid)", "ScheduledPayment", s.Id.ToString(),
+                               after: new { from = due, missed, next = latest });
+                    await _db.SaveChangesAsync();
+                    return new BankResult(true, reason);
+                }
+
                 if (s.SkipNext)
                 {
                     status = run.Status = ScheduledRunStatus.Skipped;
@@ -111,14 +139,32 @@ public partial class BankService
                 return new BankResult(true, moved.Message);
             });
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
             // The unique (item, date) index refused a second run: another scheduler run already paid it.
             _db.ChangeTracker.Clear();
             return new ScheduledOutcome(false, null, runDate, "Already processed by another run.");
         }
+        catch (Exception ex) when (IsBusy(ex))
+        {
+            // SQLite was busy for longer than the busy timeout: nothing was saved; the next tick tries again.
+            _db.ChangeTracker.Clear();
+            return new ScheduledOutcome(false, null, runDate, "Database busy; will try again next run.", ex);
+        }
+        catch (Exception ex) when (runDate != default)
+        {
+            // Anything else is a real problem with this item: mark that date Failed (with an alert) instead of
+            // silently retrying it every minute. The exception goes to the log.
+            _db.ChangeTracker.Clear();
+            var recorded = await RecordFailureAsync(scheduledPaymentId, runDate, "A system error stopped this payment. Nothing was moved.");
+            return recorded with { Error = ex };
+        }
 
         if (result.Message == NothingDue) return new ScheduledOutcome(false, null, null, NothingDue);
+        // Lost a race on the account balance (the Balance concurrency check). Nothing moved and nothing was
+        // recorded, so this is not a failure: the next tick runs the same date again.
+        if (!result.Success && result.Message == ConcurrencyMessage)
+            return new ScheduledOutcome(false, null, runDate, "Balance changed during the run; will try again next run.");
         if (result.Success) return new ScheduledOutcome(true, status, runDate, result.Message);
         return await RecordFailureAsync(scheduledPaymentId, runDate, failure ?? result.Message);
     }
@@ -152,12 +198,20 @@ public partial class BankService
             await tx.CommitAsync();
             return new ScheduledOutcome(true, ScheduledRunStatus.Failed, runDate, reason);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
             _db.ChangeTracker.Clear();
             return new ScheduledOutcome(false, null, runDate, "Already processed by another run.");
         }
     }
+
+    // SQLite error 19 (constraint) with "UNIQUE": the (item, date) run row already exists.
+    private static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is SqliteException { SqliteErrorCode: 19 } se && se.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase);
+
+    // SQLite error 5/6 (busy / locked), possibly wrapped by EF.
+    private static bool IsBusy(Exception ex) =>
+        (ex as SqliteException ?? ex.InnerException as SqliteException) is { SqliteErrorCode: 5 or 6 };
 
     private Task<ScheduledPayment?> LoadScheduleAsync(int id) =>
         _db.ScheduledPayments.Include(s => s.Payee).Include(s => s.ToAccount).FirstOrDefaultAsync(s => s.Id == id);

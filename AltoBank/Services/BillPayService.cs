@@ -194,6 +194,16 @@ public class BillPayService : IBillPayService
         if (s == null) return Fail("Scheduled payment not found.");
         if (s.Status != ScheduleStatus.Active) return Fail($"This item is {s.Status.ToString().ToLowerInvariant()} and can't be changed.");
         if (e.NextRunDate < BankTime.Today) return Fail("The next date can't be in the past.");
+        if (e.NextRunDate > BankTime.Today.AddYears(1)) return Fail("Schedule payments up to a year ahead.");
+        // The next date has to match the repeat pattern, or the schedule would quietly drift to a new day.
+        if (s.Frequency == ScheduleFrequency.Weekly && s.DayOfWeek is DayOfWeek dow && e.NextRunDate.DayOfWeek != dow)
+            return Fail($"This repeats every {dow}, so the next date must be a {dow}. To change the day, cancel it and schedule a new one.");
+        if (s.Frequency == ScheduleFrequency.Monthly && s.DayOfMonth is int dom
+            && e.NextRunDate != Recurrence.MonthDay(e.NextRunDate.Year, e.NextRunDate.Month, dom))
+            return Fail($"This repeats on {s.ScheduleText.ToLowerInvariant()}, so the next date must be that day of a month. To change the day, cancel it and schedule a new one.");
+        // Each date is processed once (that's what stops double payments), so a date that already ran can't be reused.
+        if (await _db.ScheduledRuns.AnyAsync(r => r.ScheduledPaymentId == s.Id && r.RunDate == e.NextRunDate))
+            return Fail($"This was already processed for {e.NextRunDate:MMM d}. Choose a later date, or use Pay now for a one-off payment.");
         if (e.EndDate is DateOnly end && end < e.NextRunDate) return Fail("The end date is before the next payment.");
         var from = await _db.Accounts.FirstOrDefaultAsync(a => a.Id == e.FromAccountId && a.UserId == userId);
         if (from == null || from.Status == AccountStatus.Closed) return Fail("Account not found.");

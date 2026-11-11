@@ -25,7 +25,9 @@ public static class Recurrence
     {
         DateOnly? next = s.Frequency switch
         {
-            ScheduleFrequency.Weekly => current.AddDays(7),
+            // The next chosen weekday AFTER current (always 7 days when current is on that weekday), so the
+            // item stays on its weekday even if a date ever got off it.
+            ScheduleFrequency.Weekly => First(ScheduleFrequency.Weekly, current.AddDays(1), s.DayOfWeek, null),
             ScheduleFrequency.Monthly => MonthDay(current.AddMonths(1).Year, current.AddMonths(1).Month, s.DayOfMonth ?? current.Day),
             _ => null
         };

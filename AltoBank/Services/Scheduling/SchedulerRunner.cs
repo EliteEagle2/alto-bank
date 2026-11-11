@@ -7,8 +7,8 @@ namespace AltoBank.Services.Scheduling;
 /// <summary>
 /// ONE scheduler run (every minute from SchedulerService, or the admin's "Run scheduler now"):
 ///   1. every Active scheduled item whose NextRunDate is today or earlier (bank time) is run through
-///      IBankService.ExecuteScheduledAsync, one date at a time, so missed dates after downtime are caught up
-///      (each date still at most once);
+///      IBankService.ExecuteScheduledAsync. After downtime, older missed dates are recorded as "missed" (no money
+///      moves) and only the most recent due date is paid; each date is handled at most once;
 ///   2. money requests older than 14 days are expired (with an alert to the requester);
 ///   3. a SchedulerRunLog row is saved (shown on the admin Scheduled Payments page).
 /// Each item runs in its OWN transaction, so one failure never undoes another payment.
@@ -20,16 +20,21 @@ public class SchedulerRunner : ISchedulerRunner
     private readonly ApplicationDbContext _db;
     private readonly IBankService _bank;
     private readonly IPaymentRequestService _requests;
+    private readonly ILogger<SchedulerRunner> _log;
 
-    public SchedulerRunner(ApplicationDbContext db, IBankService bank, IPaymentRequestService requests)
+    public SchedulerRunner(ApplicationDbContext db, IBankService bank, IPaymentRequestService requests, ILogger<SchedulerRunner> log)
     {
         _db = db;
         _bank = bank;
         _requests = requests;
+        _log = log;
     }
 
     public async Task<SchedulerRunSummary> RunAsync(string trigger, CancellationToken cancellationToken = default, string? triggeredBy = null)
     {
+        // Everything the scheduler does is the BANK acting, even when an admin pressed "Run scheduler now"
+        // (that request is audited separately, under the admin's name).
+        using var _ = AuditLogger.ActAs(new AuditActor(null, null, "System"));
         var started = DateTime.UtcNow;
         var today = BankTime.Today;
         int processed = 0, succeeded = 0, failed = 0, skipped = 0;
@@ -43,7 +48,18 @@ public class SchedulerRunner : ISchedulerRunner
         {
             for (int i = 0; i < MaxCatchUpPerItem && !cancellationToken.IsCancellationRequested; i++)
             {
-                var outcome = await _bank.ExecuteScheduledAsync(id, today);
+                ScheduledOutcome outcome;
+                try { outcome = await _bank.ExecuteScheduledAsync(id, today); }
+                catch (Exception ex)
+                {
+                    // One broken item must never stop the others (or the request expiry below).
+                    _log.LogError(ex, "Scheduler: scheduled item {Id} threw; moving on to the next item", id);
+                    _db.ChangeTracker.Clear();
+                    failed++;
+                    break;
+                }
+                if (outcome.Error != null)
+                    _log.LogError(outcome.Error, "Scheduler: scheduled item {Id} ({Date}): {Message}", id, outcome.RunDate, outcome.Message);
                 if (!outcome.Ran) break;
                 processed++;
                 switch (outcome.Status)
@@ -55,7 +71,9 @@ public class SchedulerRunner : ISchedulerRunner
             }
         }
 
-        var expired = await _requests.ExpireDueAsync();
+        var expired = 0;
+        try { expired = await _requests.ExpireDueAsync(); }
+        catch (Exception ex) { _log.LogError(ex, "Scheduler: expiring money requests failed"); _db.ChangeTracker.Clear(); }
         var summary = new SchedulerRunSummary(trigger, started, DateTime.UtcNow, processed, succeeded, failed, skipped, expired);
 
         _db.ChangeTracker.Clear();

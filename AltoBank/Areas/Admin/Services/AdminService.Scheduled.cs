@@ -60,12 +60,22 @@ public partial class AdminService
     /// <summary>
     /// "Run scheduler now". The run itself is many small transactions ON PURPOSE: each due payment is paid (or
     /// fails) in its own transaction, so one customer's failure can never roll back another's payment. The admin
-    /// action is then recorded (reason + what the run did) in its own transaction through ExecuteAsync.
+    /// action is recorded in two audited transactions through ExecuteAsync: "Scheduler.RunRequested" (with the
+    /// reason) BEFORE anything moves, so no money ever moves without the admin's request on record, then
+    /// "Scheduler.Run" with what the run did. The payments themselves are logged as "System" (the scheduler did
+    /// them), not as the admin.
     /// </summary>
     public async Task<(AdminResult Result, SchedulerRunSummary? Summary)> RunSchedulerNowAsync(string reason)
     {
         if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length < MinReasonLength)
             return (Fail($"A reason of at least {MinReasonLength} characters is required for this action."), null);
+
+        var requested = await ExecuteAsync(reason, true, () =>
+        {
+            _audit.Add("Scheduler.RunRequested", "Asked the scheduler to run now", "Scheduler", null, reason: reason);
+            return Task.FromResult(Ok("Requested."));
+        });
+        if (!requested.Success) return (requested, null);
 
         var summary = await _scheduler.RunAsync("admin", default, AdminEmail);
         var result = await ExecuteAsync(reason, true, () =>

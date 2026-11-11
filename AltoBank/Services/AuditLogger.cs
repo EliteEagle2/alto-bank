@@ -72,9 +72,30 @@ public class AuditLogger : IAuditLogger
         await _db.SaveChangesAsync();
     }
 
+    // Set by ActAs(...) for work the bank does on its own (the scheduler), even when an admin's request started it.
+    private static readonly AsyncLocal<AuditActor?> Override = new();
+
+    /// <summary>
+    /// Until the returned object is disposed, audit rows written on this async flow use <paramref name="actor"/>
+    /// instead of the logged-in user. Used by the scheduler so a bill it pays is logged as "System", not as the
+    /// admin who pressed "Run scheduler now".
+    /// </summary>
+    public static IDisposable ActAs(AuditActor actor)
+    {
+        var previous = Override.Value;
+        Override.Value = actor;
+        return new Restore(previous);
+    }
+
+    private sealed class Restore(AuditActor? previous) : IDisposable
+    {
+        public void Dispose() => Override.Value = previous;
+    }
+
     // The logged-in user making this request (or "System" when there's no web request, e.g. the seeder).
     private AuditActor CurrentActor()
     {
+        if (Override.Value is { } forced) return forced;
         var user = _http.HttpContext?.User;
         if (user?.Identity?.IsAuthenticated != true)
             return new AuditActor(null, null, _http.HttpContext == null ? "System" : "Anonymous");
