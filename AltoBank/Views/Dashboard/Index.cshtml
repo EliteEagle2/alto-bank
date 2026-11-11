@@ -4,17 +4,13 @@
 }
 
 <div class="container">
-    @* Greeting + total balance *@
-    <div class="page-head d-flex flex-wrap justify-content-between align-items-end gap-3">
-        <div>
-            <p class="text-muted-alto mb-1">@Model.Greeting,</p>
-            <h1 class="mb-0">@Model.FirstName <span class="text-gradient">👋</span></h1>
-        </div>
-        <div class="text-lg-end">
-            <div class="text-muted-alto small text-uppercase" style="letter-spacing:.14em">Total balance</div>
-            <div class="total-balance text-gradient"><money amount="@Model.TotalBalance" /></div>
-        </div>
-    </div>
+    @* Greeting + total balance, over the Ridgeline contour lines *@
+    <section class="balance-hero" aria-label="Total balance">
+        <p class="balance-hero-greeting">@Model.Greeting, @Model.FirstName</p>
+        <h1 class="visually-hidden">Dashboard</h1>
+        <div class="total-balance"><money amount="@Model.TotalBalance" /></div>
+        <p class="balance-hero-meta">Total across @Model.Accounts.Count(a => a.Status != AccountStatus.Closed) account@(Model.Accounts.Count(a => a.Status != AccountStatus.Closed) == 1 ? "" : "s")</p>
+    </section>
 
     <partial name="_QuickActions" />
 

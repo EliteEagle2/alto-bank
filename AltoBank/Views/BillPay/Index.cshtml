@@ -32,11 +32,11 @@
                 {
                     <form asp-action="Pay" method="post" id="payForm" novalidate>
                         <div class="row g-2 mb-3">
-                            <div class="col-sm-6">
+                            <div class="col-12">
                                 <label asp-for="Pay.PayeeId" class="form-label"></label>
                                 <select asp-for="Pay.PayeeId" asp-items="payeeOptions" class="form-select"><option value="">Choose a payee</option></select>
                             </div>
-                            <div class="col-sm-6">
+                            <div class="col-12">
                                 <label asp-for="Pay.FromAccountId" class="form-label"></label>
                                 <select asp-for="Pay.FromAccountId" asp-items="Model.FromAccounts" class="form-select"></select>
                             </div>

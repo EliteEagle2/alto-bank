@@ -36,10 +36,10 @@ pp /profile --data-urlencode Personal.FirstName=Jordan --data-urlencode Personal
    --data-urlencode "Personal.Apt=Apt 3B" -d Personal.City=Altoona -d Personal.State=PA -d Personal.Zip=16601 >/dev/null
 has "saved" "$(flash $C $B/profile)" "Profile updated"
 check "phone stored formatted" "$(sql "SELECT PhoneNumber FROM AspNetUsers WHERE Id = '$JID'")" "(814) 555-0142"
-has "dashboard greets the preferred name" "$(curl -s -b $C $B/dashboard)" '>Jo <span'
+has "dashboard greets the preferred name" "$(curl -s -b $C $B/dashboard)" ', Jo</p>'
 has "top bar shows it too" "$(curl -s -b $C $B/alerts)" 'ms-1">Jo</span>'
 check "audited (Profile.Update)" "$(sql "SELECT COUNT(*) FROM AuditLogs WHERE Action = 'Profile.Update' AND TargetId = '$JID'")" 1
-has "Maya's seeded preferred name" "$(curl -s -b $M $B/dashboard)" '>May <span'
+has "Maya's seeded preferred name" "$(curl -s -b $M $B/dashboard)" ', May</p>'
 
 echo "== Security"
 pp /Profile/Password --data-urlencode CurrentPassword=wrong --data-urlencode NewPassword=Better123! --data-urlencode ConfirmPassword=Better123! >/dev/null

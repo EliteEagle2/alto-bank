@@ -14,7 +14,7 @@
 
     Chart.defaults.color = color('--muted');
     Chart.defaults.font.family = 'Inter, system-ui, sans-serif';
-    Chart.defaults.borderColor = 'rgba(138,147,166,0.14)';
+    Chart.defaults.borderColor = 'rgba(135, 150, 174,0.14)';
 
     function draw(id, config) {
         const canvas = document.getElementById(id);
@@ -37,8 +37,8 @@
 
             const ctx = document.getElementById('txChart').getContext('2d');
             const fill = ctx.createLinearGradient(0, 0, 0, 260);
-            fill.addColorStop(0, 'rgba(124,77,255,0.40)');
-            fill.addColorStop(1, 'rgba(0,229,255,0.02)');
+            fill.addColorStop(0, 'rgba(143, 184, 232,0.40)');
+            fill.addColorStop(1, 'rgba(242, 181, 68,0.02)');
             draw('txChart', {
                 type: 'line',
                 data: { labels: perDay.map(d => shortDate(d.date)),
@@ -54,7 +54,7 @@
             draw('typeChart', {
                 type: 'doughnut',
                 data: { labels: types, datasets: [{ data: types.map(t => s.depositsByType[t]),
-                        backgroundColor: [color('--accent'), color('--primary'), color('--success')], borderColor: '#141A2A', borderWidth: 3 }] },
+                        backgroundColor: [color('--accent'), color('--primary'), color('--success')], borderColor: '#18233A', borderWidth: 3 }] },
                 options: { maintainAspectRatio: false, cutout: '64%',
                            plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: c => `${c.label}: ${money(c.parsed)}` } } } }
             });

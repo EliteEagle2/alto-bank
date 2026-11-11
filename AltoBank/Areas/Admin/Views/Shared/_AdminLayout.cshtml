@@ -35,7 +35,8 @@
 
             <div class="ms-auto d-flex align-items-center gap-2">
                 <a class="btn admin-icon-btn d-none d-sm-grid" href="/swagger" target="_blank" rel="noopener" title="API docs (Swagger)" aria-label="API docs (Swagger)"><i class="bi bi-braces"></i></a>
-                <a class="btn admin-icon-btn d-none d-sm-grid" asp-area="" asp-controller="Home" asp-action="Index" target="_blank" title="Customer website" aria-label="Customer website"><i class="bi bi-box-arrow-up-right"></i></a>
+                @* Back to Alto's home page (same tab). The public site's top bar links back here ("Admin console"). *@
+                <a class="btn admin-home-btn" asp-area="" asp-controller="Home" asp-action="Index" title="Alto home page" aria-label="Alto home page"><i class="bi bi-house-door"></i><span class="d-none d-lg-inline">Home</span></a>
                 <div class="dropdown">
                     <button class="btn admin-user-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                         <span class="admin-avatar">@(me?.FirstName.FirstOrDefault())</span>
@@ -70,7 +71,7 @@
         <div class="console-page-head">
             <div class="min-w-0">
                 <div class="admin-crumb">Alto Bank Admin@(group != null ? " / " + group : "")</div>
-                <h1 class="admin-title text-truncate">@ViewData["Title"]</h1>
+                <h1 class="admin-title text-truncate @(ViewData["OwnHeading"] is true ? "visually-hidden" : "")">@ViewData["Title"]</h1>
             </div>
             @if (IsSectionDefined("PageActions"))
             {

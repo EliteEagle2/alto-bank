@@ -31,7 +31,7 @@
             },
             scales: {
                 x: { stacked: true, grid: { display: false }, ticks: { maxTicksLimit: 6 } },
-                y: { stacked: true, grid: { color: 'rgba(138,147,166,0.12)' }, ticks: { callback: v => money(Math.abs(v)).replace('.00', '') } }
+                y: { stacked: true, grid: { color: 'rgba(135, 150, 174,0.12)' }, ticks: { callback: v => money(Math.abs(v)).replace('.00', '') } }
             }
         }
     });

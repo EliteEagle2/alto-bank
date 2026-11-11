@@ -36,7 +36,7 @@
     // ---------- Confetti (pure CSS animation on generated <i> elements) ----------
     function confetti() {
         if (reducedMotion) return;
-        const colors = ['#00E5FF', '#7C4DFF', '#2EF2B0', '#E6EAF2', '#FF4D6D'];
+        const colors = ['#F2B544', '#8FB8E8', '#4CC38A', '#DCE6F2', '#EF6B5B'];
         const layer = document.createElement('div');
         layer.className = 'confetti-layer';
         layer.setAttribute('aria-hidden', 'true');

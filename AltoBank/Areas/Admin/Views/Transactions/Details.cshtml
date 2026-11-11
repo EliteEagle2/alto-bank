@@ -1,4 +1,5 @@
 @model TransactionDetailViewModel
+@{ ViewData["OwnHeading"] = true; /* this page shows its own heading (name, status, actions), so the layout title is for screen readers only */ }
 @{
     var t = Model.Transaction;
     var a = t.Account!;

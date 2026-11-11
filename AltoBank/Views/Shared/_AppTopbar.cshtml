@@ -18,6 +18,8 @@
 
     <div class="ms-auto d-flex align-items-center gap-2">
         <span class="secure-pill d-none d-md-inline-flex"><i class="bi bi-shield-lock-fill"></i>Secure session</span>
+        @* Back to Alto's home page. The public site's top bar links back here ("Dashboard"). *@
+        <a class="btn btn-alto-ghost home-btn" asp-controller="Home" asp-action="Index" title="Alto home page" aria-label="Alto home page"><i class="bi bi-house-door"></i><span class="d-none d-xl-inline">Home</span></a>
         @* Privacy mode: blur balances on this screen (the default comes from Profile → Preferences). *@
         <button type="button" class="btn btn-alto-ghost btn-icon" data-privacy-toggle aria-pressed="false" title="Hide balances" aria-label="Hide balances"><i class="bi bi-eye"></i></button>
         <a class="btn btn-alto-ghost btn-icon bell-btn" asp-controller="Alerts" asp-action="Index"
