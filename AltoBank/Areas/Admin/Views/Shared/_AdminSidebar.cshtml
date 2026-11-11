@@ -1,45 +1,40 @@
-@* Admin navigation. Always visible on large screens; a slide-out drawer (Bootstrap offcanvas-lg) on phones. *@
+@* ADMIN NAVIGATION (every admin page links here; add new admin pages to the groups below).
+   Unlike the customer site's left sidebar, the admin console uses a horizontal, grouped bar under the
+   header on large screens. On phones/tablets the same markup becomes a slide-out drawer
+   (Bootstrap "offcanvas-lg"), opened by the menu button in the console bar. *@
 @{
     var controller = ViewContext.RouteData.Values["controller"]?.ToString();
-    string Active(string c) => string.Equals(controller, c, StringComparison.OrdinalIgnoreCase) ? "active" : "";
-    var links = new[]
-    {
-        (Controller: "Dashboard", Icon: "bi-speedometer2", Text: "Overview"),
-        (Controller: "Customers", Icon: "bi-people", Text: "Customers"),
-        (Controller: "Accounts", Icon: "bi-wallet2", Text: "Accounts"),
-        (Controller: "Transactions", Icon: "bi-arrow-left-right", Text: "Transactions"),
-        (Controller: "Payments", Icon: "bi-send", Text: "P2P Payments"),
-        (Controller: "Scheduled", Icon: "bi-calendar-week", Text: "Scheduled Payments"),
-        (Controller: "Applications", Icon: "bi-file-earmark-check", Text: "Applications"),
-        (Controller: "Settings", Icon: "bi-sliders", Text: "Settings"),
-        (Controller: "AuditLog", Icon: "bi-journal-text", Text: "Audit Log"),
-    };
+    bool IsActive(string c) => string.Equals(controller, c, StringComparison.OrdinalIgnoreCase);
+    var groups = AdminNav.Groups;
 }
-<div class="admin-sidebar-wrap">
-    <aside class="admin-sidebar offcanvas-lg offcanvas-start" tabindex="-1" id="adminSidebar" aria-label="Admin navigation">
-        <div class="offcanvas-header">
-            <span class="admin-brand"><partial name="_Logo" /><span class="admin-brand-tag">Admin</span></span>
-            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#adminSidebar" aria-label="Close"></button>
+<nav class="console-nav offcanvas-lg offcanvas-start" tabindex="-1" id="adminSidebar" aria-label="Admin navigation">
+    <div class="offcanvas-header">
+        <span class="admin-brand"><partial name="_Logo" /><span class="admin-brand-tag">Admin</span></span>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#adminSidebar" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <form class="console-search d-md-none mb-3" method="get" asp-area="Admin" asp-controller="Customers" asp-action="Index" role="search">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input name="search" class="form-control" placeholder="Find a customer" aria-label="Find a customer by name or email" />
+        </form>
+        <div class="cn-groups">
+            @foreach (var g in groups)
+            {
+                <div class="cn-group">
+                    @if (g.Label != null) { <span class="cn-label">@g.Label</span> }
+                    @foreach (var l in g.Links)
+                    {
+                        <a class="admin-link @(IsActive(l.Controller) ? "active" : "")" asp-area="Admin" asp-controller="@l.Controller" asp-action="Index"
+                           aria-current="@(IsActive(l.Controller) ? "page" : null)">
+                            <i class="bi @l.Icon" aria-hidden="true"></i><span>@l.Text</span>
+                        </a>
+                    }
+                </div>
+            }
         </div>
-        <div class="offcanvas-body d-flex flex-column">
-            <a class="admin-brand d-none d-lg-flex" asp-area="Admin" asp-controller="Dashboard" asp-action="Index">
-                <partial name="_Logo" /><span class="admin-brand-tag">Admin</span>
-            </a>
-
-            <nav class="admin-nav">
-                @foreach (var l in links)
-                {
-                    <a class="admin-link @Active(l.Controller)" asp-area="Admin" asp-controller="@l.Controller" asp-action="Index"
-                       aria-current="@(Active(l.Controller) == "active" ? "page" : null)">
-                        <i class="bi @l.Icon"></i><span>@l.Text</span>
-                    </a>
-                }
-            </nav>
-
-            <div class="mt-auto admin-sidebar-foot">
-                <a class="admin-link" href="/swagger" target="_blank" rel="noopener"><i class="bi bi-braces"></i><span>API docs</span></a>
-                <a class="admin-link" asp-area="" asp-controller="Home" asp-action="Index" target="_blank"><i class="bi bi-box-arrow-up-right"></i><span>Customer website</span></a>
-            </div>
+        <div class="cn-drawer-foot d-lg-none">
+            <a class="admin-link" href="/swagger" target="_blank" rel="noopener"><i class="bi bi-braces"></i><span>API docs</span></a>
+            <a class="admin-link" asp-area="" asp-controller="Home" asp-action="Index" target="_blank"><i class="bi bi-box-arrow-up-right"></i><span>Customer website</span></a>
         </div>
-    </aside>
-</div>
+    </div>
+</nav>

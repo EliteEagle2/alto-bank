@@ -69,6 +69,11 @@ public class OverviewViewModel
     public List<Account> FrozenList { get; set; } = new();
     public List<Transaction> LargeTransactions { get; set; } = new();
     public List<AccountApplication> RecentApplications { get; set; } = new();
+    // Operations console additions
+    public List<ScheduledPayment> FailedScheduled { get; set; } = new();   // scheduled items whose last run failed (7 days)
+    public List<AuditLog> RecentAdminActivity { get; set; } = new();       // latest actions by staff
+    public DateTime? SchedulerLastRunAt { get; set; }
+    public string? SchedulerLastRunSummary { get; set; }
 }
 
 // ============================================================================

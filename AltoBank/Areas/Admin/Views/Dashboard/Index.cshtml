@@ -1,31 +1,136 @@
 @model OverviewViewModel
-@* ADMIN OVERVIEW (/admin). KPI tiles are rendered on the server; the charts load from GET /api/admin/stats
-   (wwwroot/js/admin-overview.js). "Needs attention" lists pending applications, frozen accounts and large transactions. *@
+@* ADMIN OVERVIEW (/admin) — an operations console, not a copy of the customer dashboard:
+     1. stat strip (one panel, six cells)
+     2. WORK QUEUE: everything that needs a person (pending applications, frozen accounts, failed scheduled
+        payments, large transactions) in one sortable list with filter chips, plus a System panel
+        (scheduler health) and the latest admin actions from the audit log
+     3. trends (charts load from GET /api/admin/stats via wwwroot/js/admin-overview.js)
+     4. recent applications *@
 @{
     string Fmt(decimal v) => v.ToString("C0");
+    string Ago(DateTime? utc)
+    {
+        if (utc is not DateTime u) return "";
+        var s = DateTime.UtcNow - u;
+        return s.TotalMinutes < 1 ? "just now" : s.TotalMinutes < 60 ? $"{(int)s.TotalMinutes}m ago"
+             : s.TotalHours < 24 ? $"{(int)s.TotalHours}h ago" : s.TotalDays < 7 ? $"{(int)s.TotalDays}d ago"
+             : BankTime.ToLocal(u).ToString("MMM d");
+    }
     var byType = string.Join(" · ", Model.AccountsByType.Select(kv => $"{kv.Value} {kv.Key.ToLowerInvariant()}"));
     var tiles = new[]
     {
         new KpiTileViewModel("customers", "Customers", "bi-people", Model.Customers.ToString("N0"), LinkController: "Customers"),
         new KpiTileViewModel("deposits", "Total deposits", "bi-bank", Fmt(Model.TotalDeposits), "open accounts only"),
-        new KpiTileViewModel("accounts", "Accounts by type", "bi-wallet2", Model.AccountsByType.Values.Sum().ToString("N0"), byType, LinkController: "Accounts"),
+        new KpiTileViewModel("accounts", "Accounts", "bi-wallet2", Model.AccountsByType.Values.Sum().ToString("N0"), byType, LinkController: "Accounts"),
         new KpiTileViewModel("today", "Transactions today", "bi-activity", Model.TransactionsToday.ToString("N0"), LinkController: "Transactions"),
         new KpiTileViewModel("pending", "Pending applications", "bi-hourglass-split", Model.PendingApplications.ToString("N0"),
-            Tone: Model.PendingApplications > 0 ? "warn" : "good", LinkController: "Applications",
-            LinkQuery: new Dictionary<string, string> { ["status"] = "Pending" }),
+            Model.PendingApplications > 0 ? "waiting for review" : "queue clear", Model.PendingApplications > 0 ? "warn" : "good", "Applications",
+            new Dictionary<string, string> { ["status"] = "Pending" }),
         new KpiTileViewModel("frozen", "Frozen accounts", "bi-snow", Model.FrozenAccounts.ToString("N0"),
-            Tone: Model.FrozenAccounts > 0 ? "danger" : "good", LinkController: "Accounts",
-            LinkQuery: new Dictionary<string, string> { ["status"] = "Frozen" }),
+            Model.FrozenAccounts > 0 ? "customers can't send" : "none", Model.FrozenAccounts > 0 ? "danger" : "good", "Accounts",
+            new Dictionary<string, string> { ["status"] = "Frozen" }),
     };
+
+    // One work queue across every kind of item that needs an admin, newest first.
+    var queue = new List<(string Kind, string Icon, string Tone, string Who, string What, DateTime? When, string Url, string Action)>();
+    foreach (var a in Model.PendingList)
+        queue.Add(("app", "bi-file-earmark-check", "warn", $"{a.FirstName} {a.LastName}", $"{a.AccountType} application · {a.OpeningDeposit:C} opening deposit",
+                   a.SubmittedAt, Url.Action("Details", "Applications", new { area = "Admin", id = a.Id })!, "Review"));
+    foreach (var a in Model.FrozenList)
+        queue.Add(("frozen", "bi-snow", "danger", $"{a.User?.FirstName} {a.User?.LastName}", $"{a.DisplayName} ••{a.Last4} is frozen",
+                   a.StatusChangedAt, Url.Action("Details", "Accounts", new { area = "Admin", id = a.Id })!, "Open"));
+    foreach (var s in Model.FailedScheduled)
+        queue.Add(("failed", "bi-exclamation-octagon", "danger", $"{s.User?.FirstName} {s.User?.LastName}", $"{s.Amount:C} to {s.Target} failed: {s.LastFailureReason}",
+                   s.LastRunAt, Url.Action("Index", "Scheduled", new { area = "Admin", failures = true, customer = s.User?.LastName })!, "Inspect"));
+    foreach (var t in Model.LargeTransactions)
+        queue.Add(("large", "bi-cash-stack", "info", $"{t.Account?.User?.FirstName} {t.Account?.User?.LastName}", $"{t.SignedAmount:+$#,0.00;-$#,0.00} · {t.Description}",
+                   t.Date, Url.Action("Details", "Transactions", new { area = "Admin", id = t.Id })!, "Review"));
+    queue = queue.OrderByDescending(q => q.When ?? DateTime.MinValue).ToList();
+    var kinds = new[] { ("all", "All", queue.Count), ("app", "Applications", Model.PendingList.Count), ("frozen", "Frozen", Model.FrozenList.Count),
+                        ("failed", "Failed payments", Model.FailedScheduled.Count), ("large", $"Large ≥ {Fmt(Model.LargeThreshold)}", Model.LargeTransactions.Count) };
+    var schedulerOk = Model.SchedulerLastRunAt is DateTime last && DateTime.UtcNow - last < TimeSpan.FromMinutes(5);
 }
 
+@section PageActions {
+    <a class="btn btn-admin-ghost btn-sm" asp-controller="Applications" asp-action="Index" asp-route-status="Pending"><i class="bi bi-file-earmark-check me-1"></i>Review applications</a>
+    <a class="btn btn-admin-ghost btn-sm" asp-controller="Scheduled" asp-action="Index"><i class="bi bi-calendar-week me-1"></i>Scheduler</a>
+    <a class="btn btn-admin btn-sm" asp-controller="AuditLog" asp-action="Index"><i class="bi bi-journal-text me-1"></i>Audit log</a>
+}
+
+@* ===== 1. Stat strip ===== *@
+<section class="kpi-strip mb-3" aria-label="Key numbers">
+    @foreach (var tile in tiles) { <partial name="_KpiTile" model="tile" /> }
+</section>
+
+@* ===== 2. Work queue + system ===== *@
 <div class="row g-3 mb-3">
-    @foreach (var tile in tiles)
-    {
-        <div class="col-6 col-md-4 col-xxl-2"><partial name="_KpiTile" model="tile" /></div>
-    }
+    <div class="col-xl-8">
+        <section class="admin-card p-0 h-100" data-queue aria-labelledby="queueTitle">
+            <div class="admin-card-head px-3 pt-3 mb-2">
+                <h2 id="queueTitle"><i class="bi bi-inboxes me-1 text-accent-admin"></i>Work queue <span class="queue-count">@queue.Count</span></h2>
+                <span class="small text-muted-alto">items that need a person, newest first</span>
+            </div>
+            <div class="queue-chips px-3" role="group" aria-label="Filter the work queue">
+                @foreach (var (key, label, count) in kinds)
+                {
+                    <button type="button" class="queue-chip" data-queue-filter="@key" aria-pressed="@(key == "all" ? "true" : "false")">@label <span>@count</span></button>
+                }
+            </div>
+            <ul class="queue-list">
+                @foreach (var q in queue)
+                {
+                    <li class="queue-row" data-kind="@q.Kind">
+                        <span class="queue-icon tone-@q.Tone" aria-hidden="true"><i class="bi @q.Icon"></i></span>
+                        <div class="min-w-0 flex-grow-1">
+                            <div class="fw-semibold text-truncate">@q.Who</div>
+                            <div class="small text-muted-alto text-truncate" title="@q.What">@q.What</div>
+                        </div>
+                        <span class="queue-when small text-muted-alto">@Ago(q.When)</span>
+                        <a class="btn btn-admin-ghost btn-sm" href="@q.Url">@q.Action</a>
+                    </li>
+                }
+            </ul>
+            <div class="queue-empty" data-queue-empty @(queue.Any() ? "hidden" : "")>
+                <i class="bi bi-check2-circle"></i>Nothing waiting. The queue is clear.
+            </div>
+        </section>
+    </div>
+
+    <div class="col-xl-4 d-flex flex-column gap-3">
+        <section class="admin-card" aria-labelledby="sysTitle">
+            <div class="admin-card-head"><h2 id="sysTitle"><i class="bi bi-cpu me-1 text-accent-admin"></i>System</h2></div>
+            <dl class="sys-list">
+                <div><dt><span class="cs-dot @(schedulerOk ? "ok" : "bad")" aria-hidden="true"></span>Scheduler</dt>
+                    <dd>@(Model.SchedulerLastRunAt is DateTime ranAt ? $"ran {Ago(ranAt)}" : "hasn't run yet") <span class="visually-hidden">@(schedulerOk ? "(healthy)" : "(not running)")</span></dd></div>
+                @if (Model.SchedulerLastRunSummary != null)
+                {
+                    <div><dt>Last run</dt><dd class="small">@Model.SchedulerLastRunSummary</dd></div>
+                }
+                <div><dt>Large-transaction alert</dt><dd>≥ @Fmt(Model.LargeThreshold)</dd></div>
+                <div><dt>Bank time zone</dt><dd>@BankTime.Zone.Id</dd></div>
+            </dl>
+            <a class="small" asp-controller="Scheduled" asp-action="Index">Scheduled payments <i class="bi bi-arrow-right"></i></a>
+        </section>
+
+        <section class="admin-card flex-grow-1" aria-labelledby="actTitle">
+            <div class="admin-card-head"><h2 id="actTitle"><i class="bi bi-person-badge me-1 text-accent-admin"></i>Recent admin activity</h2><a class="small" asp-controller="AuditLog" asp-action="Index">All</a></div>
+            @if (!Model.RecentAdminActivity.Any()) { <p class="small text-muted-alto mb-0">No admin actions yet.</p> }
+            <ol class="activity-feed">
+                @foreach (var l in Model.RecentAdminActivity)
+                {
+                    <li>
+                        <div class="d-flex justify-content-between gap-2"><code>@l.Action</code><span class="small text-muted-alto text-nowrap">@Ago(l.Timestamp)</span></div>
+                        <div class="small text-truncate" title="@l.Summary">@l.Summary</div>
+                        <div class="small text-muted-alto text-truncate">@l.ActorEmail@(l.Reason != null ? " · “" + l.Reason + "”" : "")</div>
+                    </li>
+                }
+            </ol>
+        </section>
+    </div>
 </div>
 
+@* ===== 3. Trends ===== *@
+<h2 class="console-section">Trends</h2>
 <div class="row g-3 mb-3">
     <div class="col-xl-8">
         <div class="admin-card h-100">
@@ -56,70 +161,31 @@
         </div>
     </div>
 
-    @* ----- Needs attention ----- *@
+    @* ===== 4. Recent applications ===== *@
     <div class="col-xl-7">
-        <div class="admin-card h-100">
-            <div class="admin-card-head"><h2><i class="bi bi-exclamation-triangle text-warning me-1"></i>Needs attention</h2></div>
-            <div class="row g-3">
-                <div class="col-md-4">
-                    <div class="kpi-label mb-1">Pending applications</div>
-                    @if (!Model.PendingList.Any()) { <p class="small text-muted-alto">None waiting.</p> }
-                    <ul class="attention-list">
-                        @foreach (var app in Model.PendingList)
+        <div class="admin-card p-0 h-100">
+            <div class="admin-card-head px-3 pt-3"><h2>Recent applications</h2><a class="small" asp-controller="Applications" asp-action="Index">View all</a></div>
+            <div class="table-responsive">
+                <table class="table admin-table mb-0">
+                    <thead><tr><th>Submitted</th><th>Applicant</th><th>Product</th><th class="text-end">Deposit</th><th>Status</th></tr></thead>
+                    <tbody>
+                        @foreach (var app in Model.RecentApplications)
                         {
-                            <li><a asp-controller="Applications" asp-action="Details" asp-route-id="@app.Id">@app.FirstName @app.LastName</a>
-                                <span class="small text-muted-alto">@app.AccountType</span></li>
+                            <tr>
+                                <td class="text-nowrap">@BankTime.ToLocal(app.SubmittedAt).ToString("MMM d, h:mm tt")</td>
+                                <td><a asp-controller="Applications" asp-action="Details" asp-route-id="@app.Id">@app.FirstName @app.LastName</a><div class="small text-muted-alto">@app.User?.Email</div></td>
+                                <td>@app.AccountType</td>
+                                <td class="text-end"><money amount="@app.OpeningDeposit" /></td>
+                                <td><partial name="_StatusPill" model="app.Status.ToString()" /></td>
+                            </tr>
                         }
-                    </ul>
-                </div>
-                <div class="col-md-4">
-                    <div class="kpi-label mb-1">Frozen accounts</div>
-                    @if (!Model.FrozenList.Any()) { <p class="small text-muted-alto">No frozen accounts.</p> }
-                    <ul class="attention-list">
-                        @foreach (var a in Model.FrozenList)
-                        {
-                            <li><a asp-area="Admin" asp-controller="Accounts" asp-action="Details" asp-route-id="@a.Id">••@a.Last4</a>
-                                <span class="small text-muted-alto">@a.User?.FirstName @a.User?.LastName</span></li>
-                        }
-                    </ul>
-                </div>
-                <div class="col-md-4">
-                    <div class="kpi-label mb-1">Large (≥ @Fmt(Model.LargeThreshold), 30 days)</div>
-                    @if (!Model.LargeTransactions.Any()) { <p class="small text-muted-alto">None.</p> }
-                    <ul class="attention-list">
-                        @foreach (var t in Model.LargeTransactions)
-                        {
-                            <li><a asp-controller="Transactions" asp-action="Details" asp-route-id="@t.Id"><money amount="@t.SignedAmount" colorize="true" show-sign="true" /></a>
-                                <span class="small text-muted-alto">@t.Account?.User?.FirstName</span></li>
-                        }
-                    </ul>
-                </div>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 </div>
 <div class="alert alert-alto-error d-none" id="statsError" role="alert"></div>
-
-<div class="admin-card p-0">
-    <div class="admin-card-head px-3 pt-3"><h2>Recent applications</h2><a class="small" asp-controller="Applications" asp-action="Index">View all</a></div>
-    <div class="table-responsive">
-        <table class="table admin-table mb-0">
-            <thead><tr><th>Submitted</th><th>Applicant</th><th>Product</th><th class="text-end">Deposit</th><th>Status</th></tr></thead>
-            <tbody>
-                @foreach (var app in Model.RecentApplications)
-                {
-                    <tr>
-                        <td class="text-nowrap">@BankTime.ToLocal(app.SubmittedAt).ToString("MMM d, h:mm tt")</td>
-                        <td><a asp-controller="Applications" asp-action="Details" asp-route-id="@app.Id">@app.FirstName @app.LastName</a><div class="small text-muted-alto">@app.User?.Email</div></td>
-                        <td>@app.AccountType</td>
-                        <td class="text-end"><money amount="@app.OpeningDeposit" /></td>
-                        <td><partial name="_StatusPill" model="app.Status.ToString()" /></td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</div>
 
 @section Scripts {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>

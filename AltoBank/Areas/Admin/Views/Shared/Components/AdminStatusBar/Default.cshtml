@@ -1,0 +1,32 @@
+@model AltoBank.Areas.Admin.ViewComponents.AdminStatusBarModel
+@* Admin status strip (AdminStatusBarViewComponent). Each count links to the page that clears it. *@
+@{
+    string Ago(DateTime utc)
+    {
+        var span = DateTime.UtcNow - utc;
+        return span.TotalSeconds < 60 ? "just now"
+             : span.TotalMinutes < 60 ? $"{(int)span.TotalMinutes} min ago"
+             : span.TotalHours < 24 ? $"{(int)span.TotalHours} h ago"
+             : BankTime.ToLocal(utc).ToString("MMM d, h:mm tt");
+    }
+}
+<div class="console-status" role="status" aria-label="System status">
+    <div class="console-status-inner">
+        <span class="cs-item"><i class="bi bi-clock"></i>@Model.BankNow.ToString("ddd, MMM d · h:mm tt") <span class="cs-dim">bank time</span></span>
+        <a class="cs-item" asp-area="Admin" asp-controller="Scheduled" asp-action="Index">
+            <span class="cs-dot @(Model.SchedulerHealthy ? "ok" : "bad")" aria-hidden="true"></span>
+            Scheduler <span class="cs-dim">@(Model.SchedulerLastRunAt is DateTime t ? "ran " + Ago(t) : "hasn't run yet")</span>
+        </a>
+        <span class="cs-sep" aria-hidden="true"></span>
+        <a class="cs-item @(Model.PendingApplications > 0 ? "cs-warn" : "")" asp-area="Admin" asp-controller="Applications" asp-action="Index" asp-route-status="Pending">
+            <i class="bi bi-hourglass-split"></i><strong>@Model.PendingApplications</strong> pending application@(Model.PendingApplications == 1 ? "" : "s")
+        </a>
+        <a class="cs-item @(Model.FrozenAccounts > 0 ? "cs-warn" : "")" asp-area="Admin" asp-controller="Accounts" asp-action="Index" asp-route-status="Frozen">
+            <i class="bi bi-snow"></i><strong>@Model.FrozenAccounts</strong> frozen
+        </a>
+        <a class="cs-item @(Model.FailedPayments > 0 ? "cs-bad" : "")" asp-area="Admin" asp-controller="Scheduled" asp-action="Index" asp-route-failures="true">
+            <i class="bi bi-exclamation-octagon"></i><strong>@Model.FailedPayments</strong> failed payment@(Model.FailedPayments == 1 ? "" : "s") <span class="cs-dim">(7 days)</span>
+        </a>
+        <span class="cs-item ms-lg-auto cs-env"><i class="bi bi-shield-lock-fill"></i>Staff only · demo environment</span>
+    </div>
+</div>

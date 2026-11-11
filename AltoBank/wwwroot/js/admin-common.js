@@ -1,10 +1,35 @@
-// Shared admin portal behavior (loaded by _AdminLayout on every /admin page).
+// Shared admin console behavior (loaded by _AdminLayout on every /admin page).
 (function () {
     'use strict';
 
-    // Close the mobile sidebar drawer after a link is tapped.
+    // Close the mobile navigation drawer after a link is tapped.
     document.querySelectorAll('#adminSidebar .admin-link').forEach(a => a.addEventListener('click', () => {
         const drawer = window.bootstrap && bootstrap.Offcanvas.getInstance(document.getElementById('adminSidebar'));
         if (drawer) drawer.hide();
     }));
+
+    // Press "/" anywhere (outside a form field) to jump to the customer search.
+    const search = document.querySelector('.console-top .console-search input');
+    document.addEventListener('keydown', e => {
+        if (e.key !== '/' || !search || e.ctrlKey || e.metaKey || e.altKey) return;
+        const t = e.target;
+        if (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+        e.preventDefault();
+        search.focus();
+    });
+
+    // Overview work queue: filter chips (All / Applications / Frozen / ...).
+    const queue = document.querySelector('[data-queue]');
+    if (queue) {
+        const chips = queue.querySelectorAll('[data-queue-filter]');
+        const rows = queue.querySelectorAll('[data-kind]');
+        const empty = queue.querySelector('[data-queue-empty]');
+        chips.forEach(chip => chip.addEventListener('click', () => {
+            const kind = chip.dataset.queueFilter;
+            chips.forEach(c => c.setAttribute('aria-pressed', c === chip ? 'true' : 'false'));
+            let shown = 0;
+            rows.forEach(r => { const on = kind === 'all' || r.dataset.kind === kind; r.hidden = !on; if (on) shown++; });
+            if (empty) empty.hidden = shown > 0;
+        }));
+    }
 })();

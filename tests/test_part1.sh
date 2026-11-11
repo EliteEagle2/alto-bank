@@ -39,7 +39,7 @@ AP=$(curl -s -b $A $B/admin)
 has "admin layout branding" "$AP" "Alto Bank Admin"
 has "admin stylesheet" "$AP" "/css/admin.css"
 for item in Overview Customers Accounts Transactions Applications Settings "Audit Log"; do has "sidebar: $item" "$AP" "<span>$item</span>"; done
-check "KPI tiles (partial)" "$(printf '%s' "$AP" | grep -c 'class="admin-card kpi-tile')" 6
+check "stat strip cells (partial)" "$(printf '%s' "$AP" | grep -c 'class="kpi-cell')" 6
 has "overview recent applications" "$AP" "Recent applications"
 check "admin /api/admin/stats -> 200" "$(code -b $A $B/api/admin/stats)" 200
 has "stats JSON" "$(curl -s -b $A $B/api/admin/stats)" '"totalCustomers":3'

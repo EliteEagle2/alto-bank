@@ -23,9 +23,9 @@ check "customer POST to admin action rejected" "$(code -b $C -X POST $B/admin/ac
 
 echo "== Overview + stats"
 OV=$(curl -s -b $A $B/admin)
-check "6 KPI tiles" "$(echo "$OV" | grep -c 'class="admin-card kpi-tile')" 6
+check "6 stat strip cells" "$(echo "$OV" | grep -c 'class="kpi-cell')" 6
 has "pending applications tile = 1" "$OV" 'data-kpi="pending">1<'
-has "needs-attention panel" "$OV" "Needs attention"
+has "work queue panel" "$OV" "Work queue"
 ST=$(curl -s -b $A "$B/api/admin/stats")
 check "stats: 12 weeks of new accounts" "$(echo "$ST" | grep -o '"weekStart"' | wc -l | tr -d ' ')" 12
 has "stats: deposits by type" "$ST" '"depositsByType":{"Checking"'

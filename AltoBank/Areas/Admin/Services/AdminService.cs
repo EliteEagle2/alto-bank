@@ -66,6 +66,7 @@ public partial class AdminService : IAdminService
         var recentAmounts = await _db.Transactions.AsNoTracking().Where(t => t.Date >= since)
             .Select(t => new { t.Id, t.Amount }).ToListAsync();
         var largeIds = recentAmounts.Where(t => t.Amount >= settings.LargeTransactionThreshold).Select(t => t.Id).ToList();
+        var weekAgo = DateTime.UtcNow.AddDays(-7);
 
         return new OverviewViewModel
         {
@@ -84,7 +85,14 @@ public partial class AdminService : IAdminService
             LargeTransactions = await _db.Transactions.AsNoTracking().Include(t => t.Account!).ThenInclude(a => a.User)
                 .Where(t => largeIds.Contains(t.Id)).OrderByDescending(t => t.Date).Take(6).ToListAsync(),
             RecentApplications = await _db.AccountApplications.AsNoTracking().Include(a => a.User)
-                .OrderByDescending(a => a.SubmittedAt).Take(6).ToListAsync()
+                .OrderByDescending(a => a.SubmittedAt).Take(6).ToListAsync(),
+            FailedScheduled = await _db.ScheduledPayments.AsNoTracking().Include(s => s.User).Include(s => s.Payee).Include(s => s.ToAccount)
+                .Where(s => s.LastRunStatus == ScheduledRunStatus.Failed && s.LastRunAt >= weekAgo)
+                .OrderByDescending(s => s.LastRunAt).Take(6).ToListAsync(),
+            RecentAdminActivity = await _db.AuditLogs.AsNoTracking().Where(l => l.ActorRole == "Admin")
+                .OrderByDescending(l => l.Id).Take(8).ToListAsync(),
+            SchedulerLastRunAt = settings.SchedulerLastRunAt,
+            SchedulerLastRunSummary = settings.SchedulerLastRunSummary
         };
     }
 
