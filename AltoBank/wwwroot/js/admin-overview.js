@@ -8,7 +8,7 @@
 
     const css = getComputedStyle(document.documentElement);
     const color = name => css.getPropertyValue(name).trim();
-    const money = v => v.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+    const money = v => v.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });   // money always shows cents
     const shortDate = d => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const charts = {};
 

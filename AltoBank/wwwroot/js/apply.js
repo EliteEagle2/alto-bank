@@ -31,7 +31,7 @@
     const TITLES = ['Account', 'About you', 'Contact & address', 'Employment', 'Verify identity', 'Fund account', 'Review & sign'];
     const LAST = 7;
     const CITIZENSHIP = { US: 'U.S. citizen', PR: 'Permanent resident', Other: 'Other' };
-    const DESIGNS = { aurora: 'Aurora', violet: 'Violet Nebula', onyx: 'Onyx Glow' };
+    const DESIGNS = { aurora: 'Summit Gold', violet: 'Glacier', onyx: 'Onyx' };
 
     // Simulated ZIP lookup table (a real bank would call an address-verification service).
     const ZIPS = {

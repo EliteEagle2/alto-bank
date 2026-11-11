@@ -65,8 +65,10 @@ public partial class AdminService : IAdminService
         // "Large transactions": last 30 days at or above the threshold (amounts compared in memory).
         var since = BankTime.StartOfDayUtc(BankTime.Today.AddDays(-30));
         var recentAmounts = await _db.Transactions.AsNoTracking().Where(t => t.Date >= since)
-            .Select(t => new { t.Id, t.Amount }).ToListAsync();
-        var largeIds = recentAmounts.Where(t => t.Amount >= settings.LargeTransactionThreshold).Select(t => t.Id).ToList();
+            .Select(t => new { t.Id, t.Amount, t.Type }).ToListAsync();
+        // Only money LEAVING an account needs a second look; a big payroll deposit or transfer in doesn't.
+        var largeIds = recentAmounts.Where(t => t.Amount >= settings.LargeTransactionThreshold && !Transaction.IsCreditType(t.Type))
+            .Select(t => t.Id).ToList();
         var weekAgo = DateTime.UtcNow.AddDays(-7);
 
         return new OverviewViewModel

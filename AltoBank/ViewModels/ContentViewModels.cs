@@ -22,8 +22,8 @@ public record StepViewModel(string Title, string Text);
 public record CtaViewModel(string Title, string Text, string ButtonText, string Controller, string Action);
 
 /// <summary>CSS-drawn card graphic (Shared/_CardArt). Variant adds a color class; Nickname shows next to the chip.</summary>
-public record CardArtViewModel(string Tier, string Variant = "", string Number = "4410  2748  1903  4821",
-    string Holder = "Jordan Rivera", string? Nickname = null);
+public record CardArtViewModel(string Tier, string Variant = "", string Number = "0000  1234  5678  9010",   // marketing art: an obviously fake number
+    string Holder = "Alex Sample", string? Nickname = null);   // and a placeholder name, never a real customer's
 
 /// <summary>Contact Us form. Validation attributes give us server + client-side checks.</summary>
 public class ContactViewModel

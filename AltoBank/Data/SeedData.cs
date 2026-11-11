@@ -415,7 +415,7 @@ public static class SeedData
             {
                 UserId = user.Id, AccountNumber = a.Number, AccountType = a.Type, Nickname = a.Nickname,
                 CardDesign = a.CardDesign, GoalName = a.GoalName, GoalAmount = a.GoalAmount,
-                OpenedAt = DateTime.UtcNow.Date.AddDays(-a.OpenedDaysAgo).AddHours(8)
+                OpenedAt = BankDayAt(DateTime.UtcNow.Date.AddDays(-a.OpenedDaysAgo), 8)
             }).ToList();
             var transfers = GenerateHistory(c, accounts);
             db.Accounts.AddRange(accounts);
@@ -425,7 +425,7 @@ public static class SeedData
         }
         if (user.CreatedAt == null)
         {
-            user.CreatedAt = DateTime.UtcNow.Date.AddDays(-c.Accounts.Max(a => a.OpenedDaysAgo)).AddHours(8);
+            user.CreatedAt = BankDayAt(DateTime.UtcNow.Date.AddDays(-c.Accounts.Max(a => a.OpenedDaysAgo)), 8);
             await userManager.UpdateAsync(user);
         }
 
@@ -466,6 +466,10 @@ public static class SeedData
 
     // ---------- Transaction generator ----------
 
+    /// <summary>A time on the BANK-LOCAL day that <paramref name="day"/> falls on (e.g. 8 = 8:00 AM in Altoona), as UTC.</summary>
+    private static DateTime BankDayAt(DateTime day, double localHour) =>
+        AltoBank.Services.BankTime.StartOfDayUtc(DateOnly.FromDateTime(day)).AddHours(localHour);
+
     /// <summary>
     /// Walks day by day from the customer's first account opening to yesterday and creates realistic activity.
     /// Each account gets its opening deposit on its own open date, and nothing touches an account before that.
@@ -491,10 +495,13 @@ public static class SeedData
             var date = start.AddDays(day);
             // Accounts that open today get their opening deposit first.
             foreach (var (account, seed) in accounts.Zip(c.Accounts).Where(p => p.First.OpenedAt.Date == date))
-                Post(account, TransactionType.Deposit, seed.OpeningDeposit, "Opening deposit", date.AddHours(8));   // before any other activity that day
+                Post(account, TransactionType.Deposit, seed.OpeningDeposit, "Opening deposit", BankDayAt(date, 8));   // before any other activity that day
             if (day == 0) continue;
-            var at = date.AddHours(8);                 // each event this day gets a later timestamp
-            DateTime Next() => at = at.AddMinutes(rng.Next(25, 140));
+            // Each event this day gets a later timestamp, all within shop hours in BANK time (about 8:20 AM to 9:30 PM),
+            // never in the middle of the night. Times never go backwards, so running balances stay in order.
+            var at = BankDayAt(date, 8);
+            var closing = BankDayAt(date, 21.5);
+            DateTime Next() => at = at.AddMinutes(rng.Next(20, 95)) is var t && t > closing ? closing : t;
 
             // Payday every other Friday.
             if (date.DayOfWeek == DayOfWeek.Friday && (day / 7) % 2 == 0)
@@ -521,7 +528,7 @@ public static class SeedData
             // Savings earn interest on the last day of each month (4.10% APY ≈ 0.335%/month).
             if (date.AddDays(1).Day == 1)
                 foreach (var s in savings.Where(s => s.Balance > 0))
-                    Post(s, TransactionType.Interest, Math.Round(s.Balance * 0.041m / 12m, 2), "Interest earned", date.AddHours(23));
+                    Post(s, TransactionType.Interest, Math.Round(s.Balance * 0.041m / 12m, 2), "Interest earned", BankDayAt(date, 21.75));
 
             // Everyday spending.
             if (day % 6 == 0 || rng.NextDouble() < 0.08) Post(checking, TransactionType.Withdrawal, Money(38, 165), Pick(rng, "Summit Grocers", "FreshWay Market", "Hilltop Foods"), Next());

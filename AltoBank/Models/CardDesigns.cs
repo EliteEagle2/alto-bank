@@ -6,7 +6,7 @@ namespace AltoBank.Models;
 /// </summary>
 public static class CardDesigns
 {
-    public const string Aurora = "aurora"; // cyan -> violet (default)
+    public const string Aurora = "aurora"; // "Summit Gold": navy with a gold highlight (default). Keys are stored on accounts, so they never change.
     public const string Violet = "violet";
     public const string Onyx = "onyx";
 
@@ -14,12 +14,12 @@ public static class CardDesigns
 
     public static string DisplayName(string? design) => design switch
     {
-        Violet => "Violet Nebula",
-        Onyx => "Onyx Glow",
-        _ => "Aurora"
+        Violet => "Glacier",
+        Onyx => "Onyx",
+        _ => "Summit Gold"
     };
 
-    // CSS class added to .alto-card for each design ("" = the default cyan/violet gradient).
+    // CSS class added to .alto-card for each design ("" = the default Summit Gold).
     public static string CssClass(string? design) => design switch
     {
         Violet => "alto-card--violet",

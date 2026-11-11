@@ -38,7 +38,7 @@
 .admin-brand { display: flex; align-items: center; gap: .5rem; text-decoration: none; flex-shrink: 0; }
 .admin-brand .alto-logo { height: 26px; }
 .admin-brand-tag {
-    font-family: "Bricolage Grotesque", sans-serif; font-size: .64rem; font-weight: 700; letter-spacing: .01em; text-transform: none;
+    font-family: AltoBullets, "Bricolage Grotesque", sans-serif; font-size: .64rem; font-weight: 700; letter-spacing: .01em; text-transform: none;
     color: #fff; background: var(--admin-accent); padding: .15rem .45rem; border-radius: 6px;
     box-shadow: 0 0 14px rgba(143, 184, 232, 0.55);
 }
@@ -122,7 +122,7 @@ a.cs-item:hover { color: #A9C8EE; }
 .kpi-cell::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: transparent; }
 .kpi-label { color: var(--muted); font-size: .72rem; text-transform: none; letter-spacing: .01em; display: flex; align-items: center; gap: .4rem; }
 .kpi-icon { color: #A9C8EE; font-size: .95rem; }
-.kpi-value { font-family: "Bricolage Grotesque", sans-serif; font-size: 1.5rem; font-weight: 700; margin-top: .15rem; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.kpi-value { font-family: AltoBullets, "Bricolage Grotesque", sans-serif; font-size: 1.5rem; font-weight: 700; margin-top: .15rem; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .kpi-hint { color: var(--muted); font-size: .72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .kpi-warn::before { background: var(--warn); } .kpi-warn .kpi-icon, .kpi-warn .kpi-value { color: var(--warn); }
 .kpi-danger::before { background: var(--danger); } .kpi-danger .kpi-icon, .kpi-danger .kpi-value { color: var(--danger); }
@@ -208,7 +208,7 @@ a.cs-item:hover { color: #A9C8EE; }
 .kv { display: grid; grid-template-columns: minmax(120px, 34%) 1fr; gap: .45rem 1rem; margin: 0; }
 .kv dt { color: var(--muted); font-weight: 400; }
 .kv dd { margin: 0; word-break: break-word; }
-.big-balance { font-family: "Bricolage Grotesque", sans-serif; font-size: 2rem; font-weight: 700; }
+.big-balance { font-family: AltoBullets, "Bricolage Grotesque", sans-serif; font-size: 2rem; font-weight: 700; }
 
 .attention-list { list-style: none; padding: 0; margin: 0; }
 .attention-list li { display: flex; justify-content: space-between; gap: .75rem; padding: .55rem 0; border-bottom: 1px solid var(--admin-line); }
@@ -230,7 +230,7 @@ a.cs-item:hover { color: #A9C8EE; }
 /* Confirm modal */
 .confirm-what { padding: .75rem .9rem; border-radius: 10px; background: rgba(143, 184, 232, 0.08); border: 1px solid rgba(143, 184, 232, 0.35); }
 .confirm-what.danger { background: rgba(239, 107, 91, 0.08); border-color: rgba(239, 107, 91, 0.4); }
-.temp-password { font-family: "Bricolage Grotesque", monospace; font-size: 1.3rem; letter-spacing: .01em; padding: .6rem 1rem; border-radius: 10px; border: 1px dashed var(--warn); color: var(--warn); display: inline-block; }
+.temp-password { font-family: AltoBullets, "Bricolage Grotesque", monospace; font-size: 1.3rem; letter-spacing: .01em; padding: .6rem 1rem; border-radius: 10px; border: 1px dashed var(--warn); color: var(--warn); display: inline-block; }
 
 /* JSON diff cells in the audit log */
 .audit-json { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .74rem; color: var(--muted); max-width: 320px; white-space: pre-wrap; word-break: break-word; }

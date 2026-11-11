@@ -8,7 +8,6 @@ namespace AltoBank.TagHelpers;
 /// Renders a decimal as US currency inside a &lt;span&gt;. Options:
 ///   colorize="true"  → green for positive, red for negative (credits vs. debits)
 ///   show-sign="true" → prefix "+" for positive amounts ("−" is always shown for negatives)
-///   whole="true"     → no cents, e.g. $15,000
 ///
 /// Examples:
 ///   &lt;money amount="@account.Balance" /&gt;                         →  $4,494.41
@@ -24,15 +23,14 @@ public class MoneyTagHelper : TagHelper
     public decimal Amount { get; set; }
     public bool Colorize { get; set; }
     public bool ShowSign { get; set; }
-    public bool Whole { get; set; }
 
     public override void Process(TagHelperContext context, TagHelperOutput output)
     {
         output.TagName = "span";
         output.TagMode = TagMode.StartTagAndEndTag;
 
-        var format = Whole ? "C0" : "C2";
-        var text = Math.Abs(Amount).ToString(format, Us);
+        // Always dollars AND cents: money is never rounded for display.
+        var text = Math.Abs(Amount).ToString("C2", Us);
         if (Amount < 0) text = "−" + text;          // proper minus sign
         else if (ShowSign && Amount > 0) text = "+" + text;
 

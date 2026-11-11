@@ -64,7 +64,7 @@ public class PreferencesService : IPreferencesService
         foreach (var (value, label) in new[] { (s.LowBalanceAlert, "Low balance"), (s.LargeDebitAlert, "Large purchase") })
         {
             if (value is not decimal v) continue;
-            if (v <= 0 || v > UserPreferences.MaxThreshold) return new BankResult(false, $"{label} amount must be between $0.01 and {UserPreferences.MaxThreshold:C0}.");
+            if (v <= 0 || v > UserPreferences.MaxThreshold) return new BankResult(false, $"{label} amount must be between $0.01 and {UserPreferences.MaxThreshold:C}.");
             if (decimal.Round(v, 2) != v) return new BankResult(false, $"{label} amount can have at most 2 decimal places.");
         }
 
@@ -100,8 +100,12 @@ public class PreferencesService : IPreferencesService
             .Where(l => l.Action == "Auth.Login" && l.TargetId == userId)
             .OrderByDescending(l => l.Id).Take(take)
             .Select(l => new { l.Timestamp, l.IpAddress, l.Summary }).ToListAsync())
-        .Select(l => new AltoBank.ViewModels.SignInEntry(l.Timestamp, l.IpAddress, l.Summary.Contains("demo") ? "Demo button" : "Password"))
+        .Select(l => new AltoBank.ViewModels.SignInEntry(l.Timestamp, FriendlyIp(l.IpAddress), l.Summary.Contains("demo") ? "Demo button" : "Password"))
         .ToList();
+
+    // Loopback addresses mean the sign-in came from the machine running the app.
+    private static string? FriendlyIp(string? ip) =>
+        ip is "::1" or "127.0.0.1" or "::ffff:127.0.0.1" ? "This device (localhost)" : ip;
 
     private async Task<UserPreferences> LoadOrCreateAsync(string userId)
     {

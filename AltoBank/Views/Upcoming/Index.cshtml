@@ -44,7 +44,7 @@
                         foreach (var u in items.Take(3))
                         {
                             <span class="cal-item @(u.WillBeSkipped ? "is-skipped" : "")" title="@u.Item.Target · @u.Item.Amount.ToString("C")@(u.WillBeSkipped ? " (skipped)" : "")">
-                                <i class="bi @Icon(u.Item)"></i><span class="cal-item-text">@u.Item.Amount.ToString("C0") @u.Item.Target</span>
+                                <i class="bi @Icon(u.Item)"></i><span class="cal-item-text">@u.Item.Amount.ToString("C") @u.Item.Target</span>
                             </span>
                         }
                         if (items.Count > 3) { <span class="cal-more">+@(items.Count - 3) more</span> }
@@ -156,8 +156,8 @@
                 {
                     <form asp-action="ScheduleTransfer" method="post" novalidate>
                         <div class="row g-2 mb-3">
-                            <div class="col-sm-6"><label class="form-label" for="Transfer_FromAccountId">From</label><select id="Transfer_FromAccountId" name="Transfer.FromAccountId" asp-items="Model.Accounts" class="form-select"></select></div>
-                            <div class="col-sm-6"><label class="form-label" for="Transfer_ToAccountId">To</label>
+                            <div class="col-12"><label class="form-label" for="Transfer_FromAccountId">From</label><select id="Transfer_FromAccountId" name="Transfer.FromAccountId" asp-items="Model.Accounts" class="form-select"></select></div>
+                            <div class="col-12"><label class="form-label" for="Transfer_ToAccountId">To</label>
                                 <select id="Transfer_ToAccountId" name="Transfer.ToAccountId" class="form-select">
                                     @for (int i = 0; i < Model.Accounts.Count; i++) { <option value="@Model.Accounts[i].Value" selected="@(i == 1)">@Model.Accounts[i].Text</option> }
                                 </select>

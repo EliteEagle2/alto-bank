@@ -78,7 +78,7 @@ else if (a.Status == AccountStatus.Closed)
             <div class="goal mt-3" style="max-width: 460px">
                 <div class="d-flex justify-content-between small mb-1">
                     <span><i class="bi bi-bullseye me-1"></i>@(a.GoalName ?? "Savings goal")</span>
-                    <span class="text-muted-alto"><money amount="@a.Balance" whole="true" /> of <money amount="@goal" whole="true" /> (@pct.ToString("0")%)</span>
+                    <span class="text-muted-alto"><money amount="@a.Balance" /> of <money amount="@goal" /> (@pct.ToString("0")%)</span>
                 </div>
                 <div class="progress alto-progress" role="progressbar" aria-valuenow="@pct.ToString("0")" aria-valuemin="0" aria-valuemax="100" aria-label="Goal progress">
                     <div class="progress-bar" style="width: @pct.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%"></div>

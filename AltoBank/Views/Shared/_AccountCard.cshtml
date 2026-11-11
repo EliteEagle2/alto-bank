@@ -17,7 +17,7 @@
         <div class="goal mb-3">
             <div class="d-flex justify-content-between small mb-1">
                 <span><i class="bi bi-bullseye me-1"></i>@(Model.GoalName ?? "Savings goal")</span>
-                <span class="text-muted-alto">@pct.ToString("0")% of @goal.ToString("C0")</span>
+                <span class="text-muted-alto">@pct.ToString("0")% of @goal.ToString("C")</span>
             </div>
             <div class="progress alto-progress" role="progressbar" aria-valuenow="@pct.ToString("0")" aria-valuemin="0" aria-valuemax="100" aria-label="Goal progress">
                 <div class="progress-bar" style="width: @pct.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)%"></div>

@@ -6,7 +6,7 @@
     var tiles = new[]
     {
         new KpiTileViewModel("p2pToday", "Payments today", "bi-send", Model.PaymentsToday.ToString("N0")),
-        new KpiTileViewModel("p2pVolume", "Volume (30 days)", "bi-cash-stack", Model.VolumeLast30Days.ToString("C0"), "completed payments"),
+        new KpiTileViewModel("p2pVolume", "Volume (30 days)", "bi-cash-stack", Model.VolumeLast30Days.ToString("C"), "completed payments"),
         new KpiTileViewModel("p2pPending", "Open requests", "bi-hourglass-split", Model.PendingRequests.ToString("N0"), Tone: Model.PendingRequests > 0 ? "warn" : null),
         new KpiTileViewModel("p2pExpired", "Expired requests", "bi-clock-history", Model.ExpiredRequests.ToString("N0")),
     };

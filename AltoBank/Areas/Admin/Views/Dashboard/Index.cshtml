@@ -7,7 +7,7 @@
      3. trends (charts load from GET /api/admin/stats via wwwroot/js/admin-overview.js)
      4. recent applications *@
 @{
-    string Fmt(decimal v) => v.ToString("C0");
+    string Fmt(decimal v) => v.ToString("C");   // money always shows cents
     string Ago(DateTime? utc)
     {
         if (utc is not DateTime u) return "";
@@ -47,14 +47,14 @@
                    t.Date, Url.Action("Details", "Transactions", new { area = "Admin", id = t.Id })!, "Review"));
     queue = queue.OrderByDescending(q => q.When ?? DateTime.MinValue).ToList();
     var kinds = new[] { ("all", "All", queue.Count), ("app", "Applications", Model.PendingList.Count), ("frozen", "Frozen", Model.FrozenList.Count),
-                        ("failed", "Failed payments", Model.FailedScheduled.Count), ("large", $"Large ≥ {Fmt(Model.LargeThreshold)}", Model.LargeTransactions.Count) };
+                        ("failed", "Failed payments", Model.FailedScheduled.Count), ("large", $"Large debits ≥ {Fmt(Model.LargeThreshold)}", Model.LargeTransactions.Count) };
     var schedulerOk = Model.SchedulerLastRunAt is DateTime last && DateTime.UtcNow - last < TimeSpan.FromMinutes(5);
 }
 
 @section PageActions {
-    <a class="btn btn-admin-ghost btn-sm" asp-controller="Applications" asp-action="Index" asp-route-status="Pending"><i class="bi bi-file-earmark-check me-1"></i>Review applications</a>
+    <a class="btn btn-admin btn-sm" asp-controller="Applications" asp-action="Index" asp-route-status="Pending"><i class="bi bi-file-earmark-check me-1"></i>Review applications</a>
     <a class="btn btn-admin-ghost btn-sm" asp-controller="Scheduled" asp-action="Index"><i class="bi bi-calendar-week me-1"></i>Scheduler</a>
-    <a class="btn btn-admin btn-sm" asp-controller="AuditLog" asp-action="Index"><i class="bi bi-journal-text me-1"></i>Audit log</a>
+    <a class="btn btn-admin-ghost btn-sm" asp-controller="AuditLog" asp-action="Index"><i class="bi bi-journal-text me-1"></i>Audit log</a>
 }
 
 @* ===== 1. Stat strip ===== *@

@@ -2,6 +2,9 @@
 (function () {
     'use strict';
 
+    // Tooltips on icon-only buttons (e.g. "API docs" on the { } button).
+    if (window.bootstrap) document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => new bootstrap.Tooltip(el));
+
     // Close the mobile navigation drawer after a link is tapped.
     document.querySelectorAll('#adminSidebar .admin-link').forEach(a => a.addEventListener('click', () => {
         const drawer = window.bootstrap && bootstrap.Offcanvas.getInstance(document.getElementById('adminSidebar'));
