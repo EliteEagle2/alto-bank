@@ -1365,3 +1365,5 @@ h1 span.text-gradient, h2 span.text-gradient, h3 span.text-gradient { color: inh
 /* The sidebar promo only shows when there's room for it under the navigation (it was clipped on 900px-tall screens) */
 @media (min-width: 992px) and (max-height: 1079.98px) { .app-sidebar .sidebar-promo { display: none; } }
 .cta-band { background-position: center bottom; background-size: 100% 55%; }
+/* No glow behind the hero card */
+.card-stage::before { display: none; }
