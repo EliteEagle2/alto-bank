@@ -20,7 +20,7 @@ check "someone else's account -> 404 (IDOR)" "$(code -b $C $B/accounts/$MAYA)" 4
 check "non-existent account -> 404" "$(code -b $C $B/accounts/999999)" 404
 check "anonymous -> login" "$(code $B/accounts/$CHK)" 302
 check "admin (also a customer) can't open JORDAN's account page -> 404" "$(code -b $A $B/accounts/$CHK)" 404
-has "header: _AccountHeader with masked number" "$D" '\*\*\*\*  4821'
+has "header: _AccountHeader with masked number" "$D" '\(&#x2022;\|•\)\{4\}  4821'
 has "header: current + available balance" "$D" 'Available balance'
 has "tabs: Activity / Account Info / Direct Deposit / Card" "$(echo "$D" | grep -oE 'data-bs-target="#(activity|info|direct-deposit|card)"' | sort -u | wc -l | tr -d ' ')" 4
 hasnt "savings has no Card tab" "$(curl -s -b $C $B/accounts/$SAV)" 'data-bs-target="#card"'

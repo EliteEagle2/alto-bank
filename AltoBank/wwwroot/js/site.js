@@ -31,3 +31,22 @@
         if (amount) amount.classList.toggle('is-revealed');
     });
 })();
+
+// ===== Sideways-scrolling tab bars ([data-tab-scroller]) =====
+// Shows the right-edge fade only while more tabs are off-screen, and keeps the active tab in view.
+(function () {
+    'use strict';
+    document.querySelectorAll('[data-tab-scroller]').forEach(wrap => {
+        const bar = wrap.querySelector('[role="tablist"]');
+        if (!bar) return;
+        const update = () => wrap.classList.toggle('has-more', bar.scrollLeft + bar.clientWidth < bar.scrollWidth - 4);
+        const reveal = () => {
+            const active = bar.querySelector('.active');
+            if (active) bar.scrollTo({ left: active.offsetLeft - (bar.clientWidth - active.offsetWidth) / 2, behavior: 'smooth' });
+        };
+        bar.addEventListener('scroll', update, { passive: true });
+        window.addEventListener('resize', update);
+        bar.addEventListener('shown.bs.tab', () => { reveal(); setTimeout(update, 350); });
+        reveal(); update();
+    });
+})();

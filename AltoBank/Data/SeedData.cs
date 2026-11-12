@@ -118,9 +118,78 @@ public static class SeedData
 
         await EnsureDebitCardsAsync(db, services.GetRequiredService<AltoBank.Services.ICardService>());
         await EnsureReviewDemoDataAsync(db, userManager);
+        // Today's demo activity (P2P payments, requests, bill payments) is created through the real services, so it
+        // is all stamped "now"; spread it across the bank day afterwards (only on a fresh seed).
+        var seedStarted = DateTime.UtcNow;
+        var freshPayments = !await db.Payments.AnyAsync();
         await EnsurePaymentsDemoDataAsync(services, db, userManager);
         await EnsureBillPayDemoDataAsync(services, db, userManager);
+        if (freshPayments) await SpreadTodaysDemoActivityAsync(db, seedStarted);
         await EnsurePreferencesDemoDataAsync(db, userManager);
+    }
+
+    /// <summary>
+    /// Spreads the demo activity created "now" (P2P payments, requests, bill payments, their alerts and runs) across
+    /// today's bank hours so the activity feed reads like a real day: events about 2 hours apart, the last one a few
+    /// minutes ago, never before 7 AM or after 10 PM bank time (closer together when the day has less room; before
+    /// 7 AM the events go on yesterday). Order is kept, so running balances stay correct. Both legs of a payment
+    /// (sent + received) are one event and get the same time.
+    /// </summary>
+    private static async Task SpreadTodaysDemoActivityAsync(ApplicationDbContext db, DateTime seededFrom)
+    {
+        var txs = await db.Transactions.Where(t => t.Date >= seededFrom).OrderBy(t => t.Id).ToListAsync();
+        if (txs.Count == 0) return;
+
+        // Group into events: a PaymentReceived right after the matching PaymentSent is the same payment.
+        var events = new List<List<Transaction>>();
+        foreach (var t in txs)
+        {
+            var last = events.LastOrDefault();
+            if (last is { Count: 1 } && t.Type == TransactionType.PaymentReceived
+                && last[0].Type == TransactionType.PaymentSent && last[0].Amount == t.Amount)
+                last.Add(t);
+            else
+                events.Add(new List<Transaction> { t });
+        }
+
+        // The window: today 7 AM .. min(now, 10 PM) in bank time; if that's too short (early morning), yesterday 7-10 PM.
+        var now = DateTime.UtcNow;
+        var today = AltoBank.Services.BankTime.Today;
+        var start = AltoBank.Services.BankTime.StartOfDayUtc(today).AddHours(7);
+        var end = new[] { now.AddMinutes(-5), AltoBank.Services.BankTime.StartOfDayUtc(today).AddHours(22) }.Min();
+        if (end - start < TimeSpan.FromHours(1))
+        {
+            start = AltoBank.Services.BankTime.StartOfDayUtc(today.AddDays(-1)).AddHours(7);
+            end = AltoBank.Services.BankTime.StartOfDayUtc(today.AddDays(-1)).AddHours(22);
+        }
+        var gap = TimeSpan.FromTicks(Math.Min(TimeSpan.FromHours(2).Ticks, (end - start).Ticks / events.Count));
+
+        // New time per event, counting back from the end of the window; remember old -> new for everything else.
+        var moved = new List<(DateTime Old, DateTime New)>();
+        for (int i = 0; i < events.Count; i++)
+        {
+            var when = end - TimeSpan.FromTicks(gap.Ticks * (events.Count - 1 - i));
+            foreach (var t in events[i]) { moved.Add((t.Date, when)); t.Date = when; }
+        }
+        // Any other record made during the seed takes the new time of the transaction closest to its own.
+        DateTime Shift(DateTime old) => moved.OrderBy(m => Math.Abs((m.Old - old).Ticks)).First() is var m ? m.New + (old - m.Old) : old;
+
+        foreach (var p in await db.Payments.Where(p => p.CreatedAt >= seededFrom).ToListAsync()) p.CreatedAt = Shift(p.CreatedAt);
+        foreach (var r in await db.MoneyRequests.Where(r => r.CreatedAt >= seededFrom).ToListAsync())
+        {
+            var delta = Shift(r.CreatedAt) - r.CreatedAt;
+            r.CreatedAt += delta; r.ExpiresAt += delta;
+            if (r.RespondedAt is DateTime responded) r.RespondedAt = Shift(responded);
+        }
+        foreach (var run in await db.ScheduledRuns.Where(x => x.ProcessedAt >= seededFrom).ToListAsync()) run.ProcessedAt = Shift(run.ProcessedAt);
+        foreach (var s in await db.ScheduledPayments.Where(x => x.LastRunAt >= seededFrom).ToListAsync()) s.LastRunAt = Shift(s.LastRunAt!.Value);
+        foreach (var a in await db.Alerts.Where(a => a.CreatedAt >= seededFrom).ToListAsync())
+        {
+            var wasRead = a.ReadAt == a.CreatedAt;   // muted alerts arrive already read
+            a.CreatedAt = Shift(a.CreatedAt);
+            if (wasRead) a.ReadAt = a.CreatedAt;
+        }
+        await db.SaveChangesAsync();
     }
 
     /// <summary>PROFILE SETTINGS demo data (once): Jordan has balance alerts and a default account, Maya goes by "May"

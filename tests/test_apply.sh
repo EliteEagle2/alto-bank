@@ -95,7 +95,7 @@ has "decision: Approved!" "$DP" "Approved!"
 has "decision animates on first view" "$DP" 'data-animate="true"'
 has "decision: opening balance \$250.00" "$DP" '\$250.00'
 has "decision: routing number" "$DP" "031300000"
-has "decision: masked account number" "$DP" '\*\*\*\* [0-9]\{4\}'
+has "decision: masked account number" "$DP" '\(&#x2022;\|•\)\{4\} \+[0-9]\{4\}'
 has "decision: onyx card" "$DP" 'alto-card alto-card--onyx'
 has "decision: nickname on card" "$DP" 'data-card-nickname>Daily Driver'
 has "decision: funding label" "$DP" "External: First Keystone"

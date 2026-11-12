@@ -1423,3 +1423,15 @@ h1 span.text-gradient, h2 span.text-gradient, h3 span.text-gradient { color: inh
 .hero h1, .hero p, .page-hero h1, .page-hero p, .balance-hero p, .balance-hero .total-balance, .cta-band h2, .cta-band p {
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.75), 0 0 10px rgba(16, 24, 38, 1), 0 0 22px rgba(16, 24, 38, 1), 0 0 44px rgba(16, 24, 38, 0.95);
 }
+
+/* Account tabs on phones: a sideways-scrolling pill bar. The right edge fades while there are more tabs to see. */
+@media (max-width: 767.98px) {
+    .tab-scroller { position: relative; margin-bottom: 1.25rem; }
+    .tab-scroller .acct-tabs { border-bottom: 0; margin-bottom: 0; gap: .4rem; padding: .1rem 0 .35rem; scroll-snap-type: x proximity; }
+    .tab-scroller .acct-tabs .nav-link { border: 1px solid var(--border); border-radius: 999px; padding: .45rem .95rem; box-shadow: none; scroll-snap-align: start; }
+    .tab-scroller .acct-tabs .nav-link.active { background: var(--surface); border-color: var(--primary); color: #fff; box-shadow: none; }
+    .tab-scroller.has-more::after {
+        content: ""; position: absolute; top: 0; right: 0; bottom: .35rem; width: 48px; pointer-events: none;
+        background: linear-gradient(90deg, transparent, var(--bg) 85%);
+    }
+}

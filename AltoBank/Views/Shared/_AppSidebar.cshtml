@@ -1,12 +1,17 @@
 @* Left sidebar for online banking. On large screens it is always visible;
    on phones/tablets Bootstrap's "offcanvas-lg" turns it into a slide-out drawer
    opened by the menu button in the top bar. *@
+@inject IBankService Bank
+@inject UserManager<ApplicationUser> Users
 @{
     var controller = ViewContext.RouteData.Values["controller"]?.ToString();
     var action = ViewContext.RouteData.Values["action"]?.ToString();
     // Highlight the link for the current page. History pages count as "Accounts".
     string Active(string c, string? a = null) =>
         controller == c && (a == null || action == a) ? "active" : "";
+    // The Summit Savings promo is only for customers who don't already have an open savings account.
+    var userId = Users.GetUserId(User);
+    var hasSavings = userId != null && (await Bank.GetAccountsAsync(userId)).Any(a => a.AccountType == AccountType.Savings && a.Status != AccountStatus.Closed);
 }
 <div class="app-sidebar-wrap">
     <aside class="app-sidebar offcanvas-lg offcanvas-start" tabindex="-1" id="appSidebar" aria-label="Banking navigation">
@@ -45,11 +50,14 @@
             }
 
             <div class="mt-auto pt-4">
+                @if (!hasSavings)
+                {
                 <div class="sidebar-promo mb-3">
                     <div class="small fw-semibold mb-1"><i class="bi bi-stars me-1"></i>Summit Savings</div>
                     <div class="small text-muted-alto mb-2">Earn 4.10% APY on a new goal account.</div>
                     <a class="small" asp-controller="Accounts" asp-action="Apply" asp-route-type="Savings">Open one <i class="bi bi-arrow-right"></i></a>
                 </div>
+                }
                 <form asp-controller="Auth" asp-action="Logout" method="post">
                     <button type="submit" class="side-link w-100 border-0 bg-transparent text-danger-alto"><i class="bi bi-box-arrow-left"></i>Log out</button>
                 </form>

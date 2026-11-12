@@ -8,7 +8,7 @@
     var app = Model.Application;
     var isChecking = a.AccountType == AccountType.Checking;
     var variant = isChecking ? CardDesigns.CssClass(a.CardDesign) : "alto-card--violet";
-    var masked = $"**** {a.Last4}";
+    var masked = $"•••• {a.Last4}";
 }
 
 <div class="apply-grid decision" id="decision" data-animate="@(Model.Animate ? "true" : "false")" data-user-key="@Model.UserKey">
