@@ -76,7 +76,7 @@ public sealed partial class FileStore : IFileStore
             StartsWith(bytes, Jpeg) ? (".jpg", "image/jpeg") :
             StartsWith(bytes, Png) ? (".png", "image/png") : null;
         if (kind == null)
-            return new(null, $"The {what} must be a JPG or PNG photo. That file isn't one, whatever its name says.");
+            return new(null, $"The {what} must be a JPG or PNG photo. That file is a different kind of file, so take or choose a photo instead.");
 
         var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         return new(new UploadedImage(bytes, kind.Value.Ext, kind.Value.Type, hash), null);

@@ -88,6 +88,11 @@ has "missing back photo -> refused" "$(cat /tmp/post.html)" "Add a photo of the 
 TK=$(tok $C /checks)   # the endorsement boxes NOT ticked (no Form.Signed / Restricted / InFrame fields)
 curl -s -b $C -o /tmp/post.html -F "Form.AccountId=$JCHK" -F Form.Amount=20 -F "Form.Front=@$(img png 109);type=image/png" -F "Form.Back=@$(img png 110);type=image/png" -F "__RequestVerificationToken=$TK" $B/checks
 has "checklist not ticked -> refused" "$(cat /tmp/post.html)" "Sign the back of the check first"
+TK=$(tok $C /checks)
+curl -s -b $C -o /tmp/post.html -F "Form.AccountId=$JCHK" -F Form.Amount=20 -F "Form.Front=@$FT;type=image/jpeg" -F "Form.Back=@$(img png 117);type=image/png" -F "__RequestVerificationToken=$TK" $B/checks
+P2=$(cat /tmp/post.html)
+has "unticked checklist AND a bad photo: both reported at once (checklist)" "$P2" "Sign the back of the check first"
+has "unticked checklist AND a bad photo: both reported at once (photo)" "$P2" "must be a JPG or PNG photo"
 check "none of those created a deposit" "$(sql "SELECT COUNT(*) FROM CheckDeposits WHERE Id > $NEW AND Amount = 20")" 0
 
 echo "== Duplicate guard"
@@ -144,12 +149,15 @@ check "GET Maya's -> 404" "$(code -b $C $B/api/checkdeposits/$(sql "SELECT Id FR
 check "anonymous -> 401" "$(code $B/api/checkdeposits)" 401
 check "POST without antiforgery token -> 400" "$(curl -s -o /dev/null -w '%{http_code}' -b $C -F accountId=$JCHK -F amount=12 -F "front=@$(img png 140);type=image/png" -F "back=@$(img png 141);type=image/png" $B/api/checkdeposits)" 400
 TK=$(tok $C /checks)
-R=$(curl -s -b $C -w '\n%{http_code}' -H "RequestVerificationToken: $TK" -F accountId=$JCHK -F amount=12.34 -F "front=@$(img png 142);type=image/png" -F "back=@$(img png 143);type=image/png" $B/api/checkdeposits)
+R=$(curl -s -b $C -w '\n%{http_code}' -H "RequestVerificationToken: $TK" -F accountId=$JCHK -F amount=12.34 -F endorsed=true -F "front=@$(img png 142);type=image/png" -F "back=@$(img png 143);type=image/png" $B/api/checkdeposits)
 check "POST multipart with the token -> 201" "$(echo "$R" | tail -1)" 201
 has "returns the pending deposit" "$(echo "$R" | head -1)" '"amount":12.34,"status":"Pending"'
-R=$(curl -s -b $C -w '\n%{http_code}' -H "RequestVerificationToken: $TK" -F accountId=$JCHK -F amount=12 -F "front=@$FT;type=image/jpeg" -F "back=@$(img png 144);type=image/png" $B/api/checkdeposits)
+R=$(curl -s -b $C -w '\n%{http_code}' -H "RequestVerificationToken: $TK" -F accountId=$JCHK -F amount=12 -F endorsed=true -F "front=@$FT;type=image/jpeg" -F "back=@$(img png 144);type=image/png" $B/api/checkdeposits)
 check "API: fake JPG -> 400" "$(echo "$R" | tail -1)" 400
 has "API says why" "$(echo "$R" | head -1)" "JPG or PNG"
+R=$(curl -s -b $C -w '\n%{http_code}' -H "RequestVerificationToken: $TK" -F accountId=$JCHK -F amount=12 -F "front=@$(img png 145);type=image/png" -F "back=@$(img png 146);type=image/png" $B/api/checkdeposits)
+check "API: not endorsed -> 400" "$(echo "$R" | tail -1)" 400
+has "API says to endorse" "$(echo "$R" | head -1)" "Endorse the back"
 
 echo "== Admin queue"
 Q=$(curl -s -b $A $B/admin/checkdeposits)
@@ -192,7 +200,7 @@ check "reason required" "$(sql "SELECT Status FROM CheckDeposits WHERE Id = $RJ"
 adm reject $RJ "The back is not endorsed" >/dev/null
 check "rejected with the reason" "$(sql "SELECT Status || ':' || RejectReason FROM CheckDeposits WHERE Id = $RJ")" "Rejected:The back is not endorsed"
 check "audit row" "$(sql "SELECT COUNT(*) FROM AuditLogs WHERE Action = 'CheckDeposit.Reject' AND TargetId = '$RJ'")" 1
-check "rejected alert with the reason" "$(sql "SELECT COUNT(*) FROM Alerts WHERE UserId = '$JID' AND Type = 'CheckRejected' AND Message LIKE '%The back is not endorsed%'")" 1
+check "rejected alert with the reason (as a sentence)" "$(sql "SELECT COUNT(*) FROM Alerts WHERE UserId = '$JID' AND Type = 'CheckRejected' AND Message LIKE '%The back is not endorsed. No money was added.%'")" 1
 SP=$(curl -s -b $C $B/checks/$RJ)
 has "customer sees: Not accepted" "$SP" "Not accepted"
 has "customer sees the reason" "$SP" "The back is not endorsed"
@@ -234,6 +242,27 @@ deposit $S $SCHK 4500 "$(img png 180)" "$(img png 181)" >/dev/null
 has "new per-check limit applies" "$(cat /tmp/post.html)" "limited to \$4,000.00 per check"
 SETT 5000 10000 >/dev/null
 check "restored" "$(sql "SELECT MobileDepositPerCheckLimit || ':' || MobileDepositDailyLimit FROM BankSettings")" "5000:10000"
+
+echo "== Two submits at the same moment (daily limit and duplicate guard can't be raced)"
+sql "UPDATE BankSettings SET MobileDepositDailyLimit = 99999" >/dev/null
+SAMUSED=$(sql "SELECT IFNULL(SUM(Amount),0) FROM CheckDeposits WHERE UserId = '$SID' AND Status <> 'Rejected'")
+sql "UPDATE BankSettings SET MobileDepositDailyLimit = $(awk -v u=$SAMUSED 'BEGIN{printf "%.2f", u + 500}')" >/dev/null   # room for exactly one more $400
+for n in 1 2 3 4; do F="$(img png $((300+n)))"; BK="$(img png $((310+n)))"; ( deposit $S $SCHK 400 "$F" "$BK" > "$T/race$n.txt" ) & done; wait
+check "4 parallel \$400 deposits with \$500 left: exactly one accepted" "$(cat $T/race*.txt | grep -c '^302')" 1
+sql "UPDATE BankSettings SET MobileDepositDailyLimit = 10000" >/dev/null
+DUP=$(img png 320)
+for n in 1 2 3; do ( deposit $C $JCHK 33 "$DUP" "$(img png $((330+n)))" > "$T/dup$n.txt" ) & done; wait
+check "3 parallel deposits of the same image: exactly one accepted" "$(cat $T/dup*.txt | grep -c '^302')" 1
+
+echo "== Approve refuses a check image that was already deposited"
+ORIG=$(sql "SELECT Id FROM CheckDeposits WHERE UserId = '$JID' AND Status = 'Approved' ORDER BY Id LIMIT 1")
+# A copy slipped in some other way (e.g. before the guard existed): same front hash, still pending.
+sql "INSERT INTO CheckDeposits (UserId, AccountId, Amount, FrontImage, BackImage, FrontHash, Status, SubmittedAt) SELECT UserId, AccountId, Amount, FrontImage, BackImage, FrontHash, 'Pending', SubmittedAt FROM CheckDeposits WHERE Id = $ORIG" >/dev/null
+COPY=$(last_id)
+adm approve $COPY "Looks fine to me" >/dev/null
+has "refused: already deposited" "$(flash $A $B/admin/checkdeposits/details/$COPY)" "already deposited as CHK-$(printf '%06d' $ORIG)"
+check "still pending" "$(sql "SELECT Status FROM CheckDeposits WHERE Id = $COPY")" "Pending"
+has "detail warns about the duplicate image" "$(curl -s -b $A $B/admin/checkdeposits/details/$COPY)" "This front image was submitted before"
 
 echo "== Nothing deleted"
 check "every deposit still has both files on record" "$(sql "SELECT COUNT(*) FROM CheckDeposits WHERE FrontImage = '' OR BackImage = ''")" 0

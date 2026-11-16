@@ -24,15 +24,18 @@ namespace AltoBank.Controllers;
 [Route("checks")]
 public class ChecksController : Controller
 {
-    // Two photos of up to 5 MB each, plus the form fields. Anything bigger is refused before it's read.
-    public const long MaxRequestBytes = 2 * IFileStore.MaxBytes + 512 * 1024;
+    // Room for two photos of up to 10 MB plus the form fields. IFileStore refuses anything over 5 MB with a clear message;
+    // this larger request cap only exists so that message can be shown (a request over the cap gets a plain error).
+    public const long MaxRequestBytes = 4 * IFileStore.MaxBytes + 512 * 1024;
 
     private readonly ICheckDepositService _checks;
+    private readonly IFileStore _files;
     private readonly UserManager<ApplicationUser> _userManager;
 
-    public ChecksController(ICheckDepositService checks, UserManager<ApplicationUser> userManager)
+    public ChecksController(ICheckDepositService checks, IFileStore files, UserManager<ApplicationUser> userManager)
     {
         _checks = checks;
+        _files = files;
         _userManager = userManager;
     }
 
@@ -56,6 +59,12 @@ public class ChecksController : Controller
                 return RedirectToAction(nameof(Status), new { id = deposit!.Id });
             }
             ModelState.AddModelError(string.Empty, result.Message);
+        }
+        else
+        {
+            // The form has other problems (checklist, amount): check the photos too, so everything is listed at once.
+            foreach (var (file, what) in new[] { (form.Front, "front of the check"), (form.Back, "back of the check") })
+                if (await _files.ReadImageAsync(file, what) is { Ok: false } bad) ModelState.AddModelError(string.Empty, bad.Error!);
         }
         // Browsers never re-send files, so say so: the customer has to pick the photos again.
         ViewData["PhotosCleared"] = form.Front != null || form.Back != null;

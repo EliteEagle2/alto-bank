@@ -37,9 +37,11 @@ public class CheckDepositService : ICheckDepositService
     private readonly IFileStore _files;
     private readonly IAlertService _alerts;
     private readonly IAuditLogger _audit;
+    private readonly ILogger<CheckDepositService> _log;
 
-    public CheckDepositService(ApplicationDbContext db, IFileStore files, IAlertService alerts, IAuditLogger audit)
+    public CheckDepositService(ApplicationDbContext db, IFileStore files, IAlertService alerts, IAuditLogger audit, ILogger<CheckDepositService> log)
     {
+        _log = log;
         _db = db;
         _files = files;
         _alerts = alerts;
@@ -65,14 +67,26 @@ public class CheckDepositService : ICheckDepositService
 
     public async Task<(BankResult Result, CheckDeposit? Deposit)> SubmitAsync(string userId, int accountId, decimal amount, IFormFile? front, IFormFile? back)
     {
-        // 1) Amount and account
+        // 1) Checks that don't read the database: the amount and the photos (real JPG/PNG by signature, 5 MB max).
+        //    Nothing is written to disk yet.
         if (BankService.CheckAmount(amount) is { } badAmount) return (badAmount, null);
+        var f = await _files.ReadImageAsync(front, "front of the check");
+        if (!f.Ok) return (new(false, f.Error!), null);
+        var b = await _files.ReadImageAsync(back, "back of the check");
+        if (!b.Ok) return (new(false, b.Error!), null);
+        if (f.Image!.Sha256 == b.Image!.Sha256)
+            return (new(false, "The front and back photos are the same picture. Take a photo of each side."), null);
+
+        // 2) Everything that depends on other deposits happens inside ONE transaction. On SQLite, BeginTransaction takes the
+        //    write lock straight away (BEGIN IMMEDIATE), so two submits at the same moment run one after the other: the
+        //    second one sees the first and can't slip past the daily limit or the duplicate guard.
+        await using var tx = await _db.Database.BeginTransactionAsync();
+
         var account = await _db.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == accountId && a.UserId == userId);
         if (account == null) return (new(false, "Choose one of your accounts."), null);
         if (account.Status != AccountStatus.Active)
             return (new(false, $"{account.DisplayName} is {account.Status.ToString().ToLowerInvariant()}, so it can't take a mobile deposit."), null);
 
-        // 2) Limits (server-side; the page shows them too)
         var limits = await GetLimitsAsync(userId);
         if (amount > limits.PerCheck)
             return (new(false, $"Mobile deposits are limited to {limits.PerCheck:C} per check. For a larger check, visit a branch."), null);
@@ -81,15 +95,7 @@ public class CheckDepositService : ICheckDepositService
                 ? $"You've reached today's {limits.Daily:C} mobile deposit limit. You can deposit more tomorrow."
                 : $"That would go over today's {limits.Daily:C} mobile deposit limit. You can deposit up to {limits.LeftToday:C} more today."), null);
 
-        // 3) The photos: real JPG/PNG (by signature), 5 MB max. Nothing is written to disk until everything passes.
-        var f = await _files.ReadImageAsync(front, "front of the check");
-        if (!f.Ok) return (new(false, f.Error!), null);
-        var b = await _files.ReadImageAsync(back, "back of the check");
-        if (!b.Ok) return (new(false, b.Error!), null);
-        if (f.Image!.Sha256 == b.Image!.Sha256)
-            return (new(false, "The front and back photos are the same picture. Take a photo of each side."), null);
-
-        // 4) Duplicate guard: the same front image already deposited (and not rejected) by anyone.
+        // Duplicate guard: the same front image already deposited (and not rejected) by anyone.
         var earlier = await _db.CheckDeposits.AsNoTracking()
             .Where(d => d.FrontHash == f.Image.Sha256 && d.Status != CheckDepositStatus.Rejected)
             .OrderBy(d => d.SubmittedAt).FirstOrDefaultAsync();
@@ -98,26 +104,37 @@ public class CheckDepositService : ICheckDepositService
                 ? $"You already deposited this check on {BankTime.ToLocal(earlier.SubmittedAt):MMM d} ({earlier.Reference}). A check can only be deposited once."
                 : "This check has already been deposited. If you think that's a mistake, please contact us."), null);
 
-        // 5) Save the files, then the record + "received" alert + audit row together.
-        var frontName = await _files.SaveAsync(f.Image);
-        var backName = await _files.SaveAsync(b.Image);
-        var deposit = new CheckDeposit
+        // 3) Write the files, then the record + "received" alert + audit row, and commit.
+        string? frontName = null, backName = null;
+        try
         {
-            UserId = userId, AccountId = account.Id, Amount = amount,
-            FrontImage = frontName, BackImage = backName, FrontHash = f.Image.Sha256,
-            SubmittedAt = DateTime.UtcNow
-        };
-        await using var tx = await _db.Database.BeginTransactionAsync();
-        _db.CheckDeposits.Add(deposit);
-        await _db.SaveChangesAsync();
-        _alerts.Add(userId, AlertType.CheckReceived, "Check received",
-            $"We got your {amount:C} check for {account.DisplayName} ••{account.Last4}. We'll review it, usually within one business day.",
-            $"/checks/{deposit.Id}");
-        _audit.Add("CheckDeposit.Submit", $"Submitted {deposit.Reference}: {amount:C} to ••{account.Last4}", "CheckDeposit", deposit.Id.ToString(),
-                   after: new { amount, accountId = account.Id, front = frontName, back = backName });
-        await _db.SaveChangesAsync();
-        await tx.CommitAsync();
-        return (new(true, $"Check received. {amount:C} will show as pending in {account.DisplayName} until we review it."), deposit);
+            frontName = await _files.SaveAsync(f.Image);
+            backName = await _files.SaveAsync(b.Image);
+            var deposit = new CheckDeposit
+            {
+                UserId = userId, AccountId = account.Id, Amount = amount,
+                FrontImage = frontName, BackImage = backName, FrontHash = f.Image.Sha256,
+                SubmittedAt = DateTime.UtcNow
+            };
+            _db.CheckDeposits.Add(deposit);
+            await _db.SaveChangesAsync();
+            _alerts.Add(userId, AlertType.CheckReceived, "Check received",
+                $"We got your {amount:C} check for {account.DisplayName} ••{account.Last4}. We'll review it, usually within one business day.",
+                $"/checks/{deposit.Id}");
+            _audit.Add("CheckDeposit.Submit", $"Submitted {deposit.Reference}: {amount:C} to ••{account.Last4}", "CheckDeposit", deposit.Id.ToString(),
+                       after: new { amount, accountId = account.Id, front = frontName, back = backName });
+            await _db.SaveChangesAsync();
+            await tx.CommitAsync();
+            return (new(true, $"Check received. {amount:C} will show as pending in {account.DisplayName} until we review it."), deposit);
+        }
+        catch (Exception ex)
+        {
+            // Files are never deleted, so say which ones now belong to nothing (for staff to clean up by hand).
+            _db.ChangeTracker.Clear();
+            _log.LogError(ex, "Check deposit for {UserId} failed after saving files {Front} and {Back}; they are not linked to any deposit.",
+                          userId, frontName ?? "(none)", backName ?? "(none)");
+            throw;
+        }
     }
 
     public Task<List<CheckDeposit>> ListAsync(string userId, int take = 20) =>

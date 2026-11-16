@@ -177,6 +177,9 @@ public class CheckDepositUploadDto
     [Range(typeof(decimal), "0.01", "1000000")] public decimal Amount { get; set; }
     [Required] public IFormFile? Front { get; set; }
     [Required] public IFormFile? Back { get; set; }
+    /// <summary>The customer confirms the back is signed with "For mobile deposit only at Alto Bank" (same as the website's checklist).</summary>
+    [Range(typeof(bool), "true", "true", ErrorMessage = "Endorse the back of the check (sign it and write \"For mobile deposit only at Alto Bank\") and set endorsed=true.")]
+    public bool Endorsed { get; set; }
 }
 
 /// <summary>A check deposit. Status: Pending, Approved, Rejected. Image URLs only work for the owner.</summary>

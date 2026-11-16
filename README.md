@@ -127,7 +127,7 @@ dotnet run -- --reset-db   # delete the database and start over with fresh demo 
 
 ## Tests
 
-`tests/` holds 13 end-to-end suites (800+ checks) that drive the running app over HTTP: money rules, races, ownership checks
+`tests/` holds 13 end-to-end suites (900+ checks) that drive the running app over HTTP: money rules, races, ownership checks
 (another customer's id returns 404), antiforgery, the scheduler, P2P, Bill Pay, staff permissions, profile settings, insights
 budgets and check deposits. Run them against a **separate test server with its own scratch database**, never your real `altobank.db`:
 
@@ -135,6 +135,7 @@ budgets and check deposits. Run them against a **separate test server with its o
 # terminal 1: a test server on a scratch database
 cd AltoBank
 $env:ConnectionStrings__DefaultConnection = "Data Source=C:\temp\alto-test.db"
+$env:Uploads__Root = "C:\temp\alto-test-uploads"   # test check images stay out of App_Data/uploads
 dotnet run -- --reset-db
 $env:ASPNETCORE_URLS = "http://localhost:5299"; $env:Scheduler__IntervalSeconds = "5"
 dotnet run --no-launch-profile

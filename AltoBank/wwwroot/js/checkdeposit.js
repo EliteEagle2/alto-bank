@@ -119,8 +119,9 @@
         steps.forEach(s => s.hidden = true);
         gate.hidden = true;
         review.hidden = false;
-        review.querySelector('legend').focus?.();
+        // Move focus to the review so keyboard and screen-reader users land on it (the button they pressed is now hidden).
         review.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        $('[data-review-title]').focus({ preventScroll: true });
     });
     backBtn.addEventListener('click', () => {
         steps.forEach(s => s.hidden = false);

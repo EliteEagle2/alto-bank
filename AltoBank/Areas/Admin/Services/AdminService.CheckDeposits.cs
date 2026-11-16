@@ -68,9 +68,16 @@ public partial class AdminService
             if (d.Status != CheckDepositStatus.Pending)
                 return Fail($"{d.Reference} was already {d.Status.ToString().ToLowerInvariant()}. A check can only be decided once.");
 
+            // Second line of defense against duplicates: never post a check whose front image was already deposited.
+            var posted = await _db.CheckDeposits.AsNoTracking()
+                .Where(x => x.FrontHash == d.FrontHash && x.Id != d.Id && x.Status == CheckDepositStatus.Approved)
+                .Select(x => x.Id).FirstOrDefaultAsync();
+            if (posted != 0)
+                return Fail($"Can't approve {d.Reference}: the same check image was already deposited as CHK-{posted:D6}. Reject this one.");
+
             // The money goes through IBankService, inside THIS transaction (frozen/closed accounts are refused there).
-            var (posted, t) = await _bank.PostCheckDepositInCurrentTransactionAsync(d);
-            if (!posted.Success || t == null) return Fail($"Can't approve {d.Reference}: {posted.Message}");
+            var (result, t) = await _bank.PostCheckDepositInCurrentTransactionAsync(d);
+            if (!result.Success || t == null) return Fail($"Can't approve {d.Reference}: {result.Message}");
 
             d.Status = CheckDepositStatus.Approved;
             d.ReviewedAt = DateTime.UtcNow;
@@ -95,8 +102,9 @@ public partial class AdminService
             d.ReviewedAt = DateTime.UtcNow;
             d.ReviewerEmail = AdminEmail;
             d.RejectReason = reason.Trim();   // shown to the customer, so the modal asks for it in their words
+            var sentence = d.RejectReason.EndsWith('.') || d.RejectReason.EndsWith('!') || d.RejectReason.EndsWith('?') ? d.RejectReason : d.RejectReason + ".";
             _alerts.Add(d.UserId, AlertType.CheckRejected, "Check not accepted",
-                $"Your {d.Amount:C} check for {d.Account!.DisplayName} wasn't accepted: {d.RejectReason} No money was added.", $"/checks/{d.Id}");
+                $"Your {d.Amount:C} check for {d.Account!.DisplayName} wasn't accepted: {sentence} No money was added.", $"/checks/{d.Id}");
             _audit.Add("CheckDeposit.Reject", $"Rejected {d.Reference} ({d.Amount:C})", "CheckDeposit", d.Id.ToString(),
                        new { status = "Pending" }, new { status = "Rejected" }, reason);
             return Ok($"{d.Reference} rejected. The customer will see your reason.");

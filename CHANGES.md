@@ -22,8 +22,8 @@ Every suite runs against a separate test server on a freshly reset scratch datab
 | staff | Owner role, staff page, admins can't act on their own records | 56 |
 | profile | personal info, security, alert settings, preferences | 59 |
 | insights | categories, Insights page + API, budgets, budget alerts | 127 |
-| checkdeposit | uploads, limits, duplicates, pending balance, review queue | 112 |
-| **Total** | | **934** |
+| checkdeposit | uploads, limits, duplicates, races, pending balance, review queue | 121 |
+| **Total** | | **943** |
 
 ## Phase 2
 
@@ -51,6 +51,11 @@ Every suite runs against a separate test server on a freshly reset scratch datab
 - **Demo data**: placeholder check images drawn in code and marked "SAMPLE - NOT A REAL CHECK". Jordan has one approved and
   one pending; Maya has one rejected ("the back isn't endorsed"); Samuel has none.
 - Migration `MobileCheckDeposit` (the new limit columns default to the real limits for the existing settings row).
+- Review fixes: the daily limit and the duplicate guard are checked inside the same transaction as the insert, so two
+  submits at the same moment can't both get through (tested with parallel requests); approval refuses a check image that
+  was already deposited; the API needs `endorsed=true` like the website's checklist; without JavaScript, photo problems
+  are listed together with checklist problems; focus moves to the review step; files saved before a failed insert are
+  logged.
 
 ### Simpler customer navigation
 

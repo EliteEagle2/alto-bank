@@ -178,7 +178,9 @@ public static class SeedData
         await using (var tx = await db.Database.BeginTransactionAsync())
         {
             var (posted, t) = await bank.PostCheckDepositInCurrentTransactionAsync(approved);
-            if (posted.Success && t != null)
+            if (!posted.Success || t == null)
+                Console.WriteLine($"  Check deposit demo: couldn't post {approved.Reference} ({posted.Message}); it stays Pending.");
+            else
             {
                 approved.Status = CheckDepositStatus.Approved;
                 approved.ReviewedAt = t.Date;

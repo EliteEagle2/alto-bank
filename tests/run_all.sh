@@ -6,6 +6,7 @@
 #
 # Start the test server on a SCRATCH database first (never the real altobank.db), e.g. in PowerShell:
 #   $env:ConnectionStrings__DefaultConnection = "Data Source=C:\temp\alto-test.db"
+#   $env:Uploads__Root = "C:\temp\alto-test-uploads"   # check deposit images from the tests stay out of App_Data/uploads
 #   dotnet run -- --reset-db
 #   $env:ASPNETCORE_URLS = "http://localhost:5299"; dotnet run --no-launch-profile
 # Suites that "move time" (p2p, scheduler, ...) also need TEST_DB=<that scratch .db file> (see lib.sh sql()),
