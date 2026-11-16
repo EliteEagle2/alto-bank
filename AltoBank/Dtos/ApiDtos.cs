@@ -30,7 +30,8 @@ public record ActivityItemDto(
     int Id, DateTime Date, string Description, string Type, string Kind, bool IsCredit,
     decimal Amount, decimal SignedAmount, decimal BalanceAfter, string Status,
     string? Memo, string? Counterparty, int? ReversalOfTransactionId, int? ReversedByTransactionId,
-    DateOnly BankDate);   // the day this falls on in the bank's time zone (for "Today" / "Yesterday" grouping)
+    DateOnly BankDate,    // the day this falls on in the bank's time zone (for "Today" / "Yesterday" grouping)
+    string Category, string CategoryLabel, bool CategoryOverridden);   // Spending Insights
 
 /// <summary>A page of activity plus the money in/out totals for the WHOLE filtered range.</summary>
 public record ActivityPageDto(
@@ -137,3 +138,29 @@ public class PayRequestDto
 }
 
 public record ActionResultDto(bool Success, string Message);
+
+// ----- Spending Insights (/api/insights) -----
+
+/// <summary>A category the customer can pick. Key is what the API accepts ("FoodAndDining").</summary>
+public record CategoryDto(string Key, string Label, string Color, string Icon, bool IsSpending);
+
+public record CategorySpendDto(string Key, string Label, string Color, decimal Amount, decimal PreviousAmount, int Count);
+public record MerchantSpendDto(string Name, string Category, decimal Amount, int Count);
+public record MonthSpendDto(string Month, string Label, decimal Spending);
+public record CalloutDto(string Tone, string Text);
+public record BudgetProgressDto(int Id, string Category, string Label, decimal Limit, decimal Spent, decimal Remaining, decimal Percent, string State);
+
+/// <summary>GET /api/insights/summary — one bank month. Current month = month to date, compared with the same days last month.</summary>
+public record InsightsSummaryDto(
+    string Month, bool IsCurrentMonth, int ComparedDays,
+    decimal Spending, decimal PreviousSpending, decimal MoneyIn, decimal MoneyOut,
+    IReadOnlyList<CategorySpendDto> Categories, IReadOnlyList<MerchantSpendDto> TopMerchants,
+    IReadOnlyList<CalloutDto> Callouts, IReadOnlyList<BudgetProgressDto> Budgets);
+
+/// <summary>POST /api/insights/transactions/{id}/category. Category = a key from /api/insights/categories, or "auto".</summary>
+public class RecategorizeDto
+{
+    [Required, StringLength(20)] public string Category { get; set; } = string.Empty;
+}
+
+public record RecategorizeResultDto(bool Success, string Message, string Category, string Label, bool Overridden);

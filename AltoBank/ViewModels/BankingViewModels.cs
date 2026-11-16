@@ -14,6 +14,7 @@ public class DashboardViewModel
     public decimal TotalBalance { get; set; }
     public List<Transaction> RecentTransactions { get; set; } = new();
     public List<AltoBank.Dtos.DailyFlowDto> Flows { get; set; } = new();   // 30-day in/out chart
+    public BudgetWidgetViewModel Budgets { get; set; } = new(false, new());   // budgets at 75%+ this month
 }
 
 /// <summary>Shared form for Deposit and Withdraw (same fields, different action).</summary>

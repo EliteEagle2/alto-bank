@@ -74,6 +74,11 @@ public class Transaction
     public int? ReversalOfTransactionId { get; set; }
     public int? ReversedByTransactionId { get; set; }
 
+    // Spending Insights: what this was for. Set automatically by CategoryRules when the row is created;
+    // CategoryOverridden = the customer picked it themselves, so the rules never change it again.
+    public TransactionCategory Category { get; set; } = TransactionCategory.Other;
+    public bool CategoryOverridden { get; set; }
+
     // ----- Computed helpers (not stored) -----
 
     // True when money came INTO the account (shown in green).

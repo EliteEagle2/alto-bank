@@ -1,0 +1,24 @@
+@model BudgetProgress
+@* One budget's progress this month (Budgets page, Insights, dashboard widget).
+   Green under 75%, amber from 75%, red from 100%. The state is also written out in words with an icon,
+   so it never relies on color alone. *@
+@{
+    var (icon, status) = Model.State switch
+    {
+        "over" => ("bi-exclamation-octagon-fill", $"Over by {(-Model.Remaining):C}"),
+        "near" => ("bi-exclamation-triangle-fill", $"{Math.Floor(Model.Percent)}% used, {Model.Remaining:C} left"),
+        _ => ("bi-check-circle-fill", $"{Model.Remaining:C} left")
+    };
+    var width = Math.Min(100m, Model.Percent);
+}
+<div class="budget-bar budget-@Model.State">
+    <div class="budget-bar-top">
+        <span class="budget-bar-name"><i class="bi @Model.Icon" aria-hidden="true"></i>@Model.Label</span>
+        <span class="budget-bar-amounts"><money amount="@Model.Spent" /> <span class="text-muted-alto">of</span> <money amount="@Model.Limit" /></span>
+    </div>
+    <div class="budget-track" role="progressbar" aria-label="@Model.Label budget" aria-valuemin="0" aria-valuemax="100"
+         aria-valuenow="@Math.Round(width)" aria-valuetext="@status">
+        <div class="budget-fill" style="width: @width.ToString(System.Globalization.CultureInfo.InvariantCulture)%"></div>
+    </div>
+    <div class="budget-bar-status"><i class="bi @icon" aria-hidden="true"></i>@status</div>
+</div>

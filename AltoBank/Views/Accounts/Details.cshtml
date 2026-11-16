@@ -19,7 +19,10 @@
      data-total="@Model.TotalCount"
      data-default-days="@AccountDetailsViewModel.DefaultDays"
      data-today="@BankTime.Today.ToString("yyyy-MM-dd")"
-     data-tz="@BankTime.Zone.Id">
+     data-tz="@BankTime.Zone.Id"
+     data-categories="@System.Text.Json.JsonSerializer.Serialize(Categories.All.Select(c => new { key = c.ToString(), label = Categories.Label(c) }))">
+    @* Token for the category forms on rows that "Load more" adds (server-rendered rows carry their own). *@
+    @Html.AntiForgeryToken()
 
     <partial name="_AccountHeader" model="Model" />
 

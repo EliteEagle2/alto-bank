@@ -36,8 +36,8 @@
 
     <div class="row g-4">
         @* 30-day money in vs. out (Chart.js). The numbers are serialized to JSON in data-flows. *@
-        <div class="col-xl-5 order-xl-2">
-            <div class="glass p-4 h-100">
+        <div class="col-xl-5 order-xl-2 d-flex flex-column gap-4">
+            <div class="glass p-4">
                 <div class="d-flex justify-content-between align-items-baseline mb-1">
                     <h4 class="mb-0">Last 30 days</h4>
                     <span class="small text-muted-alto">excludes transfers between your accounts</span>
@@ -51,6 +51,7 @@
                             data-flows="@System.Text.Json.JsonSerializer.Serialize(Model.Flows, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))"></canvas>
                 </div>
             </div>
+            <partial name="_BudgetWidget" model="Model.Budgets" />
         </div>
 
         @* Recent transactions across all accounts — shared table partial, with the Account column *@

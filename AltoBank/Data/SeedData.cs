@@ -126,6 +126,79 @@ public static class SeedData
         await EnsureBillPayDemoDataAsync(services, db, userManager);
         if (freshPayments) await SpreadTodaysDemoActivityAsync(db, seedStarted);
         await EnsurePreferencesDemoDataAsync(db, userManager);
+        await CategorizeTransactionsAsync(db);
+        await EnsureInsightsDemoDataAsync(services, db, userManager);
+    }
+
+    /// <summary>
+    /// SPENDING INSIGHTS backfill: transactions saved before categories existed got "Other" from the migration.
+    /// Give each one its automatic category (CategoryRules), and each reversal the category of what it undid.
+    /// A customer's own choice (CategoryOverridden) is never touched. Only rows that change are saved, so on later
+    /// startups this finds nothing to do.
+    /// </summary>
+    private static async Task CategorizeTransactionsAsync(ApplicationDbContext db)
+    {
+        var rows = await db.Transactions.Where(t => !t.CategoryOverridden && t.Category == TransactionCategory.Other).ToListAsync();
+        if (rows.Count == 0) return;
+        var reversed = rows.Where(t => t.ReversalOfTransactionId != null).Select(t => t.ReversalOfTransactionId!.Value).ToList();
+        var originals = await db.Transactions.AsNoTracking().Where(t => reversed.Contains(t.Id))
+            .ToDictionaryAsync(t => t.Id, t => t.Category);
+        foreach (var t in rows)
+            t.Category = t.ReversalOfTransactionId is int of && originals.TryGetValue(of, out var c) ? c : CategoryRules.For(t.Type, t.Description);
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Demo budgets so the Insights page, the Budgets page and the dashboard widget have something to show.
+    /// Limits are set from what each customer has ACTUALLY spent so far this month, so every reseed shows the
+    /// three states: comfortably under (green), near the limit (amber, 75%+) and over (red, 100%+).
+    /// Jordan also has one transaction he recategorized himself (the concert tickets he paid Maya for).
+    /// Alex (staff) has none, which shows the empty state.
+    /// </summary>
+    private static async Task EnsureInsightsDemoDataAsync(IServiceProvider services, ApplicationDbContext db, UserManager<ApplicationUser> userManager)
+    {
+        if (await db.Budgets.AnyAsync()) return;
+        var jordan = await userManager.FindByEmailAsync(DemoEmail);
+        var maya = await userManager.FindByEmailAsync("maya@altobank.com");
+        var sam = await userManager.FindByEmailAsync("sam@altobank.com");
+        if (jordan == null || maya == null || sam == null) return;
+
+        // Jordan paid Maya back for concert tickets: a person-to-person payment ("Transfers" by default) that is
+        // really entertainment, so he moved it.
+        var concert = await db.Transactions.Where(t => t.Account!.UserId == jordan.Id && t.Type == TransactionType.PaymentSent
+                                                       && t.Description.Contains("Concert")).FirstOrDefaultAsync();
+        if (concert != null) { concert.Category = TransactionCategory.Entertainment; concert.CategoryOverridden = true; }
+        await db.SaveChangesAsync();
+
+        var budgetsService = services.GetRequiredService<AltoBank.Services.IBudgetService>();
+        foreach (var (user, plan) in new[]
+        {
+            (jordan, new[] { (TransactionCategory.FoodAndDining, "near"), (TransactionCategory.Groceries, "ok"), (TransactionCategory.Gas, "ok"),
+                             (TransactionCategory.Shopping, "over"), (TransactionCategory.Entertainment, "near") }),
+            (maya, new[] { (TransactionCategory.Groceries, "near"), (TransactionCategory.FoodAndDining, "ok"), (TransactionCategory.Gas, "over") }),
+            (sam, new[] { (TransactionCategory.FoodAndDining, "over"), (TransactionCategory.Groceries, "ok") }),
+        })
+        {
+            var month = AltoBank.Services.BankTime.FirstOfThisMonth;
+            // Same spending rule as the Insights page (AltoBank.Services.Spending): debits minus refunds.
+            var spent = AltoBank.Services.Spending.ByCategory(await AltoBank.Services.Spending.LoadAsync(db, user.Id, month, month.AddMonths(1)));
+            var before = AltoBank.Services.Spending.ByCategory(await AltoBank.Services.Spending.LoadAsync(db, user.Id, month.AddMonths(-1), month));
+            foreach (var (category, state) in plan)
+            {
+                var mtd = spent.GetValueOrDefault(category);
+                var prev = before.GetValueOrDefault(category);
+                static decimal Up5(decimal v) => Math.Max(5m, Math.Ceiling(v / 5m) * 5m);
+                static decimal Down5(decimal v) => Math.Max(5m, Math.Floor(v / 5m) * 5m);
+                var limit = mtd <= 0 ? Up5(Math.Max(prev, 50m))           // nothing spent yet this month: a normal-looking limit
+                    : state switch
+                    {
+                        "over" => mtd > 5m ? Down5(mtd * 0.9m) : 5m,
+                        "near" => Up5(mtd / 0.85m),
+                        _ => Math.Ceiling(Math.Max(mtd / 0.45m, prev) / 25m) * 25m
+                    };
+                await budgetsService.SaveAsync(user.Id, category, limit);   // also raises the 75% / 100% alerts
+            }
+        }
     }
 
     /// <summary>
@@ -621,7 +694,8 @@ public static class SeedData
             account.Balance += credit ? amount : -amount;
             var t = new Transaction
             {
-                Date = when, Type = type, Amount = amount, Description = description, BalanceAfter = account.Balance
+                Date = when, Type = type, Amount = amount, Description = description, BalanceAfter = account.Balance,
+                Category = CategoryRules.For(type, description)
             };
             account.Transactions.Add(t);
             return t;

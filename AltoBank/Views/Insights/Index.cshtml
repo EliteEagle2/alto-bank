@@ -1,0 +1,271 @@
+@model InsightsPageViewModel
+@* SPENDING INSIGHTS — /insights?month=yyyy-MM. The numbers and lists are rendered here; the two charts load their
+   data from /api/insights/summary and /api/insights/trend (wwwroot/js/insights.js). The category list beside the
+   donut is its legend and its table view: every slice is listed with its amount, so nothing depends on the chart. *@
+@{
+    var d = Model.Data;
+    var monthName = d.Month.ToString("MMMM yyyy");
+    var months = new List<DateOnly>();
+    for (var m = BankTime.FirstOfThisMonth; m >= d.EarliestMonth; m = m.AddMonths(-1)) months.Add(m);
+    var vsLabel = d.IsCurrentMonth ? $"than {d.PreviousMonth:MMM} 1–{d.ComparedDays}" : $"than {d.PreviousMonth:MMMM}";
+    var change = d.PreviousSpending > 0 ? (int)Math.Round((d.Spending - d.PreviousSpending) / d.PreviousSpending * 100m) : (int?)null;
+    var total = d.Categories.Sum(c => c.Amount);
+    string Href(DateOnly month, TransactionCategory? cat = null) =>
+        Url.Action("Index", "Insights", new { month = MonthParam.Format(month), category = cat?.ToString() })!;
+}
+
+<div class="container py-4 insights-page" id="insights" data-month="@Model.MonthKey">
+    <div class="feature-head">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-pie-chart text-gradient me-2"></i>Insights</h2>
+            <p class="text-muted-alto mb-0">Where your money went, by category. Transfers between your accounts and payments to people don't count as spending.</p>
+        </div>
+        <form method="get" asp-action="Index" class="month-picker" aria-label="Choose a month">
+            @if (d.HasPrevious)
+            {
+                <a class="btn btn-alto-outline btn-sm" href="@Href(d.PreviousMonth)" aria-label="Previous month"><i class="bi bi-chevron-left"></i></a>
+            }
+            else
+            {
+                <span class="btn btn-alto-outline btn-sm disabled" aria-hidden="true"><i class="bi bi-chevron-left"></i></span>
+            }
+            <label class="visually-hidden" for="monthSelect">Month</label>
+            <select id="monthSelect" name="month" class="form-select form-select-sm" data-autosubmit>
+                @foreach (var m in months)
+                {
+                    <option value="@MonthParam.Format(m)" selected="@(m == d.Month)">@m.ToString("MMMM yyyy")@(m == BankTime.FirstOfThisMonth ? " (so far)" : "")</option>
+                }
+            </select>
+            <button type="submit" class="btn btn-alto-outline btn-sm visually-hidden-focusable">Show</button>
+            @if (d.HasNext)
+            {
+                <a class="btn btn-alto-outline btn-sm" href="@Href(d.Month.AddMonths(1))" aria-label="Next month"><i class="bi bi-chevron-right"></i></a>
+            }
+            else
+            {
+                <span class="btn btn-alto-outline btn-sm disabled" aria-hidden="true"><i class="bi bi-chevron-right"></i></span>
+            }
+        </form>
+    </div>
+
+    @* ---------- The month in four numbers ---------- *@
+    <section class="glass insights-summary mb-4" aria-label="@monthName summary">
+        <div class="insights-headline">
+            <div class="small text-muted-alto">Spent in @d.Month.ToString("MMMM")@(d.IsCurrentMonth ? " so far" : "")</div>
+            <div class="insights-total"><money amount="@d.Spending" /></div>
+            @if (change is int pct && d.HasPrevious)
+            {
+                <div class="insights-change @(pct > 0 ? "is-up" : "is-down")">
+                    <i class="bi @(pct > 0 ? "bi-arrow-up-right" : pct < 0 ? "bi-arrow-down-right" : "bi-dash")" aria-hidden="true"></i>
+                    @(pct == 0 ? "About the same" : $"{Math.Abs(pct)}% {(pct > 0 ? "more" : "less")}") <span class="text-muted-alto">@vsLabel (<money amount="@d.PreviousSpending" />)</span>
+                </div>
+            }
+        </div>
+        <dl class="insights-flows">
+            <div><dt>Money in</dt><dd><money amount="@d.MoneyIn" class="text-success-alto" /></dd></div>
+            <div><dt>Money out</dt><dd><money amount="@d.MoneyOut" class="text-danger-alto" /></dd></div>
+            <div><dt>Net</dt><dd><money amount="@(d.MoneyIn - d.MoneyOut)" colorize="true" show-sign="true" /></dd></div>
+        </dl>
+    </section>
+
+    @if (d.Callouts.Any())
+    {
+        <ul class="insight-callouts mb-4" aria-label="What changed">
+            @foreach (var c in d.Callouts)
+            {
+                <li class="callout-@c.Tone"><i class="bi @c.Icon" aria-hidden="true"></i><span>@c.Text</span></li>
+            }
+        </ul>
+    }
+
+    <div class="row g-4 mb-4">
+        @* ---------- Donut by category + its legend/table ---------- *@
+        <div class="col-lg-6">
+            <section class="glass p-4 h-100" aria-labelledby="byCategoryTitle">
+                <h3 class="h5 mb-3" id="byCategoryTitle">By category</h3>
+                @if (!d.Categories.Any(c => c.Amount > 0))
+                {
+                    <partial name="_EmptyState" model='new EmptyStateViewModel("bi-pie-chart", $"No spending in {monthName}.")' />
+                }
+                else
+                {
+                    <div class="donut-wrap">
+                        <div class="donut-chart">
+                            <canvas id="categoryChart" role="img" aria-label="Spending by category in @monthName. The list next to the chart has every amount."></canvas>
+                            <div class="donut-center" aria-hidden="true"><span class="small text-muted-alto">Total</span><money amount="@total" /></div>
+                        </div>
+                        <div class="legend-col">
+                        <p class="small text-muted-alto mb-2 legend-hint">Select a category to see what's in it.</p>
+                        <ul class="category-legend">
+                            @foreach (var c in d.Categories.Where(c => c.Amount > 0))
+                            {
+                                var share = total > 0 ? Math.Round(c.Amount / total * 100m) : 0;
+                                <li class="@(Model.Category == c.Category ? "is-active" : "")">
+                                    <a href="@Href(d.Month, c.Category)#drilldown" aria-current="@(Model.Category == c.Category ? "true" : null)">
+                                        <span class="legend-swatch" style="background:@c.Color" aria-hidden="true"></span>
+                                        <span class="legend-name">@c.Label</span>
+                                        <span class="legend-share">@share%</span>
+                                        <money amount="@c.Amount" class="legend-amount" />
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                        </div>
+                    </div>
+                }
+            </section>
+        </div>
+
+        @* ---------- Month over month ---------- *@
+        <div class="col-lg-6">
+            <section class="glass p-4 h-100" aria-labelledby="trendTitle">
+                <div class="d-flex justify-content-between align-items-baseline mb-3 gap-2 flex-wrap">
+                    <h3 class="h5 mb-0" id="trendTitle">Month over month</h3>
+                    <span class="small text-muted-alto">Total spending@(d.IsCurrentMonth ? ", this month so far" : "")</span>
+                </div>
+                <div class="trend-chart">
+                    <canvas id="trendChart" role="img" aria-label="Total spending per month: @string.Join(", ", d.Trend.Select(t => $"{t.Month:MMMM} {t.Spending:C}"))"></canvas>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    @if (Model.Category is TransactionCategory picked)
+    {
+        @* ---------- Drill-down: one category's transactions this month ---------- *@
+        <section class="glass mb-4 overflow-hidden" id="drilldown" aria-labelledby="drillTitle">
+            <div class="d-flex justify-content-between align-items-center p-4 pb-3 gap-2 flex-wrap">
+                <h3 class="h5 mb-0" id="drillTitle"><i class="bi @Categories.Icon(picked) me-2" aria-hidden="true"></i>@Categories.Label(picked) in @d.Month.ToString("MMMM")</h3>
+                <a class="small" href="@Href(d.Month)">Close</a>
+            </div>
+            @if (!Model.CategoryTransactions.Any())
+            {
+                <partial name="_EmptyState" model='new EmptyStateViewModel(Categories.Icon(picked), $"Nothing in {Categories.Label(picked)} in {monthName}.")' />
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table alto-table mb-0">
+                        <thead><tr><th>Date</th><th>Description</th><th class="d-none d-md-table-cell">Account</th><th class="text-end">Amount</th><th>Category</th></tr></thead>
+                        <tbody>
+                            @foreach (var t in Model.CategoryTransactions)
+                            {
+                                <tr>
+                                    <td class="text-muted-alto text-nowrap">@t.LocalDate.ToString("MMM d")</td>
+                                    <td>
+                                        <a href="@Url.Action("Details", "Accounts", new { id = t.AccountId })#activity">@t.Description</a>
+                                        @if (t.CategoryOverridden) { <span class="cat-chip is-manual" title="You picked this category">Your pick</span> }
+                                        @if (t.Status == TransactionStatus.Reversed) { <span class="badge-reversed">Reversed</span> }
+                                    </td>
+                                    <td class="d-none d-md-table-cell text-muted-alto">@t.Account?.DisplayName ••@t.Account?.Last4</td>
+                                    <td class="text-end text-nowrap"><money amount="@t.SignedAmount" colorize="true" show-sign="true" /></td>
+                                    <td>
+                                        <form method="post" action="@Url.Action("Recategorize", "Insights", new { id = t.Id })" class="drill-cat" data-drill-cat data-tx-id="@t.Id">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="returnUrl" value="@($"{Href(d.Month, picked)}#drilldown")" />
+                                            <label class="visually-hidden" for="drill-@t.Id">Category for @t.Description</label>
+                                            <select id="drill-@t.Id" name="category" class="form-select form-select-sm">
+                                                @foreach (var c in Categories.All)
+                                                {
+                                                    <option value="@c" selected="@(c == t.Category)">@Categories.Label(c)</option>
+                                                }
+                                                @if (t.CategoryOverridden) { <option value="auto">Let Alto pick again</option> }
+                                            </select>
+                                            <button type="submit" class="btn btn-alto btn-sm">Save</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted-alto px-4 py-3 mb-0"><i class="bi bi-info-circle me-1"></i>Something in the wrong place? Pick the right category next to it and select <strong>Save</strong>. Your totals update right away.</p>
+            }
+        </section>
+    }
+
+    <div class="row g-4">
+        @* ---------- Top 5 merchants ---------- *@
+        <div class="col-lg-6">
+            <section class="glass p-4 h-100" aria-labelledby="merchantsTitle">
+                <h3 class="h5 mb-3" id="merchantsTitle">Top merchants</h3>
+                @if (!d.TopMerchants.Any())
+                {
+                    <p class="text-muted-alto mb-0">No purchases in @monthName.</p>
+                }
+                else
+                {
+                    var top = d.TopMerchants.Max(m => m.Amount);
+                    <ol class="merchant-list">
+                        @foreach (var m in d.TopMerchants)
+                        {
+                            <li>
+                                <div class="merchant-row">
+                                    <span class="merchant-name">@m.Name</span>
+                                    <money amount="@m.Amount" class="merchant-amount" />
+                                </div>
+                                <div class="small text-muted-alto">@Categories.Label(m.Category), @m.Count transaction@(m.Count == 1 ? "" : "s")</div>
+                                <span class="merchant-track" aria-hidden="true"><span style="width:@((top > 0 ? m.Amount / top * 100m : 0).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture))%; background:@Categories.Color(m.Category)"></span></span>
+                            </li>
+                        }
+                    </ol>
+                }
+            </section>
+        </div>
+
+        @* ---------- Budgets ---------- *@
+        <div class="col-lg-6">
+            <section class="glass p-4 h-100" aria-labelledby="budgetsTitle">
+                <div class="d-flex justify-content-between align-items-baseline mb-3">
+                    <h3 class="h5 mb-0" id="budgetsTitle">Budgets</h3>
+                    <a class="small" asp-controller="Budgets" asp-action="Index">Manage budgets</a>
+                </div>
+                @if (!d.Budgets.Any())
+                {
+                    <partial name="_EmptyState" model='@(new EmptyStateViewModel("bi-sliders", "Set a monthly limit for a category to see your progress here.", "Set a budget", "Budgets", "Index"))' />
+                }
+                else
+                {
+                    @if (!d.IsCurrentMonth)
+                    {
+                        <p class="small text-muted-alto">@monthName spending against your current limits.</p>
+                    }
+                    <div class="budget-list">
+                        @foreach (var b in d.Budgets) { <partial name="_BudgetBar" model="b" /> }
+                    </div>
+                }
+            </section>
+        </div>
+    </div>
+
+    @* ---------- How this works (plain-language help, always at hand) ---------- *@
+    <details class="glass insights-help mt-4" @(d.Budgets.Any() ? "" : "open")>
+        <summary><i class="bi bi-question-circle me-2" aria-hidden="true"></i>How Insights works</summary>
+        <div class="insights-help-grid">
+            <div>
+                <h4 class="h6"><i class="bi bi-tags me-2" aria-hidden="true"></i>Categories are automatic</h4>
+                <p>Alto sorts each purchase by the merchant name: Summit Grocers goes to Groceries, Keystone Fuel to Gas, and so on. Paychecks and interest count as income. Moving money between your own accounts or paying a friend isn't spending, so it's left out.</p>
+            </div>
+            <div>
+                <h4 class="h6"><i class="bi bi-pencil me-2" aria-hidden="true"></i>Fix a category</h4>
+                <p>Select a category above to list its purchases, then pick a different one next to the purchase. You can also open any transaction in <a asp-controller="Accounts" asp-action="Index">Accounts</a> and change it there. Your choice sticks.</p>
+            </div>
+            <div>
+                <h4 class="h6"><i class="bi bi-sliders me-2" aria-hidden="true"></i>Budgets</h4>
+                <p>Set a monthly limit for any category on the <a asp-controller="Budgets" asp-action="Index">Budgets</a> page. The bar turns amber at 75% and red at 100%, and we send you an alert at each. Limits start over on the 1st.</p>
+            </div>
+        </div>
+    </details>
+</div>
+
+@* Toast ("Moved to Groceries") *@
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
+    <div class="toast alto-toast" id="altoToast" role="status" aria-live="polite" aria-atomic="true" data-bs-delay="2200">
+        <div class="toast-body"><i class="bi bi-check2-circle me-2"></i><span data-toast-text></span></div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="~/js/insights.js" asp-append-version="true"></script>
+}

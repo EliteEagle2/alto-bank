@@ -166,5 +166,6 @@ public class AccountsApiController : ControllerBase
         new(t.Id, DateTime.SpecifyKind(t.Date, DateTimeKind.Utc), t.Description, t.TypeLabel, t.Type.ToString(), t.IsCredit,
             t.Amount, t.SignedAmount, t.BalanceAfter, t.Status.ToString(), t.Memo,
             t.CounterpartyName ?? (t.CounterpartyAccountId is int c ? labels.GetValueOrDefault(c) : null),
-            t.ReversalOfTransactionId, t.ReversedByTransactionId, BankTime.DateOf(t.Date));
+            t.ReversalOfTransactionId, t.ReversedByTransactionId, BankTime.DateOf(t.Date),
+            t.Category.ToString(), Categories.Label(t.Category), t.CategoryOverridden);
 }

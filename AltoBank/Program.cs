@@ -77,6 +77,8 @@ builder.Services.AddScoped<IAlertService, AlertService>();   // the customer Ale
 builder.Services.AddScoped<IPreferencesService, PreferencesService>();   // Profile settings (display, privacy, alert amounts)
 builder.Services.AddScoped<IPaymentRequestService, PaymentRequestService>();   // Send & Request: requests (no money moves)
 builder.Services.AddScoped<IBillPayService, BillPayService>();   // Bill Pay: payees + schedules (no money moves)
+builder.Services.AddScoped<IBudgetService, BudgetService>();     // Spending Insights: budgets, recategorizing, budget alerts
+builder.Services.AddScoped<IInsightsService, InsightsService>(); // Spending Insights: read-only monthly numbers for the charts
 
 // Background scheduler: a hosted service (singleton) that runs every minute; each run gets its own scope.
 builder.Services.AddScoped<AltoBank.Services.Scheduling.ISchedulerRunner, AltoBank.Services.Scheduling.SchedulerRunner>();

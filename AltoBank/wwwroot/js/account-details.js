@@ -99,6 +99,8 @@
         const desc = el('span', 'tx-desc');
         desc.appendChild(el('span', 'tx-title', t.description));
         const sub = el('span', 'tx-sub', `${t.type} · ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: TZ })} `);
+        const chip = el('span', 'cat-chip', t.categoryLabel); chip.dataset.catChip = '';
+        sub.appendChild(chip);
         if (reversed) sub.appendChild(el('span', 'badge-reversed', 'Reversed'));
         desc.appendChild(sub);
         const amounts = el('span', 'tx-amounts');
@@ -113,10 +115,63 @@
         [['Transaction ID', '#' + t.id], ['Date & time', date.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'medium', timeZone: TZ })],
          ['Type', t.type], ['Counterparty', t.counterparty || '—'], ['Memo', t.memo || '—'], ['Status', reversed ? 'Reversed' : 'Posted']]
             .forEach(([k, v]) => { const d = el('div'); d.append(el('dt', null, k), el('dd', k === 'Transaction ID' ? 'font-monospace' : null, v)); dl.append(d); });
-        more.append(dl);
+        more.append(dl, buildCategoryForm(t));
         row.append(btn, more);
         return { row, day: t.bankDate, label: dayLabel(t.bankDate) };
     }
+
+    // ---------- Category picker (same markup as the form in _TransactionRow.cshtml) ----------
+    const CATEGORIES = JSON.parse(root.dataset.categories || '[]');
+    const pageToken = (root.querySelector('input[name="__RequestVerificationToken"]') || {}).value || '';
+    const NOTE_AUTO = 'Alto picked this category from the merchant name.';
+    const NOTE_MINE = 'You chose this category.';
+
+    function fillCategorySelect(select, current, overridden) {
+        select.replaceChildren();
+        CATEGORIES.forEach(c => { const o = el('option', null, c.label); o.value = c.key; o.selected = c.key === current; select.append(o); });
+        if (overridden) { const o = el('option', null, 'Let Alto pick again'); o.value = 'auto'; select.append(o); }
+    }
+
+    function buildCategoryForm(t) {
+        const form = el('form', 'tx-cat-form'); form.method = 'post';
+        form.action = '/transactions/' + t.id + '/category'; form.dataset.txCat = '';
+        const token = el('input'); token.type = 'hidden'; token.name = '__RequestVerificationToken'; token.value = pageToken;
+        const back = el('input'); back.type = 'hidden'; back.name = 'returnUrl'; back.value = location.pathname + '#activity';
+        const label = el('label', 'form-label small mb-0', 'Category'); label.htmlFor = 'cat-' + t.id;
+        const select = el('select', 'form-select form-select-sm'); select.id = 'cat-' + t.id; select.name = 'category';
+        fillCategorySelect(select, t.category, t.categoryOverridden);
+        const save = el('button', 'btn btn-alto-outline btn-sm', 'Save'); save.type = 'submit';
+        const note = el('span', 'small text-muted-alto', t.categoryOverridden ? NOTE_MINE : NOTE_AUTO); note.dataset.catNote = '';
+        form.append(token, back, label, select, save, note);
+        return form;
+    }
+
+    // Save a category without reloading: POST /api/insights/transactions/{id}/category (JSON).
+    // Without JavaScript the same form posts to /transactions/{id}/category and comes back here.
+    list.addEventListener('submit', async e => {
+        const form = e.target.closest('[data-tx-cat]');
+        if (!form) return;
+        e.preventDefault();
+        const row = form.closest('.tx-row');
+        const select = form.elements.category;
+        const btn = form.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        try {
+            const res = await getJson('/api/insights/transactions/' + row.dataset.txId + '/category', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                body: JSON.stringify({ category: select.value })
+            });
+            row.querySelector('[data-cat-chip]').textContent = res.label;
+            form.querySelector('[data-cat-note]').textContent = res.overridden ? NOTE_MINE : NOTE_AUTO;
+            fillCategorySelect(select, res.category, res.overridden);
+            toast(res.message);
+        } catch (err) {
+            toast(err.message, true);
+        } finally {
+            btn.disabled = false;
+        }
+    });
 
     function appendRows(items) {
         items.forEach(t => {

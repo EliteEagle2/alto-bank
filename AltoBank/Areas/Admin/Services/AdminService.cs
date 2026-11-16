@@ -626,6 +626,7 @@ public partial class AdminService : IAdminService
                 var rev = AddTransaction(account, undoCredit ? TransactionType.ReversalDebit : TransactionType.ReversalCredit,
                                          leg.Amount, $"Reversal: {leg.Description}", memo: CustomerMemo, counterpartyId: leg.CounterpartyAccountId);
                 rev.ReversalOfTransactionId = leg.Id;
+                rev.Category = leg.Category;   // a reversal belongs to the same category as what it undoes
                 leg.Status = TransactionStatus.Reversed;
                 reversals.Add((leg, rev));
             }
@@ -959,7 +960,8 @@ public partial class AdminService : IAdminService
             AccountId = account.Id, Type = type, Amount = amount,
             Description = description.Length > 100 ? description[..100] : description,
             Memo = memo?.Length > 200 ? memo[..200] : memo,
-            BalanceAfter = account.Balance, CounterpartyAccountId = counterpartyId, Date = DateTime.UtcNow
+            BalanceAfter = account.Balance, CounterpartyAccountId = counterpartyId, Date = DateTime.UtcNow,
+            Category = CategoryRules.For(type, description)
         };
         _db.Transactions.Add(t);
         return t;

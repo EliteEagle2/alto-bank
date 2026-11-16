@@ -533,6 +533,45 @@ namespace AltoBank.Migrations
                         });
                 });
 
+            modelBuilder.Entity("AltoBank.Models.Budget", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("MonthlyLimit")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Active");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Category")
+                        .IsUnique();
+
+                    b.ToTable("Budgets");
+                });
+
             modelBuilder.Entity("AltoBank.Models.Card", b =>
                 {
                     b.Property<int>("Id")
@@ -993,6 +1032,16 @@ namespace AltoBank.Migrations
                     b.Property<decimal>("BalanceAfter")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Other");
+
+                    b.Property<bool>("CategoryOverridden")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int?>("CounterpartyAccountId")
                         .HasColumnType("INTEGER");
 
@@ -1034,9 +1083,9 @@ namespace AltoBank.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AccountId");
-
                     b.HasIndex("Date");
+
+                    b.HasIndex("AccountId", "Category", "Date");
 
                     b.ToTable("Transactions");
                 });
@@ -1244,6 +1293,17 @@ namespace AltoBank.Migrations
                 });
 
             modelBuilder.Entity("AltoBank.Models.Alert", b =>
+                {
+                    b.HasOne("AltoBank.Models.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.Budget", b =>
                 {
                     b.HasOne("AltoBank.Models.ApplicationUser", "User")
                         .WithMany()

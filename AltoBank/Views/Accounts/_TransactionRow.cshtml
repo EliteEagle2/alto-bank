@@ -1,6 +1,8 @@
 @model TransactionRowViewModel
 @* One row in the Account Details activity list. Click the row to expand the details.
-   (account-details.js builds rows for "Load more" with the same markup.) *@
+   (account-details.js builds rows for "Load more" with the same markup.)
+   The expanded part has the category picker: a normal form (POST /transactions/{id}/category, antiforgery token,
+   then back here), which account-details.js sends to the JSON API instead so the page doesn't reload. *@
 @{
     var t = Model.Transaction;
     var icon = t.Type switch
@@ -16,6 +18,7 @@
         _ => "bi-arrow-counterclockwise"
     };
     var reversed = t.Status == TransactionStatus.Reversed;
+    var returnUrl = $"{Context.Request.Path}#activity";
 }
 <div class="tx-row @(reversed ? "is-reversed" : "")" data-tx-id="@t.Id">
     <button type="button" class="tx-main" aria-expanded="false" aria-controls="tx-more-@t.Id">
@@ -23,6 +26,7 @@
         <span class="tx-desc">
             <span class="tx-title">@t.Description</span>
             <span class="tx-sub">@t.TypeLabel · @t.LocalDate.ToString("h:mm tt")
+                <span class="cat-chip" data-cat-chip>@Categories.Label(t.Category)</span>
                 @if (reversed) { <span class="badge-reversed">Reversed</span> }
             </span>
         </span>
@@ -41,5 +45,22 @@
             <div><dt>Memo</dt><dd>@(t.Memo ?? "—")</dd></div>
             <div><dt>Status</dt><dd>@(reversed ? "Reversed" : "Posted")</dd></div>
         </dl>
+        <form class="tx-cat-form" method="post" action="@Url.Action("Recategorize", "Insights", new { id = t.Id })" data-tx-cat>
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="returnUrl" value="@returnUrl" />
+            <label class="form-label small mb-0" for="cat-@t.Id">Category</label>
+            <select class="form-select form-select-sm" id="cat-@t.Id" name="category">
+                @foreach (var c in Categories.All)
+                {
+                    <option value="@c" selected="@(c == t.Category)">@Categories.Label(c)</option>
+                }
+                @if (t.CategoryOverridden)
+                {
+                    <option value="auto">Let Alto pick again</option>
+                }
+            </select>
+            <button type="submit" class="btn btn-alto-outline btn-sm">Save</button>
+            <span class="small text-muted-alto" data-cat-note>@(t.CategoryOverridden ? "You chose this category." : "Alto picked this category from the merchant name.")</span>
+        </form>
     </div>
 </div>

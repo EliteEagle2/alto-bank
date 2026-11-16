@@ -27,6 +27,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<ScheduledPayment> ScheduledPayments => Set<ScheduledPayment>();
     public DbSet<ScheduledRun> ScheduledRuns => Set<ScheduledRun>();
     public DbSet<SchedulerRunLog> SchedulerRunLogs => Set<SchedulerRunLog>();
+    public DbSet<Budget> Budgets => Set<Budget>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -54,6 +55,20 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             t.HasOne(x => x.Account).WithMany(a => a.Transactions)
              .HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
             t.HasIndex(x => x.Date);
+            // Existing rows get "Other" from the migration; the seeder then categorizes them with CategoryRules.
+            // Sentinel = Other: EF sends every other value (including FoodAndDining, the enum's 0) instead of the DB default.
+            t.Property(x => x.Category).HasConversion<string>().HasMaxLength(20)
+             .HasDefaultValue(TransactionCategory.Other).HasSentinel(TransactionCategory.Other);
+            t.HasIndex(x => new { x.AccountId, x.Category, x.Date });   // insights: one category over a month
+        });
+
+        // ----- Spending Insights: one budget per (customer, category); removing only sets Status -----
+        builder.Entity<Budget>(b =>
+        {
+            b.Property(x => x.Category).HasConversion<string>().HasMaxLength(20);
+            b.Property(x => x.Status).HasConversion<string>().HasMaxLength(10).HasDefaultValue(BudgetStatus.Active);
+            b.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            b.HasIndex(x => new { x.UserId, x.Category }).IsUnique();
         });
 
         builder.Entity<AccountApplication>(app =>

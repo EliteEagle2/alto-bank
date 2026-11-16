@@ -38,13 +38,19 @@ public partial class BankService : IBankService
     private readonly IAuditLogger _audit;
     private readonly ICardService _cards;
     private readonly IAlertService _alerts;
+    private readonly IBudgetService _budgets;
 
-    public BankService(ApplicationDbContext db, IAuditLogger audit, ICardService cards, IAlertService alerts)
+    // Spending Insights: (customer, category) pairs that got a new debit in the current money movement.
+    // Their budgets are checked once the movement has committed (see InTransactionAsync).
+    private readonly HashSet<(string UserId, TransactionCategory Category)> _budgetTouched = new();
+
+    public BankService(ApplicationDbContext db, IAuditLogger audit, ICardService cards, IAlertService alerts, IBudgetService budgets)
     {
         _db = db;
         _audit = audit;
         _cards = cards;
         _alerts = alerts;
+        _budgets = budgets;
     }
 
     // =====================================================================
@@ -570,25 +576,55 @@ public partial class BankService : IBankService
     /// </summary>
     private async Task<BankResult> InTransactionAsync(Func<Task<BankResult>> work)
     {
-        await using var dbTransaction = await _db.Database.BeginTransactionAsync();
+        _budgetTouched.Clear();
+        BankResult result;
+        await using (var dbTransaction = await _db.Database.BeginTransactionAsync())
+        {
+            try
+            {
+                result = await work();
+                if (result.Success) await dbTransaction.CommitAsync();
+                else { await dbTransaction.RollbackAsync(); _db.ChangeTracker.Clear(); _budgetTouched.Clear(); }
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                await dbTransaction.RollbackAsync();
+                _db.ChangeTracker.Clear();   // forget the stale balances we loaded
+                _budgetTouched.Clear();
+                return new BankResult(false, ConcurrencyMessage);
+            }
+            catch
+            {
+                await dbTransaction.RollbackAsync(); // undo everything if anything failed
+                _db.ChangeTracker.Clear();
+                _budgetTouched.Clear();
+                throw;
+            }
+        }
+        if (result.Success) await RaiseBudgetAlertsAsync();
+        return result;
+    }
+
+    /// <summary>
+    /// After a money movement has COMMITTED: add a budget alert for any budget the new debits pushed past 75% or 100%
+    /// (once per budget per month). It runs after the commit on purpose, so a problem saving an alert can never undo
+    /// or block the payment itself.
+    /// </summary>
+    private async Task RaiseBudgetAlertsAsync()
+    {
+        if (_budgetTouched.Count == 0) return;
+        var touched = _budgetTouched.ToList();
+        _budgetTouched.Clear();
         try
         {
-            var result = await work();
-            if (result.Success) await dbTransaction.CommitAsync();
-            else { await dbTransaction.RollbackAsync(); _db.ChangeTracker.Clear(); }
-            return result;
+            foreach (var byUser in touched.GroupBy(x => x.UserId))
+                await _budgets.QueueAlertsAsync(byUser.Key, byUser.Select(x => x.Category));
+            await _db.SaveChangesAsync();
         }
-        catch (DbUpdateConcurrencyException)
+        catch (DbUpdateException)
         {
-            await dbTransaction.RollbackAsync();
-            _db.ChangeTracker.Clear();   // forget the stale balances we loaded
-            return new BankResult(false, ConcurrencyMessage);
-        }
-        catch
-        {
-            await dbTransaction.RollbackAsync(); // undo everything if anything failed
+            // e.g. the same alert was just added by a parallel request (unique dedupe key): it exists, nothing to do.
             _db.ChangeTracker.Clear();
-            throw;
         }
     }
 
@@ -607,10 +643,15 @@ public partial class BankService : IBankService
             BalanceAfter = account.Balance,
             Memo = memo,
             CounterpartyAccountId = counterpartyId,
-            Date = DateTime.UtcNow
+            Date = DateTime.UtcNow,
+            Category = CategoryRules.For(type, description)   // Spending Insights: automatic category
         };
         _db.Transactions.Add(t);
-        if (!Transaction.IsCreditType(type)) AddBalanceAlerts(account, amount);
+        if (!Transaction.IsCreditType(type))
+        {
+            AddBalanceAlerts(account, amount);
+            if (Categories.IsSpending(t.Category)) _budgetTouched.Add((account.UserId, t.Category));
+        }
         return t;
     }
 

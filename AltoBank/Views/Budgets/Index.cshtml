@@ -1,0 +1,106 @@
+@model BudgetsPageViewModel
+@* BUDGETS — /budgets. A monthly limit per spending category. Progress counts this bank month's spending across
+   all of your accounts; bars turn amber at 75% and red at 100%, and you get one alert at each (once a month). *@
+@{
+    var daysLeft = DateTime.DaysInMonth(Model.Month.Year, Model.Month.Month) - BankTime.Today.Day;
+    var options = Model.Unbudgeted.ToList();
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+}
+
+<div class="container py-4 budgets-page">
+    <div class="feature-head">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-sliders text-gradient me-2"></i>Budgets</h2>
+            <p class="text-muted-alto mb-0">@Model.Month.ToString("MMMM yyyy"): @daysLeft day@(daysLeft == 1 ? "" : "s") left. Limits reset on the 1st of every month.</p>
+        </div>
+        <a class="btn btn-alto-outline btn-sm" asp-controller="Insights" asp-action="Index"><i class="bi bi-pie-chart me-1"></i>See your insights</a>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <section class="glass p-4" aria-labelledby="yourBudgetsTitle">
+                <h3 class="h5 mb-3" id="yourBudgetsTitle">This month</h3>
+                @if (!Model.Budgets.Any())
+                {
+                    <partial name="_EmptyState" model='@(new EmptyStateViewModel("bi-sliders", "No budgets yet. Pick a category under Add a budget to start."))' />
+                }
+                else
+                {
+                    <ul class="budget-manage-list">
+                        @foreach (var b in Model.Budgets)
+                        {
+                            <li>
+                                <partial name="_BudgetBar" model="b" />
+                                <details class="budget-edit">
+                                    <summary class="small">Change or remove</summary>
+                                    <form asp-action="Save" method="post" class="budget-edit-form mt-2">
+                                        <input type="hidden" name="Form.Category" value="@b.Category" />
+                                        <label class="form-label small" for="limit-@b.BudgetId">Monthly limit</label>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">$</span>
+                                            <input id="limit-@b.BudgetId" name="Form.MonthlyLimit" type="number" step="0.01" min="1" max="100000"
+                                                   class="form-control" value="@b.Limit.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)" required />
+                                            <button type="submit" class="btn btn-alto-outline btn-sm">Save</button>
+                                        </div>
+                                    </form>
+                                    <form asp-action="Remove" asp-route-id="@b.BudgetId" method="post" class="remove-box mt-2">
+                                        <span class="small">Remove the @b.Label budget? Your spending history stays the same.</span>
+                                        <button type="submit" class="btn btn-alto-ghost btn-sm text-danger-alto">Remove budget</button>
+                                    </form>
+                                </details>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+        </div>
+
+        <div class="col-lg-5">
+            <section class="glass p-4" aria-labelledby="addBudgetTitle">
+                <h3 class="h5 mb-3" id="addBudgetTitle">Add a budget</h3>
+                @if (!options.Any())
+                {
+                    <p class="text-muted-alto mb-0">Every spending category already has a budget. Use <strong>Change limit</strong> to adjust one.</p>
+                }
+                else
+                {
+                    <form asp-action="Save" method="post" novalidate>
+                        <div asp-validation-summary="ModelOnly" class="text-danger-alto small mb-2"></div>
+                        <div class="mb-3">
+                            <label asp-for="Form.Category" class="form-label"></label>
+                            <select asp-for="Form.Category" class="form-select" data-budget-category>
+                                <option value="">Choose a category</option>
+                                @foreach (var c in options)
+                                {
+                                    var last = Model.LastMonth.GetValueOrDefault(c);
+                                    <option value="@c" selected="@(Model.Form.Category == c)" data-last="@last.ToString("0.00", inv)">@Categories.Label(c)</option>
+                                }
+                            </select>
+                            <span asp-validation-for="Form.Category" class="text-danger-alto small"></span>
+                        </div>
+                        <div class="mb-3">
+                            <label asp-for="Form.MonthlyLimit" class="form-label"></label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input asp-for="Form.MonthlyLimit" class="form-control" type="number" step="0.01" min="1" max="100000" placeholder="0.00" />
+                            </div>
+                            <span asp-validation-for="Form.MonthlyLimit" class="text-danger-alto small"></span>
+                            <div class="form-text" data-limit-hint>Pick a category and we'll suggest a limit from what you spent last month.</div>
+                        </div>
+                        <button type="submit" class="btn btn-alto">Add budget</button>
+                    </form>
+                }
+                <ul class="budget-explain small text-muted-alto mt-3 mb-0">
+                    <li><i class="bi bi-calendar3 me-2" aria-hidden="true"></i>Counts what you spend in that category this month, across all your accounts.</li>
+                    <li><i class="bi bi-arrow-repeat me-2" aria-hidden="true"></i>Starts over on the 1st of every month.</li>
+                    <li><i class="bi bi-palette me-2" aria-hidden="true"></i>Green while you're under 75%, amber from 75%, red once you go over.</li>
+                </ul>
+                <p class="small text-muted-alto mt-3 mb-0"><i class="bi bi-bell me-1"></i>We'll alert you once when a budget reaches 75% and again at 100%. You can turn budget alerts off in <a asp-controller="Profile" asp-action="Index" asp-fragment="alerts">Profile</a>.</p>
+            </section>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/budgets.js" asp-append-version="true"></script>
+}
