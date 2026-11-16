@@ -36,6 +36,9 @@
     foreach (var a in Model.PendingList)
         queue.Add(("app", "bi-file-earmark-check", "warn", $"{a.FirstName} {a.LastName}", $"{a.AccountType} application · {a.OpeningDeposit:C} opening deposit",
                    a.SubmittedAt, Url.Action("Details", "Applications", new { area = "Admin", id = a.Id })!, "Review"));
+    foreach (var c in Model.PendingChecks)
+        queue.Add(("check", "bi-camera", "warn", $"{c.User?.FirstName} {c.User?.LastName}", $"{c.Amount:C} mobile check deposit to {c.Account?.DisplayName} ••{c.Account?.Last4}",
+                   c.SubmittedAt, Url.Action("Details", "CheckDeposits", new { area = "Admin", id = c.Id })!, "Review"));
     foreach (var a in Model.FrozenList)
         queue.Add(("frozen", "bi-snow", "danger", $"{a.User?.FirstName} {a.User?.LastName}", $"{a.DisplayName} ••{a.Last4} is frozen",
                    a.StatusChangedAt, Url.Action("Details", "Accounts", new { area = "Admin", id = a.Id })!, "Open"));
@@ -46,13 +49,14 @@
         queue.Add(("large", "bi-cash-stack", "info", $"{t.Account?.User?.FirstName} {t.Account?.User?.LastName}", $"{t.SignedAmount:+$#,0.00;-$#,0.00} · {t.Description}",
                    t.Date, Url.Action("Details", "Transactions", new { area = "Admin", id = t.Id })!, "Review"));
     queue = queue.OrderByDescending(q => q.When ?? DateTime.MinValue).ToList();
-    var kinds = new[] { ("all", "All", queue.Count), ("app", "Applications", Model.PendingList.Count), ("frozen", "Frozen", Model.FrozenList.Count),
+    var kinds = new[] { ("all", "All", queue.Count), ("app", "Applications", Model.PendingList.Count), ("check", "Checks", Model.PendingChecks.Count), ("frozen", "Frozen", Model.FrozenList.Count),
                         ("failed", "Failed payments", Model.FailedScheduled.Count), ("large", $"Large debits ≥ {Fmt(Model.LargeThreshold)}", Model.LargeTransactions.Count) };
     var schedulerOk = Model.SchedulerLastRunAt is DateTime last && DateTime.UtcNow - last < TimeSpan.FromMinutes(5);
 }
 
 @section PageActions {
     <a class="btn btn-admin btn-sm" asp-controller="Applications" asp-action="Index" asp-route-status="Pending"><i class="bi bi-file-earmark-check me-1"></i>Review applications</a>
+    <a class="btn btn-admin-ghost btn-sm" asp-controller="CheckDeposits" asp-action="Index"><i class="bi bi-camera me-1"></i>Checks@(Model.PendingCheckCount > 0 ? $" ({Model.PendingCheckCount})" : "")</a>
     <a class="btn btn-admin-ghost btn-sm" asp-controller="Scheduled" asp-action="Index"><i class="bi bi-calendar-week me-1"></i>Scheduler</a>
     <a class="btn btn-admin-ghost btn-sm" asp-controller="AuditLog" asp-action="Index"><i class="bi bi-journal-text me-1"></i>Audit log</a>
 }

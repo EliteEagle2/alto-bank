@@ -71,7 +71,7 @@
     const ICONS = {
         Deposit: 'bi-arrow-down-left', Withdrawal: 'bi-arrow-up-right', TransferIn: 'bi-arrow-left-right', TransferOut: 'bi-arrow-left-right',
         Interest: 'bi-percent', AdjustmentCredit: 'bi-sliders', AdjustmentDebit: 'bi-sliders',
-        PaymentSent: 'bi-send', PaymentReceived: 'bi-person-down', BillPayment: 'bi-receipt'
+        PaymentSent: 'bi-send', PaymentReceived: 'bi-person-down', BillPayment: 'bi-receipt', CheckDeposit: 'bi-camera'
     };
     // Dates follow the BANK's time zone and calendar (not the browser's), same as the server-rendered rows.
     const TZ = root.dataset.tz || 'America/New_York';

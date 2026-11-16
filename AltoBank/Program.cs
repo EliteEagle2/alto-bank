@@ -79,6 +79,8 @@ builder.Services.AddScoped<IPaymentRequestService, PaymentRequestService>();   /
 builder.Services.AddScoped<IBillPayService, BillPayService>();   // Bill Pay: payees + schedules (no money moves)
 builder.Services.AddScoped<IBudgetService, BudgetService>();     // Spending Insights: budgets, recategorizing, budget alerts
 builder.Services.AddScoped<IInsightsService, InsightsService>(); // Spending Insights: read-only monthly numbers for the charts
+builder.Services.AddSingleton<IFileStore, FileStore>();          // uploads in App_Data/uploads (outside wwwroot), JPG/PNG by signature
+builder.Services.AddScoped<ICheckDepositService, CheckDepositService>();   // Mobile check deposit: submit, limits, duplicates (no money moves)
 
 // Background scheduler: a hosted service (singleton) that runs every minute; each run gets its own scope.
 builder.Services.AddScoped<AltoBank.Services.Scheduling.ISchedulerRunner, AltoBank.Services.Scheduling.SchedulerRunner>();

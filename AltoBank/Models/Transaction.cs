@@ -17,7 +17,8 @@ public enum TransactionType
     ReversalDebit,      // offsets (undoes) an earlier credit
     PaymentSent,        // Send & Request: money sent to another Alto customer (debit)
     PaymentReceived,    // Send & Request: money received from another Alto customer (credit)
-    BillPayment         // Bill Pay: money paid to a payee, now or on a schedule (debit)
+    BillPayment,        // Bill Pay: money paid to a payee, now or on a schedule (debit)
+    CheckDeposit        // Mobile check deposit, posted when an admin approves it (credit)
 }
 
 /// <summary>
@@ -92,7 +93,8 @@ public class Transaction
     public static readonly TransactionType[] CreditTypes =
     {
         TransactionType.Deposit, TransactionType.TransferIn, TransactionType.Interest,
-        TransactionType.AdjustmentCredit, TransactionType.ReversalCredit, TransactionType.PaymentReceived
+        TransactionType.AdjustmentCredit, TransactionType.ReversalCredit, TransactionType.PaymentReceived,
+        TransactionType.CheckDeposit
     };
 
     /// <summary>Money sent to another account. These count toward the daily transfer limit (withdrawals don't).</summary>
@@ -124,6 +126,7 @@ public class Transaction
         TransactionType.PaymentSent => "Payment sent",
         TransactionType.PaymentReceived => "Payment received",
         TransactionType.BillPayment => "Bill payment",
+        TransactionType.CheckDeposit => "Mobile check deposit",
         _ => type.ToString()
     };
 }

@@ -70,6 +70,14 @@ public interface IBankService
     /// <summary>Called by the background scheduler for one due item. Idempotent per (item, date).</summary>
     Task<ScheduledOutcome> ExecuteScheduledAsync(int scheduledPaymentId, DateOnly today);
 
+    // ----- Mobile check deposit (money side; BankService.CheckDeposits.cs) -----
+    /// <summary>
+    /// Posts an APPROVED check deposit: credits the account and records a CheckDeposit transaction. Must run inside the
+    /// caller's DB transaction (the admin approval), so the status change, the money and the audit row commit together.
+    /// Only an Active account can take it (a frozen or closed account is refused, with the reason).
+    /// </summary>
+    Task<(BankResult Result, Transaction? Transaction)> PostCheckDepositInCurrentTransactionAsync(CheckDeposit deposit);
+
     // ----- Opening accounts -----
     Task<(BankResult Result, Account? Account)> OpenAccountAsync(string userId, OpenAccountRequest request);
     Task<(BankResult Result, Account? Account)> OpenAccountInCurrentTransactionAsync(string userId, OpenAccountRequest request);

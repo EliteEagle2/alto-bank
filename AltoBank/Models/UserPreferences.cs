@@ -64,7 +64,7 @@ public class UserPreferences
         AlertType.BillPaid or AlertType.TransferScheduled => AlertCategory.Bills,
         AlertType.LowBalance or AlertType.LargeDebit => AlertCategory.Balance,
         AlertType.BudgetNearLimit => AlertCategory.Budgets,
-        AlertType.CheckApproved or AlertType.CheckRejected => AlertCategory.Deposits,
+        AlertType.CheckReceived or AlertType.CheckApproved or AlertType.CheckRejected => AlertCategory.Deposits,
         AlertType.DisputeUpdate => AlertCategory.Disputes,
         // Failed payments, freezes and reversals are about your money being blocked or taken back: always on.
         _ => AlertCategory.Security

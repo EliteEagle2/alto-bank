@@ -36,6 +36,7 @@ public static class CustomerNav
         new Page("Transfer", "bi-arrow-left-right", "Transactions", "Transfer", "Transfer"),
         new Page("Deposit", "bi-arrow-down-circle", "Transactions", "Deposit", "Deposit"),
         new Page("Withdraw", "bi-arrow-up-circle", "Transactions", "Withdraw", "Withdraw"),
+        new Page("Deposit a check", "bi-camera", "Checks", "Index"),
     });
 
     public static readonly Group Pay = new("Pay & request", "bi-send", new[]

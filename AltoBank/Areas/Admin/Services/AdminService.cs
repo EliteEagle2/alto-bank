@@ -95,7 +95,10 @@ public partial class AdminService : IAdminService
             RecentAdminActivity = await _db.AuditLogs.AsNoTracking().Where(l => l.ActorRole == "Admin")
                 .OrderByDescending(l => l.Id).Take(8).ToListAsync(),
             SchedulerLastRunAt = settings.SchedulerLastRunAt,
-            SchedulerLastRunSummary = settings.SchedulerLastRunSummary
+            SchedulerLastRunSummary = settings.SchedulerLastRunSummary,
+            PendingChecks = await _db.CheckDeposits.AsNoTracking().Include(d => d.User).Include(d => d.Account)
+                .Where(d => d.Status == CheckDepositStatus.Pending).OrderBy(d => d.SubmittedAt).Take(6).ToListAsync(),
+            PendingCheckCount = await _db.CheckDeposits.CountAsync(d => d.Status == CheckDepositStatus.Pending)
         };
     }
 
@@ -740,6 +743,8 @@ public partial class AdminService : IAdminService
             DefaultDailyTransferLimit = s.DefaultDailyTransferLimit,
             LargeTransactionThreshold = s.LargeTransactionThreshold,
             AutoApproveApplications = s.AutoApproveApplications,
+            MobileDepositPerCheckLimit = s.MobileDepositPerCheckLimit,
+            MobileDepositDailyLimit = s.MobileDepositDailyLimit,
             UpdatedAt = s.UpdatedAt,
             UpdatedBy = s.UpdatedBy
         };
@@ -755,6 +760,10 @@ public partial class AdminService : IAdminService
             s.DefaultDailyTransferLimit = Math.Round(input.DefaultDailyTransferLimit, 2);
             s.LargeTransactionThreshold = Math.Round(input.LargeTransactionThreshold, 2);
             s.AutoApproveApplications = input.AutoApproveApplications;
+            if (input.MobileDepositPerCheckLimit > input.MobileDepositDailyLimit)
+                return Fail("The per-check mobile deposit limit can't be more than the daily limit.");
+            s.MobileDepositPerCheckLimit = Math.Round(input.MobileDepositPerCheckLimit, 2);
+            s.MobileDepositDailyLimit = Math.Round(input.MobileDepositDailyLimit, 2);
             s.UpdatedAt = DateTime.UtcNow;
             s.UpdatedBy = AdminEmail;
             _audit.Add("Settings.Update", "Updated bank settings", "BankSetting", s.Id.ToString(), before, SettingsSnapshot(s), input.Reason);
@@ -993,7 +1002,8 @@ public partial class AdminService : IAdminService
 
     private static object SettingsSnapshot(BankSetting s) => new
     {
-        s.SavingsApy, s.CheckingApy, s.DefaultDailyTransferLimit, s.LargeTransactionThreshold, s.AutoApproveApplications
+        s.SavingsApy, s.CheckingApy, s.DefaultDailyTransferLimit, s.LargeTransactionThreshold, s.AutoApproveApplications,
+        s.MobileDepositPerCheckLimit, s.MobileDepositDailyLimit
     };
 
     private static object ProfileSnapshot(ApplicationUser u) => new

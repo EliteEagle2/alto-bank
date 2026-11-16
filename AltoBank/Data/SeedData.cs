@@ -128,6 +128,83 @@ public static class SeedData
         await EnsurePreferencesDemoDataAsync(db, userManager);
         await CategorizeTransactionsAsync(db);
         await EnsureInsightsDemoDataAsync(services, db, userManager);
+        await EnsureCheckDepositDemoDataAsync(services, db, userManager);
+    }
+
+    /// <summary>
+    /// Mobile check deposit demo: placeholder check images drawn in code (SampleCheckImage: clearly marked
+    /// "SAMPLE - NOT A REAL CHECK", no real bank or routing details), stored through IFileStore like real uploads.
+    ///   Jordan: one approved (posted through IBankService, so his running balance stays right) and one pending.
+    ///   Maya:   one rejected because the back wasn't endorsed.   Samuel: none.
+    /// </summary>
+    private static async Task EnsureCheckDepositDemoDataAsync(IServiceProvider services, ApplicationDbContext db, UserManager<ApplicationUser> userManager)
+    {
+        if (await db.CheckDeposits.AnyAsync()) return;
+        var jordan = await userManager.FindByEmailAsync(DemoEmail);
+        var maya = await userManager.FindByEmailAsync("maya@altobank.com");
+        var jChk = await db.Accounts.FirstOrDefaultAsync(a => a.AccountNumber == "4410274821");
+        var mChk = await db.Accounts.FirstOrDefaultAsync(a => a.AccountNumber == "5520831402");
+        if (jordan == null || maya == null || jChk == null || mChk == null) return;
+
+        var files = services.GetRequiredService<AltoBank.Services.IFileStore>();
+        var bank = services.GetRequiredService<AltoBank.Services.IBankService>();
+        var now = DateTime.UtcNow;
+        var today = AltoBank.Services.BankTime.Today;
+
+        async Task<(string Name, string Hash)> Store(byte[] png)
+        {
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(png)).ToLowerInvariant();
+            return (await files.SaveAsync(new AltoBank.Services.UploadedImage(png, ".png", "image/png", hash)), hash);
+        }
+        async Task<CheckDeposit> Make(ApplicationUser who, Account to, SampleCheckImage.Details d, bool endorsed, DateTime submitted)
+        {
+            var front = await Store(SampleCheckImage.Front(d));
+            var back = await Store(SampleCheckImage.Back(d, endorsed));
+            var dep = new CheckDeposit
+            {
+                UserId = who.Id, AccountId = to.Id, Amount = d.Amount, FrontImage = front.Name, BackImage = back.Name,
+                FrontHash = front.Hash, SubmittedAt = submitted
+            };
+            db.CheckDeposits.Add(dep);
+            await db.SaveChangesAsync();
+            db.Alerts.Add(new Alert { UserId = who.Id, Type = AlertType.CheckReceived, Title = "Check received", CreatedAt = submitted, ReadAt = submitted.AddHours(1),
+                Message = $"We got your {d.Amount:C} check for {to.DisplayName} ••{to.Last4}. We'll review it, usually within one business day.", Link = $"/checks/{dep.Id}" });
+            return dep;
+        }
+
+        // Jordan: approved yesterday's check (posted now through IBankService, inside a transaction like the admin approval).
+        var approved = await Make(jordan, jChk, new("Ridgeline Ski Club", "Jordan Rivera", 250.00m, "1042", today.AddDays(-2), "Lift ticket refund"),
+                                  endorsed: true, submitted: now.AddDays(-1));
+        await using (var tx = await db.Database.BeginTransactionAsync())
+        {
+            var (posted, t) = await bank.PostCheckDepositInCurrentTransactionAsync(approved);
+            if (posted.Success && t != null)
+            {
+                approved.Status = CheckDepositStatus.Approved;
+                approved.ReviewedAt = t.Date;
+                approved.ReviewerEmail = AdminEmail;
+                approved.TransactionId = t.Id;
+                db.Alerts.Add(new Alert { UserId = jordan.Id, Type = AlertType.CheckApproved, Title = "Check deposited", CreatedAt = t.Date,
+                    Message = $"Your {approved.Amount:C} check was approved and added to {jChk.DisplayName} ••{jChk.Last4}.", Link = $"/checks/{approved.Id}" });
+                await db.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+        }
+
+        // Jordan: one waiting for review (shows as "Pending" on his checking account and in the admin queue).
+        await Make(jordan, jChk, new("Hilltop Property Mgmt", "Jordan Rivera", 480.00m, "5520", today, "Security deposit refund"),
+                   endorsed: true, submitted: now.AddMinutes(-50));
+
+        // Maya: rejected, the back wasn't endorsed.
+        var rejected = await Make(maya, mChk, new("Center City Books", "Maya Chen", 300.00m, "0877", today.AddDays(-4), "Book club event"),
+                                  endorsed: false, submitted: now.AddDays(-3));
+        rejected.Status = CheckDepositStatus.Rejected;
+        rejected.ReviewedAt = now.AddDays(-2);
+        rejected.ReviewerEmail = AdminEmail;
+        rejected.RejectReason = "The back isn't endorsed. Sign the back, write \"For mobile deposit only at Alto Bank\" under your signature, and deposit it again.";
+        db.Alerts.Add(new Alert { UserId = maya.Id, Type = AlertType.CheckRejected, Title = "Check not accepted", CreatedAt = rejected.ReviewedAt.Value,
+            Message = $"Your {rejected.Amount:C} check for {mChk.DisplayName} wasn't accepted: the back isn't endorsed. No money was added.", Link = $"/checks/{rejected.Id}" });
+        await db.SaveChangesAsync();
     }
 
     /// <summary>

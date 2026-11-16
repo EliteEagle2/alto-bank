@@ -45,6 +45,17 @@
                         <div class="input-group"><span class="input-group-text">$</span><input asp-for="LargeTransactionThreshold" class="form-control" type="number" step="0.01" min="1" /></div>
                         <span asp-validation-for="LargeTransactionThreshold" class="field-validation-error"></span>
                     </div>
+                    <div class="col-sm-6">
+                        <label asp-for="MobileDepositPerCheckLimit" class="form-label"></label>
+                        <div class="input-group"><span class="input-group-text">$</span><input asp-for="MobileDepositPerCheckLimit" class="form-control" type="number" step="0.01" min="1" /></div>
+                        <span asp-validation-for="MobileDepositPerCheckLimit" class="field-validation-error"></span>
+                    </div>
+                    <div class="col-sm-6">
+                        <label asp-for="MobileDepositDailyLimit" class="form-label"></label>
+                        <div class="input-group"><span class="input-group-text">$</span><input asp-for="MobileDepositDailyLimit" class="form-control" type="number" step="0.01" min="1" /></div>
+                        <span asp-validation-for="MobileDepositDailyLimit" class="field-validation-error"></span>
+                        <div class="small text-muted-alto">Per customer, per bank day. Pending and approved checks count.</div>
+                    </div>
                     <div class="col-12">
                         <div class="form-check form-switch">
                             <input asp-for="AutoApproveApplications" class="form-check-input" role="switch" />

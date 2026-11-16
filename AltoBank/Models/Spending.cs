@@ -147,7 +147,7 @@ public static class CategoryRules
         if (type is TransactionType.TransferIn or TransactionType.TransferOut
                  or TransactionType.PaymentSent or TransactionType.PaymentReceived)
             return TransactionCategory.Transfers;
-        if (type == TransactionType.Interest) return TransactionCategory.Income;
+        if (type is TransactionType.Interest or TransactionType.CheckDeposit) return TransactionCategory.Income;
         // Every Bill Pay payee is a bill (utilities, phone, rent, insurance, credit card). "Test Gas Co" is a gas
         // UTILITY bill, not fuel, so the merchant keywords below don't apply.
         if (type == TransactionType.BillPayment) return TransactionCategory.BillsAndUtilities;

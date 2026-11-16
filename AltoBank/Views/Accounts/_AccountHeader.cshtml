@@ -59,6 +59,14 @@ else if (a.Status == AccountStatus.Closed)
                 <div class="acct-available"><money amount="@Model.AvailableBalance" /></div>
                 @if (a.Status != AccountStatus.Active) { <div class="small text-muted-alto">@why</div> }
             </div>
+            @if (Model.PendingChecks.Any())
+            {
+                <div>
+                    <div class="acct-label">Pending</div>
+                    <div class="acct-available acct-pending">+<money amount="@Model.PendingTotal" /></div>
+                    <div class="small text-muted-alto">@Model.PendingChecks.Count check@(Model.PendingChecks.Count == 1 ? "" : "s") in review, not available yet</div>
+                </div>
+            }
             @if (!isChecking)
             {
                 <div>

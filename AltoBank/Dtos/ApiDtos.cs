@@ -164,3 +164,23 @@ public class RecategorizeDto
 }
 
 public record RecategorizeResultDto(bool Success, string Message, string Category, string Label, bool Overridden);
+
+// ----- Mobile check deposit (/api/checkdeposits) -----
+
+/// <summary>
+/// POST /api/checkdeposits as multipart/form-data: accountId, amount, front, back (JPG/PNG, 5 MB each).
+/// IFormFile properties bind to the uploaded files (file upload model binding).
+/// </summary>
+public class CheckDepositUploadDto
+{
+    [Required] public int AccountId { get; set; }
+    [Range(typeof(decimal), "0.01", "1000000")] public decimal Amount { get; set; }
+    [Required] public IFormFile? Front { get; set; }
+    [Required] public IFormFile? Back { get; set; }
+}
+
+/// <summary>A check deposit. Status: Pending, Approved, Rejected. Image URLs only work for the owner.</summary>
+public record CheckDepositDto(
+    int Id, string Reference, int AccountId, string Account, decimal Amount, string Status,
+    DateTime SubmittedAt, DateTime? ReviewedAt, string? RejectReason, int? TransactionId,
+    string FrontImageUrl, string BackImageUrl);

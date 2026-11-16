@@ -26,9 +26,12 @@ public class AccountsController : Controller
     private readonly IBankService _bank;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ITimeLimitedDataProtector _identityProtector;
+    private readonly ICheckDepositService _checks;
 
-    public AccountsController(IBankService bank, UserManager<ApplicationUser> userManager, IDataProtectionProvider dataProtection)
+    public AccountsController(IBankService bank, UserManager<ApplicationUser> userManager, IDataProtectionProvider dataProtection,
+                              ICheckDepositService checks)
     {
+        _checks = checks;
         _bank = bank;
         _userManager = userManager;
         // Used to sign the "identity verified" token so the browser can't fake it.
@@ -85,7 +88,8 @@ public class AccountsController : Controller
             StatementMonths = months,
             RoutingNumber = BankService.RoutingNumber,
             BankName = BankService.BankName,
-            BankAddress = BankService.BankAddress
+            BankAddress = BankService.BankAddress,
+            PendingChecks = await _checks.GetPendingAsync(UserId, id)
         });
     }
 

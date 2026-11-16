@@ -1,0 +1,60 @@
+@model CheckDepositListViewModel
+@* /admin/checkdeposits — mobile check deposits waiting for review (oldest first) and the decided ones. *@
+@{
+    var q = Model.Query;
+    var total = Model.Counts.Values.Sum();
+    string Who(ApplicationUser? u) => u == null ? "—" : $"{u.FirstName} {u.LastName}";
+    // "All" is ?status=all (not a status, so it binds to null); no status at all opens the Pending queue (controller).
+    string Tab(CheckDepositStatus? s, string? customer = null) => Url.Action("Index", new { status = s?.ToString() ?? "all", customer })!;
+}
+
+<ul class="nav admin-tabs mb-3">
+    @foreach (var s in new CheckDepositStatus?[] { CheckDepositStatus.Pending, CheckDepositStatus.Approved, CheckDepositStatus.Rejected, null })
+    {
+        var label = s?.ToString() ?? "All";
+        var count = s is CheckDepositStatus st ? Model.Counts.GetValueOrDefault(st) : total;
+        <li class="nav-item"><a class="nav-link @(q.Status == s ? "active" : "")" href="@Tab(s, q.Customer)" aria-current="@(q.Status == s ? "page" : null)">@label (@count)</a></li>
+    }
+</ul>
+
+<form method="get" class="filter-bar" role="search">
+    <input type="hidden" name="status" value="@(q.Status?.ToString() ?? "all")" />
+    <div><label for="customer">Customer</label><input id="customer" name="customer" class="form-control" value="@q.Customer" placeholder="Name or email" /></div>
+    <div class="filter-actions"><button type="submit" class="btn btn-admin btn-sm">Filter</button>
+        @if (!string.IsNullOrWhiteSpace(q.Customer)) { <a class="btn btn-admin-ghost btn-sm" href="@Tab(q.Status)">Clear</a> }
+    </div>
+</form>
+
+<div class="admin-card p-0">
+    <div class="table-responsive">
+        <table class="table admin-table table-hover mb-0">
+            <thead><tr><th>Check</th><th>Submitted</th><th>Customer</th><th>Account</th><th class="text-end">Amount</th><th>Status</th><th>Reviewed</th></tr></thead>
+            <tbody>
+                @if (!Model.Deposits.Items.Any())
+                {
+                    <tr><td colspan="7" class="text-center text-muted-alto py-4">@(q.Status == CheckDepositStatus.Pending ? "No checks waiting. The queue is clear." : "No check deposits here.")</td></tr>
+                }
+                @foreach (var d in Model.Deposits.Items)
+                {
+                    <tr>
+                        <td>
+                            <a asp-action="Details" asp-route-id="@d.Id" class="check-row-link">
+                                <img src="@Url.Action("Image", new { id = d.Id, side = "front" })" alt="" class="check-thumb" loading="lazy" />
+                                <span class="font-monospace">@d.Reference</span>
+                            </a>
+                        </td>
+                        <td class="text-nowrap">@BankTime.ToLocal(d.SubmittedAt).ToString("MMM d, h:mm tt")</td>
+                        <td>@Who(d.User)<div class="small text-muted-alto">@d.User?.Email</div></td>
+                        <td>@d.Account?.DisplayName ••@d.Account?.Last4
+                            @if (d.Account?.Status != AccountStatus.Active) { <div><partial name="_StatusPill" model="d.Account?.Status.ToString() ?? string.Empty" /></div> }
+                        </td>
+                        <td class="text-end"><money amount="@d.Amount" /></td>
+                        <td><partial name="_StatusPill" model="d.Status.ToString()" /></td>
+                        <td class="small text-muted-alto">@(d.ReviewedAt == null ? "—" : $"{d.ReviewerEmail}, {BankTime.ToLocal(d.ReviewedAt.Value):MMM d}")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <partial name="_Pager" model="Model.Deposits.Pager" />
+</div>

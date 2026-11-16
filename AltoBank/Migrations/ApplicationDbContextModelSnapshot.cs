@@ -500,6 +500,12 @@ namespace AltoBank.Migrations
                     b.Property<decimal>("LargeTransactionThreshold")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal>("MobileDepositDailyLimit")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("MobileDepositPerCheckLimit")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal>("SavingsApy")
                         .HasColumnType("decimal(9,6)");
 
@@ -529,6 +535,8 @@ namespace AltoBank.Migrations
                             CheckingApy = 0.0000m,
                             DefaultDailyTransferLimit = 5000m,
                             LargeTransactionThreshold = 2500m,
+                            MobileDepositDailyLimit = 10000m,
+                            MobileDepositPerCheckLimit = 5000m,
                             SavingsApy = 0.0410m
                         });
                 });
@@ -635,6 +643,75 @@ namespace AltoBank.Migrations
                         .IsUnique();
 
                     b.ToTable("Cards");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.CheckDeposit", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AccountId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("BackImage")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FrontHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FrontImage")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RejectReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReviewerEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Pending");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("TransactionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("FrontHash");
+
+                    b.HasIndex("Status", "SubmittedAt");
+
+                    b.HasIndex("UserId", "SubmittedAt");
+
+                    b.ToTable("CheckDeposits");
                 });
 
             modelBuilder.Entity("AltoBank.Models.CustomerNote", b =>
@@ -1323,6 +1400,25 @@ namespace AltoBank.Migrations
                         .IsRequired();
 
                     b.Navigation("Account");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.CheckDeposit", b =>
+                {
+                    b.HasOne("AltoBank.Models.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AltoBank.Models.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Account");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("AltoBank.Models.CustomerNote", b =>

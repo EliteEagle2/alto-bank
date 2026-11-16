@@ -180,9 +180,9 @@ has "Sam now has the Emergency Fund account" "$(curl -s -b $S $B/api/accounts)" 
 has "Sam's funding leg recorded" "$(curl -s -b $S $B/api/accounts | grep -o '"id":[0-9]*,"type":"Checking"' | head -1 | grep -oE '[0-9]+' | xargs -I{} curl -s -b $S "$B/api/accounts/{}/transactions?page=1")" '"description":"Opening deposit","type":"Transfer Out"'
 
 echo "== Settings: auto-approve OFF -> pending -> deny with reason"
-R=$(apost /admin/settings /admin/settings -d SavingsApyPercent=4.10 -d CheckingApyPercent=0 -d DefaultDailyTransferLimit=5000 -d LargeTransactionThreshold=2500 -d AutoApproveApplications=false -d Reason=)
+R=$(apost /admin/settings /admin/settings -d SavingsApyPercent=4.10 -d CheckingApyPercent=0 -d DefaultDailyTransferLimit=5000 -d LargeTransactionThreshold=2500 -d MobileDepositPerCheckLimit=5000 -d MobileDepositDailyLimit=10000 -d AutoApproveApplications=false -d Reason=)
 check "settings without reason rejected (form re-shown)" "$(echo $R | cut -d' ' -f1)" 200
-R=$(apost /admin/settings /admin/settings -d SavingsApyPercent=4.10 -d CheckingApyPercent=0 -d DefaultDailyTransferLimit=5000 -d LargeTransactionThreshold=2500 -d AutoApproveApplications=false --data-urlencode "Reason=Manual review this week")
+R=$(apost /admin/settings /admin/settings -d SavingsApyPercent=4.10 -d CheckingApyPercent=0 -d DefaultDailyTransferLimit=5000 -d LargeTransactionThreshold=2500 -d MobileDepositPerCheckLimit=5000 -d MobileDepositDailyLimit=10000 -d AutoApproveApplications=false --data-urlencode "Reason=Manual review this week")
 has "settings saved" "$(flash $B/admin/settings)" "Settings saved"
 # Maya applies (returning customer, all info prefilled) — minimal valid application
 M=$(mktemp); login $M maya@altobank.com 'Demo123!' >/dev/null
@@ -201,7 +201,7 @@ R=$(apost "/admin/applications/details/$MAPP" "/admin/applications/deny/$MAPP" -
 has "denied" "$(flash "$B/admin/applications/details/$MAPP")" "denied"
 has "customer sees denial reason on profile" "$(curl -s -b $M $B/profile)" "recent proof of address"
 has "customer decision page shows denial" "$(curl -s -b $M "$DEC")" "couldn"
-R=$(apost /admin/settings /admin/settings -d SavingsApyPercent=4.10 -d CheckingApyPercent=0 -d DefaultDailyTransferLimit=5000 -d LargeTransactionThreshold=2500 -d AutoApproveApplications=true --data-urlencode "Reason=Back to auto-approve")
+R=$(apost /admin/settings /admin/settings -d SavingsApyPercent=4.10 -d CheckingApyPercent=0 -d DefaultDailyTransferLimit=5000 -d LargeTransactionThreshold=2500 -d MobileDepositPerCheckLimit=5000 -d MobileDepositDailyLimit=10000 -d AutoApproveApplications=true --data-urlencode "Reason=Back to auto-approve")
 
 echo "== Monthly interest run"
 R=$(apost /admin/settings /admin/settings/runinterest --data-urlencode "reason=November interest run")

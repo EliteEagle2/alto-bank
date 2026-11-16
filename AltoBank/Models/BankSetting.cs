@@ -23,6 +23,10 @@ public class BankSetting
     // Transactions at or above this amount show up in the admin "Needs attention" panel.
     [Column(TypeName = "decimal(18,2)")] public decimal LargeTransactionThreshold { get; set; } = 2500m;
 
+    // Mobile check deposit limits: per check, and per customer per BANK day (pending + approved deposits count).
+    [Column(TypeName = "decimal(18,2)")] public decimal MobileDepositPerCheckLimit { get; set; } = 5000m;
+    [Column(TypeName = "decimal(18,2)")] public decimal MobileDepositDailyLimit { get; set; } = 10000m;
+
     // ON: applications are approved instantly. OFF: they wait as "Pending" for an admin.
     public bool AutoApproveApplications { get; set; } = true;
 

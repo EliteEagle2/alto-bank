@@ -74,6 +74,8 @@ public class OverviewViewModel
     public List<AuditLog> RecentAdminActivity { get; set; } = new();       // latest actions by staff
     public DateTime? SchedulerLastRunAt { get; set; }
     public string? SchedulerLastRunSummary { get; set; }
+    public List<CheckDeposit> PendingChecks { get; set; } = new();          // mobile check deposits waiting for review
+    public int PendingCheckCount { get; set; }
 }
 
 // ============================================================================
@@ -200,6 +202,8 @@ public class SettingsInput
     [Range(0, 1_000_000), Display(Name = "Default daily transfer limit")] public decimal DefaultDailyTransferLimit { get; set; }
     [Range(1, 1_000_000), Display(Name = "Large transaction alert threshold")] public decimal LargeTransactionThreshold { get; set; }
     [Display(Name = "Auto-approve applications")] public bool AutoApproveApplications { get; set; }
+    [Range(1, 1_000_000), Display(Name = "Mobile deposit: max per check")] public decimal MobileDepositPerCheckLimit { get; set; }
+    [Range(1, 1_000_000), Display(Name = "Mobile deposit: max per day")] public decimal MobileDepositDailyLimit { get; set; }
 
     [Required(ErrorMessage = "Enter a reason for this change."), StringLength(500, MinimumLength = 5, ErrorMessage = "Reason must be at least 5 characters.")]
     public string Reason { get; set; } = "";

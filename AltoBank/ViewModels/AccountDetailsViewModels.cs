@@ -18,6 +18,10 @@ public class AccountDetailsViewModel
     public const int DefaultDays = 90;
     public Dictionary<int, string> AccountLabels { get; set; } = new();   // counterparty names
 
+    // Mobile check deposits waiting for review. NOT in the posted or available balance (shown on their own line).
+    public List<CheckDeposit> PendingChecks { get; set; } = new();
+    public decimal PendingTotal => PendingChecks.Sum(c => c.Amount);
+
     // Header + Account Info
     public decimal AvailableBalance => Account.Status == AccountStatus.Active ? Account.Balance : 0m;
     public decimal Apy { get; set; }

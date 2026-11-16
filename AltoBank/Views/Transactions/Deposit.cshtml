@@ -6,7 +6,12 @@
 <div class="container py-5">
     <div class="glass form-card">
         <h2 class="mb-1"><i class="bi bi-arrow-down-circle text-success-alto me-2"></i>Deposit</h2>
-        <p class="text-muted-alto mb-4">Add money to one of your accounts.</p>
+        <p class="text-muted-alto mb-3">Add money to one of your accounts.</p>
+        <a class="check-offer mb-4" asp-controller="Checks" asp-action="Index">
+            <i class="bi bi-camera" aria-hidden="true"></i>
+            <span><strong>Have a paper check?</strong><span class="d-block small text-muted-alto">Deposit a check by taking a photo of each side.</span></span>
+            <i class="bi bi-chevron-right ms-auto" aria-hidden="true"></i>
+        </a>
         <partial name="_MoneyForm" model="Model" view-data='new ViewDataDictionary(ViewData) { ["Action"] = "Deposit" }' />
     </div>
 </div>

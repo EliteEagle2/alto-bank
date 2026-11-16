@@ -22,6 +22,10 @@ Built by **Austin Emig** for **Server Sided Web Development**.
   bill evenly or by custom amounts, and pay or decline requests. Requests expire after 14 days.
 - **Bill Pay and Upcoming:** manage payees, pay now, on a date, weekly or monthly, and schedule transfers between your own
   accounts. A calendar shows everything that's coming up; skip, edit or cancel any item.
+- **Mobile check deposit (simulated):** photograph the front and back (drag and drop on a computer, the camera on a
+  phone), tick the endorsement checklist and review before submitting. The check shows as **pending** (not in the
+  available balance) until staff approve it; per-check and daily limits apply, and the same check image can't be
+  deposited twice.
 - **Insights and Budgets:** every transaction is categorized automatically (and you can change it). A monthly view shows spending
   by category, month over month, top merchants and plain-language callouts. Monthly budgets turn amber at 75% and red at 100%,
   with an alert at each.
@@ -31,7 +35,8 @@ Built by **Austin Emig** for **Server Sided Web Development**.
 **For staff** (`/admin`)
 
 - A console with a work queue, customer search and a status bar (scheduler health, pending applications, frozen accounts).
-- Customers, accounts, transactions, applications, P2P payments and scheduled payments, with filters.
+- Customers, accounts, transactions, applications, P2P payments, scheduled payments and a **check deposit review
+  queue** (both images with click-to-zoom, duplicate-image warnings, the customer's deposit history), with filters.
 - Actions such as freezing an account, adjustments and reversals need a written reason and run in a database transaction that
   writes an audit log entry. Staff can't use admin tools on their own accounts.
 - An **Owner** role (set in configuration, never from the website) adds and removes admins.
@@ -64,9 +69,10 @@ On a phone:
 | Auth | ASP.NET Core Identity with Customer, Admin and Owner roles; antiforgery tokens on every form |
 | Money rules | All customer money movement goes through one service (`IBankService`). Each movement runs in a single database transaction, and `Account.Balance` is a concurrency token, so two requests racing on one account can't overdraw it |
 | Records | Nothing is deleted: transactions are reversed with an offsetting entry, and accounts, payees and budgets are closed or removed by status |
+| Uploads | Check images are stored outside `wwwroot` (`App_Data/uploads`, git-ignored) under random names; only JPG/PNG, checked by the file's signature (not its name), 5 MB max; served only to the owner or staff, never cached |
 | Background work | A `BackgroundService` scheduler pays bills and scheduled transfers and expires old requests. A unique index on (item, date) means a payment can never run twice for the same date, even after a restart |
 | Time | Times are stored in UTC; "today", months and the daily limit follow the bank's time zone (America/New_York) |
-| API | A JSON API (`/api/accounts`, `/api/payments`, `/api/insights`) that returns DTOs, never entities. The charts read from it. Swagger docs at `/swagger` in Development |
+| API | A JSON API (`/api/accounts`, `/api/payments`, `/api/insights`, `/api/checkdeposits`) that returns DTOs, never entities. The charts read from it. Swagger docs at `/swagger` in Development |
 | Front end | Bootstrap 5, Chart.js and small vanilla JavaScript modules; responsive down to phone width |
 
 ```
@@ -121,9 +127,9 @@ dotnet run -- --reset-db   # delete the database and start over with fresh demo 
 
 ## Tests
 
-`tests/` holds 12 end-to-end suites (800+ checks) that drive the running app over HTTP: money rules, races, ownership checks
+`tests/` holds 13 end-to-end suites (800+ checks) that drive the running app over HTTP: money rules, races, ownership checks
 (another customer's id returns 404), antiforgery, the scheduler, P2P, Bill Pay, staff permissions, profile settings, insights
-and budgets. Run them against a **separate test server with its own scratch database**, never your real `altobank.db`:
+budgets and check deposits. Run them against a **separate test server with its own scratch database**, never your real `altobank.db`:
 
 ```powershell
 # terminal 1: a test server on a scratch database
@@ -148,7 +154,7 @@ validation, tag helpers, areas, the API and more) to the code that uses it.
 
 ## Roadmap
 
-Mobile check deposit (image upload with an admin review queue) and transaction disputes are planned next.
+Transaction disputes (with provisional credit) are planned next.
 
 ## License
 

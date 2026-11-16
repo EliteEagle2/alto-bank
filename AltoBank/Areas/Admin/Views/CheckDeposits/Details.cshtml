@@ -1,0 +1,151 @@
+@model CheckDepositDetailViewModel
+@{ ViewData["OwnHeading"] = true; /* this page shows its own heading, so the layout title is for screen readers only */ }
+@{
+    var d = Model.Deposit;
+    var name = $"{d.User?.FirstName} {d.User?.LastName}";
+    var acct = $"{d.Account?.DisplayName} ••{d.Account?.Last4}";
+    var approve = new ConfirmModalViewModel("approveModal", $"Approve {d.Reference}",
+        $"{d.Amount:C} will be deposited to {name}'s {acct} right away and appear in their activity as \"Mobile check deposit\". They get an alert. This can only be undone with a reversal.",
+        Url.Action("Approve", new { id = d.Id })!, "Approve & deposit", "primary");
+    var reject = new ConfirmModalViewModel("rejectModal", $"Reject {d.Reference}",
+        $"No money moves. {name} will see the check as Rejected together with the reason you type below (for example \"The back isn't endorsed\"), so write it for the customer.",
+        Url.Action("Reject", new { id = d.Id })!, "Reject check", "danger");
+    string Local(DateTime? t) => t == null ? "—" : BankTime.ToLocal(t.Value).ToString("MMM d, yyyy h:mm tt");
+    string Img(string side) => Url.Action("Image", new { id = d.Id, side })!;
+    var blocked = Model.CannotApproveReason;
+}
+
+<div class="detail-head">
+    <div>
+        <a asp-action="Index" class="small text-decoration-none"><i class="bi bi-chevron-left"></i> Check deposits</a>
+        <h2 class="mt-1"><money amount="@d.Amount" /> check from @name <partial name="_StatusPill" model="d.Status.ToString()" /></h2>
+        <div class="text-muted-alto small"><span class="font-monospace">@d.Reference</span> · submitted @Local(d.SubmittedAt) · <a asp-controller="Customers" asp-action="Details" asp-route-id="@d.UserId">customer profile</a></div>
+    </div>
+    @if (d.IsPending)
+    {
+        <div class="detail-actions">
+            @if (blocked == null)
+            {
+                <button class="btn btn-admin" data-bs-toggle="modal" data-bs-target="#approveModal"><i class="bi bi-check2-circle me-1"></i>Approve</button>
+            }
+            else
+            {
+                <span class="btn btn-admin disabled" aria-disabled="true" title="@blocked"><i class="bi bi-check2-circle me-1"></i>Approve</span>
+            }
+            <button class="btn btn-admin-danger" data-bs-toggle="modal" data-bs-target="#rejectModal"><i class="bi bi-x-circle me-1"></i>Reject</button>
+        </div>
+    }
+</div>
+
+@if (d.IsPending && blocked != null)
+{
+    <div class="confirm-what danger mb-3" role="alert"><i class="bi bi-slash-circle me-2"></i><strong>Can't approve right now.</strong> @blocked</div>
+}
+@if (Model.Duplicates.Any())
+{
+    <div class="confirm-what warn mb-3" role="alert">
+        <div class="fw-semibold mb-1"><i class="bi bi-files me-2"></i>This front image was submitted before</div>
+        <ul class="mb-0 ps-3">
+            @foreach (var x in Model.Duplicates)
+            {
+                <li><a asp-action="Details" asp-route-id="@x.Id" class="font-monospace">@x.Reference</a>: <money amount="@x.Amount" />, @x.User?.FirstName @x.User?.LastName, @Local(x.SubmittedAt), @x.Status</li>
+            }
+        </ul>
+    </div>
+}
+@if (!d.IsPending)
+{
+    <div class="admin-card mb-3">
+        <dl class="kv mb-0">
+            <dt>Decision</dt><dd>@d.Status by @(d.ReviewerEmail ?? "—") on @Local(d.ReviewedAt)</dd>
+            @if (d.RejectReason != null) { <dt>Reason shown to customer</dt><dd>@d.RejectReason</dd> }
+            @if (Model.Transaction is { } t) { <dt>Posted as</dt><dd><a asp-controller="Transactions" asp-action="Details" asp-route-id="@t.Id">Transaction #@t.Id</a> on @Local(t.Date)</dd> }
+        </dl>
+    </div>
+}
+
+@* Both sides, large. Click one to see it full size. *@
+<div class="row g-3 mb-3">
+    @foreach (var (side, label) in new[] { ("front", "Front"), ("back", "Back (endorsement)") })
+    {
+        <div class="col-lg-6">
+            <figure class="admin-card check-figure mb-0">
+                <figcaption class="h6 mb-2">@label</figcaption>
+                <button type="button" class="check-zoom" data-bs-toggle="modal" data-bs-target="#zoomModal" data-zoom-src="@Img(side)" data-zoom-label="@label of @d.Reference"
+                        aria-label="Enlarge the @label.ToLowerInvariant() image">
+                    <img src="@Img(side)" alt="@label of check @d.Reference" />
+                    <span class="check-zoom-hint"><i class="bi bi-zoom-in"></i> Click to enlarge</span>
+                </button>
+            </figure>
+        </div>
+    }
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="admin-card h-100">
+            <h2 class="h6 mb-3">Deposit</h2>
+            <dl class="kv mb-0">
+                <dt>Amount</dt><dd><money amount="@d.Amount" /></dd>
+                <dt>Customer</dt><dd>@name<div class="small text-muted-alto">@d.User?.Email</div></dd>
+                <dt>To account</dt><dd><a asp-controller="Accounts" asp-action="Details" asp-route-id="@d.AccountId">@acct</a> <partial name="_StatusPill" model="d.Account?.Status.ToString() ?? string.Empty" /></dd>
+                <dt>Submitted</dt><dd>@Local(d.SubmittedAt)</dd>
+                <dt>Image check</dt><dd>@(Model.Duplicates.Any() ? $"Front image matches {Model.Duplicates.Count} other deposit(s)" : "No other deposit uses this front image")</dd>
+            </dl>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="admin-card p-0 h-100">
+            <h2 class="h6 p-3 mb-0">@d.User?.FirstName's other check deposits</h2>
+            <div class="table-responsive">
+                <table class="table admin-table mb-0">
+                    <thead><tr><th>Check</th><th>Submitted</th><th>Account</th><th class="text-end">Amount</th><th>Status</th></tr></thead>
+                    <tbody>
+                        @if (!Model.History.Any()) { <tr><td colspan="5" class="text-center text-muted-alto py-3">This is their first mobile deposit.</td></tr> }
+                        @foreach (var h in Model.History)
+                        {
+                            <tr>
+                                <td><a asp-action="Details" asp-route-id="@h.Id" class="font-monospace">@h.Reference</a></td>
+                                <td class="text-nowrap">@BankTime.ToLocal(h.SubmittedAt).ToString("MMM d, yyyy")</td>
+                                <td>@h.Account?.DisplayName ••@h.Account?.Last4</td>
+                                <td class="text-end"><money amount="@h.Amount" /></td>
+                                <td><partial name="_StatusPill" model="h.Status.ToString()" /></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Full-size image *@
+<div class="modal fade alto-modal" id="zoomModal" tabindex="-1" aria-labelledby="zoomTitle" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="zoomTitle" data-zoom-title>Check image</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center"><img data-zoom-img alt="" class="check-zoom-full" /></div>
+        </div>
+    </div>
+</div>
+
+@if (d.IsPending)
+{
+    @if (blocked == null) { <partial name="_ConfirmModal" model="approve" /> }
+    <partial name="_ConfirmModal" model="reject" />
+}
+
+@section Scripts {
+    <script>
+        // Click-to-zoom: put the clicked image in the modal (src comes from our own server-rendered attribute).
+        document.querySelectorAll('[data-zoom-src]').forEach(btn => btn.addEventListener('click', () => {
+            const img = document.querySelector('[data-zoom-img]');
+            img.src = btn.dataset.zoomSrc;
+            img.alt = btn.dataset.zoomLabel;
+            document.querySelector('[data-zoom-title]').textContent = btn.dataset.zoomLabel;
+        }));
+    </script>
+}

@@ -51,6 +51,33 @@
                 <div class="ms-auto text-muted-alto small" data-count>@Model.TotalCount transactions</div>
             </div>
 
+            @if (Model.PendingChecks.Any())
+            {
+                @* Pending mobile deposits: listed first, outside the running balance (they haven't posted). *@
+                <div class="glass activity-list pending-list mb-3" aria-label="Pending">
+                    <div class="tx-group">
+                        <div class="tx-date-head">Pending</div>
+                        @foreach (var c in Model.PendingChecks)
+                        {
+                            <a class="tx-pending-row" asp-controller="Checks" asp-action="Status" asp-route-id="@c.Id">
+                                <span class="tx-main">
+                                    <span class="tx-icon pending" aria-hidden="true"><i class="bi bi-camera"></i></span>
+                                    <span class="tx-desc">
+                                        <span class="tx-title">Pending - mobile deposit</span>
+                                        <span class="tx-sub">Submitted @BankTime.ToLocal(c.SubmittedAt).ToString("MMM d, h:mm tt") <span class="badge-pending">Pending</span></span>
+                                    </span>
+                                    <span class="tx-amounts">
+                                        <span class="tx-amount money amount-pending">+<money amount="@c.Amount" /></span>
+                                        <span class="tx-bal">Not in balance yet</span>
+                                    </span>
+                                    <i class="bi bi-chevron-right tx-caret" aria-hidden="true"></i>
+                                </span>
+                            </a>
+                        }
+                    </div>
+                </div>
+            }
+
             <div class="glass activity-list" id="activityList">
                 @foreach (var g in groups)
                 {

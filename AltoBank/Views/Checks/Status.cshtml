@@ -1,0 +1,82 @@
+@model CheckDeposit
+@* One check deposit's status for the customer: Submitted → In review → Deposited / Not accepted, with dates,
+   both photos and (when rejected) the reason. *@
+@{
+    var d = Model;
+    string Local(DateTime t) => BankTime.ToLocal(t).ToString("MMM d, yyyy h:mm tt");
+    var decided = d.Status != CheckDepositStatus.Pending;
+}
+
+<div class="container py-4 check-page">
+    <div class="feature-head">
+        <div>
+            <a asp-action="Index" class="small text-decoration-none"><i class="bi bi-chevron-left"></i> Deposit a check</a>
+            <h2 class="mt-1 mb-1"><money amount="@d.Amount" /> check <partial name="_CheckStatus" model="d.Status" /></h2>
+            <p class="text-muted-alto mb-0">To @d.Account?.DisplayName ••@d.Account?.Last4 · reference <span class="font-monospace text-nowrap">@d.Reference</span></p>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <section class="glass p-4 h-100" aria-labelledby="timelineTitle">
+                <h3 class="h6 mb-3" id="timelineTitle">What's happening</h3>
+                <ol class="check-timeline">
+                    <li class="is-done">
+                        <span class="tl-dot" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
+                        <div><strong>Submitted</strong><div class="small text-muted-alto">@Local(d.SubmittedAt)</div></div>
+                    </li>
+                    <li class="@(decided ? "is-done" : "is-current")">
+                        <span class="tl-dot" aria-hidden="true"><i class="bi @(decided ? "bi-check-lg" : "bi-hourglass-split")"></i></span>
+                        <div><strong>In review</strong>
+                            <div class="small text-muted-alto">@(decided ? "Reviewed" : "We're checking the photos. This usually takes one business day.")</div>
+                        </div>
+                    </li>
+                    @if (d.Status == CheckDepositStatus.Approved)
+                    {
+                        <li class="is-done is-good">
+                            <span class="tl-dot" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
+                            <div><strong>Deposited</strong><div class="small text-muted-alto">@Local(d.ReviewedAt!.Value)</div>
+                                <div class="small mt-1"><money amount="@d.Amount" /> was added to @d.Account?.DisplayName.
+                                    <a asp-controller="Accounts" asp-action="Details" asp-route-id="@d.AccountId" asp-fragment="activity">See it in your activity</a></div>
+                            </div>
+                        </li>
+                    }
+                    else if (d.Status == CheckDepositStatus.Rejected)
+                    {
+                        <li class="is-done is-bad">
+                            <span class="tl-dot" aria-hidden="true"><i class="bi bi-x-lg"></i></span>
+                            <div><strong>Not accepted</strong><div class="small text-muted-alto">@Local(d.ReviewedAt!.Value)</div></div>
+                        </li>
+                    }
+                    else
+                    {
+                        <li>
+                            <span class="tl-dot" aria-hidden="true"></span>
+                            <div><strong>Deposited</strong><div class="small text-muted-alto">Until then the money shows as pending and isn't in your available balance.</div></div>
+                        </li>
+                    }
+                </ol>
+
+                @if (d.Status == CheckDepositStatus.Rejected)
+                {
+                    <div class="check-reason" role="status">
+                        <div class="fw-semibold mb-1">Why it wasn't accepted</div>
+                        <p class="mb-2">@d.RejectReason</p>
+                        <p class="small text-muted-alto mb-3">No money was added. Fix the problem and deposit the check again with new photos.</p>
+                        <a class="btn btn-alto btn-sm" asp-action="Index" asp-route-accountId="@d.AccountId"><i class="bi bi-camera me-1"></i>Deposit it again</a>
+                    </div>
+                }
+            </section>
+        </div>
+
+        <div class="col-lg-7">
+            <section class="glass p-4" aria-labelledby="photosTitle">
+                <h3 class="h6 mb-3" id="photosTitle">Your photos</h3>
+                <div class="review-thumbs review-thumbs--lg">
+                    <figure><img src="@Url.Action("Image", new { id = d.Id, side = "front" })" alt="Front of check @d.Reference" /><figcaption>Front</figcaption></figure>
+                    <figure><img src="@Url.Action("Image", new { id = d.Id, side = "back" })" alt="Back of check @d.Reference" /><figcaption>Back</figcaption></figure>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>

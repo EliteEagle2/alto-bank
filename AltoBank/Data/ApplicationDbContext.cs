@@ -28,6 +28,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<ScheduledRun> ScheduledRuns => Set<ScheduledRun>();
     public DbSet<SchedulerRunLog> SchedulerRunLogs => Set<SchedulerRunLog>();
     public DbSet<Budget> Budgets => Set<Budget>();
+    public DbSet<CheckDeposit> CheckDeposits => Set<CheckDeposit>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -60,6 +61,17 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             t.Property(x => x.Category).HasConversion<string>().HasMaxLength(20)
              .HasDefaultValue(TransactionCategory.Other).HasSentinel(TransactionCategory.Other);
             t.HasIndex(x => new { x.AccountId, x.Category, x.Date });   // insights: one category over a month
+        });
+
+        // ----- Mobile check deposit: never deleted; a front-image hash index finds duplicates -----
+        builder.Entity<CheckDeposit>(c =>
+        {
+            c.Property(x => x.Status).HasConversion<string>().HasMaxLength(10).HasDefaultValue(CheckDepositStatus.Pending);
+            c.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            c.HasOne(x => x.Account).WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
+            c.HasIndex(x => x.FrontHash);
+            c.HasIndex(x => new { x.Status, x.SubmittedAt });   // the admin queue
+            c.HasIndex(x => new { x.UserId, x.SubmittedAt });   // the customer list + daily limit
         });
 
         // ----- Spending Insights: one budget per (customer, category); removing only sets Status -----

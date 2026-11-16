@@ -15,6 +15,7 @@
         TransactionType.PaymentSent => "bi-send",
         TransactionType.PaymentReceived => "bi-person-down",
         TransactionType.BillPayment => "bi-receipt",
+        TransactionType.CheckDeposit => "bi-camera",
         _ => "bi-arrow-counterclockwise"
     };
     var reversed = t.Status == TransactionStatus.Reversed;

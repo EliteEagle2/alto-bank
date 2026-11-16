@@ -1,0 +1,174 @@
+@model CheckDepositPageViewModel
+@* DEPOSIT A CHECK — /checks. A real 4-step flow (amount → photos → endorse → review). Without JavaScript every
+   step is visible and the form posts normally; wwwroot/js/checkdeposit.js adds drag and drop, previews with
+   Retake/Replace, the checklist gate and the review step. The server checks everything again. *@
+@{
+    var l = Model.Limits;
+    var canDeposit = Model.Accounts.Any();
+}
+
+<div class="container py-4 check-page" id="checkDeposit"
+     data-per-check="@l.PerCheck.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+     data-left-today="@l.LeftToday.ToString(System.Globalization.CultureInfo.InvariantCulture)">
+    <div class="feature-head">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-camera text-gradient me-2"></i>Deposit a check</h2>
+            <p class="text-muted-alto mb-0">Take a photo of each side. We'll review it, usually within one business day, and send you an alert either way.</p>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <section class="glass pay-card" aria-labelledby="checkFormTitle">
+                <h3 class="visually-hidden" id="checkFormTitle">Check deposit form</h3>
+                @if (!canDeposit)
+                {
+                    <partial name="_EmptyState" model='@(new EmptyStateViewModel("bi-wallet2", "You need an active checking or savings account to deposit a check.", "Open an account", "Accounts", "Apply"))' />
+                }
+                else
+                {
+                    <form asp-action="Submit" method="post" enctype="multipart/form-data" novalidate data-check-form>
+                        @if (!ViewData.ModelState.IsValid)
+                        {
+                            <div asp-validation-summary="All" class="alert alert-alto-error small mb-3" role="alert"></div>
+                        }
+                        @if (ViewData["PhotosCleared"] is true)
+                        {
+                            <p class="small text-muted-alto mb-3"><i class="bi bi-info-circle me-1"></i>For your security, photos aren't kept when something needs fixing. Please add them again.</p>
+                        }
+
+                        @* ---------- 1. Amount and account ---------- *@
+                        <fieldset class="check-step" data-step="details">
+                            <legend><span class="check-step-num" aria-hidden="true">1</span>Check details</legend>
+                            <div class="row g-3">
+                                <div class="col-sm-5">
+                                    <label asp-for="Form.Amount" class="form-label"></label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">$</span>
+                                        <input asp-for="Form.Amount" class="form-control" type="number" step="0.01" min="0.01" max="@l.PerCheck" placeholder="0.00" inputmode="decimal" required data-amount />
+                                    </div>
+                                    <div class="form-text">Exactly as written on the check.</div>
+                                </div>
+                                <div class="col-sm-7">
+                                    <label asp-for="Form.AccountId" class="form-label"></label>
+                                    <select asp-for="Form.AccountId" asp-items="Model.Accounts" class="form-select" required data-account></select>
+                                </div>
+                            </div>
+                            <p class="small mt-2 mb-0" data-amount-msg aria-live="polite"></p>
+                        </fieldset>
+
+                        @* ---------- 2. Photos ---------- *@
+                        <fieldset class="check-step" data-step="photos">
+                            <legend><span class="check-step-num" aria-hidden="true">2</span>Photos of both sides</legend>
+                            <div class="row g-3">
+                                @foreach (var (side, label, hint) in new[] { ("Front", "Front", "The side with the amount"), ("Back", "Back", "The side you signed") })
+                                {
+                                    <div class="col-sm-6">
+                                        <div class="drop-zone" data-drop="@side.ToLowerInvariant()">
+                                            <input type="file" id="photo-@side" name="Form.@side" accept="image/*" capture="environment" class="drop-input" required data-file />
+                                            <label for="photo-@side" class="drop-empty">
+                                                <i class="bi bi-camera" aria-hidden="true"></i>
+                                                <span class="drop-title">@label of the check</span>
+                                                <span class="drop-hint">@hint</span>
+                                                <span class="drop-action"><span class="only-touch">Take photo</span><span class="only-mouse">Drag a photo here or <u>choose a file</u></span></span>
+                                            </label>
+                                            <div class="drop-preview" hidden>
+                                                <img alt="Preview of the @label.ToLowerInvariant() of your check" data-preview />
+                                                <div class="drop-bar">
+                                                    <span class="small"><i class="bi bi-check-circle-fill text-success-alto me-1" aria-hidden="true"></i>@label added</span>
+                                                    <label for="photo-@side" class="btn btn-alto-ghost btn-sm mb-0"><span class="only-touch">Retake</span><span class="only-mouse">Replace</span></label>
+                                                </div>
+                                            </div>
+                                            <p class="drop-error small mb-0" data-file-error aria-live="polite"></p>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                            <p class="form-text mt-2 mb-0"><i class="bi bi-lightbulb me-1"></i>JPG or PNG, up to 5 MB each. Put the check on a dark, flat surface with all four corners in the photo and no glare.</p>
+                        </fieldset>
+
+                        @* ---------- 3. Endorse the back ---------- *@
+                        <fieldset class="check-step" data-step="endorse">
+                            <legend><span class="check-step-num" aria-hidden="true">3</span>Endorse the back</legend>
+                            <p class="small text-muted-alto">A check can only be deposited once it's endorsed. Before you photograph the back:</p>
+                            <div class="endorse-list">
+                                <div class="form-check">
+                                    <input asp-for="Form.Signed" class="form-check-input" data-endorse />
+                                    <label asp-for="Form.Signed" class="form-check-label">I signed the back</label>
+                                </div>
+                                <div class="form-check">
+                                    <input asp-for="Form.Restricted" class="form-check-input" data-endorse />
+                                    <label asp-for="Form.Restricted" class="form-check-label">Under my signature I wrote <strong>For mobile deposit only at Alto Bank</strong></label>
+                                </div>
+                                <div class="form-check">
+                                    <input asp-for="Form.InFrame" class="form-check-input" data-endorse />
+                                    <label asp-for="Form.InFrame" class="form-check-label">The whole check is in each photo</label>
+                                </div>
+                            </div>
+                        </fieldset>
+
+                        @* ---------- 4. Review (with JavaScript it opens after "Review deposit") ---------- *@
+                        <div class="check-review-gate" data-review-gate hidden>
+                            <button type="button" class="btn btn-alto" data-review-open disabled>Review deposit</button>
+                            <span class="small text-muted-alto ms-2" data-gate-msg>Fill in the steps above to continue.</span>
+                        </div>
+                        <fieldset class="check-step check-review" data-step="review" data-review>
+                            <legend><span class="check-step-num" aria-hidden="true">4</span>Review and deposit</legend>
+                            <dl class="review-list" data-review-list hidden>
+                                <div><dt>Amount</dt><dd data-review-amount></dd></div>
+                                <div><dt>Deposit to</dt><dd data-review-account></dd></div>
+                            </dl>
+                            <div class="review-thumbs" data-review-thumbs hidden>
+                                <figure><img alt="Front of your check" data-review-front /><figcaption>Front</figcaption></figure>
+                                <figure><img alt="Back of your check" data-review-back /><figcaption>Back</figcaption></figure>
+                            </div>
+                            <p class="small text-muted-alto">The money shows as <strong>pending</strong> in your account until we approve the check. Keep the paper check for 14 days, then shred it.</p>
+                            <div class="d-flex flex-wrap gap-2">
+                                <button type="submit" class="btn btn-alto" data-submit><i class="bi bi-check2-circle me-1"></i>Deposit check</button>
+                                <button type="button" class="btn btn-alto-ghost" data-review-back-btn hidden>Edit</button>
+                            </div>
+                        </fieldset>
+                    </form>
+                }
+            </section>
+        </div>
+
+        <div class="col-lg-5 d-flex flex-column gap-4">
+            <section class="glass p-4" aria-labelledby="limitsTitle">
+                <h3 class="h6 mb-3" id="limitsTitle">Your mobile deposit limits</h3>
+                <dl class="limit-list mb-0">
+                    <div><dt>Per check</dt><dd><money amount="@l.PerCheck" /></dd></div>
+                    <div><dt>Per day</dt><dd><money amount="@l.Daily" /></dd></div>
+                    <div><dt>Left today</dt><dd><money amount="@l.LeftToday" class="@(l.LeftToday == 0 ? "text-danger-alto" : "")" /></dd></div>
+                </dl>
+                <p class="small text-muted-alto mt-3 mb-0">Pending and approved checks count toward today's limit. A rejected check doesn't.</p>
+            </section>
+
+            <section class="glass p-4" aria-labelledby="recentChecksTitle">
+                <h3 class="h6 mb-3" id="recentChecksTitle">Your check deposits</h3>
+                @if (!Model.Recent.Any())
+                {
+                    <p class="text-muted-alto small mb-0">Nothing yet. Checks you deposit here show up in this list with their status.</p>
+                }
+                else
+                {
+                    <ul class="check-deposit-list">
+                        @foreach (var d in Model.Recent)
+                        {
+                            <li>
+                                <a asp-action="Status" asp-route-id="@d.Id">
+                                    <span class="check-list-main"><money amount="@d.Amount" /><span class="small text-muted-alto">to @d.Account?.DisplayName, @BankTime.ToLocal(d.SubmittedAt).ToString("MMM d")</span></span>
+                                    <partial name="_CheckStatus" model="d.Status" />
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/checkdeposit.js" asp-append-version="true"></script>
+}

@@ -1,0 +1,11 @@
+@model CheckDepositStatus
+@* A check deposit's status for customers: an icon and a word, never color alone. *@
+@{
+    var (icon, label, css) = Model switch
+    {
+        CheckDepositStatus.Approved => ("bi-check-circle-fill", "Deposited", "is-approved"),
+        CheckDepositStatus.Rejected => ("bi-x-circle-fill", "Not accepted", "is-rejected"),
+        _ => ("bi-hourglass-split", "In review", "is-pending")
+    };
+}
+<span class="check-status @css"><i class="bi @icon" aria-hidden="true"></i>@label</span>
