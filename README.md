@@ -121,7 +121,7 @@ dotnet run -- --reset-db   # delete the database and start over with fresh demo 
 
 ## Tests
 
-`tests/` holds 12 end-to-end suites (822 checks) that drive the running app over HTTP: money rules, races, ownership checks
+`tests/` holds 12 end-to-end suites (800+ checks) that drive the running app over HTTP: money rules, races, ownership checks
 (another customer's id returns 404), antiforgery, the scheduler, P2P, Bill Pay, staff permissions, profile settings, insights
 and budgets. Run them against a **separate test server with its own scratch database**, never your real `altobank.db`:
 
@@ -149,3 +149,10 @@ validation, tag helpers, areas, the API and more) to the code that uses it.
 ## Roadmap
 
 Mobile check deposit (image upload with an admin review queue) and transaction disputes are planned next.
+
+## License
+
+Copyright © 2026 Austin Emig. All rights reserved.
+
+This code is shared publicly for viewing only, as part of a graded class project. You may read it, but please don't copy,
+modify, redistribute or submit it as your own work. No license is granted to reuse it.
