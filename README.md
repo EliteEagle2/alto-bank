@@ -4,6 +4,8 @@ A full-stack online banking app built with **ASP.NET Core MVC (.NET 8)**, **Enti
 Customers manage accounts, move money, pay bills, send money to each other and track their spending; staff run the bank from a
 separate admin console where every action is audited.
 
+Built by **Austin Emig** for **Server Sided Web Development**.
+
 > **Class project.** Alto Bank is fictional: no real money, no real customers, not a real bank. All data is generated demo data.
 
 ![Customer dashboard](docs/screenshots/02-dashboard.png)
