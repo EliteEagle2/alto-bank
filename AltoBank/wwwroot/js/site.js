@@ -37,7 +37,7 @@
 (function () {
     'use strict';
     document.querySelectorAll('[data-tab-scroller]').forEach(wrap => {
-        const bar = wrap.querySelector('[role="tablist"]');
+        const bar = wrap.querySelector('[role="tablist"], .section-tabs');
         if (!bar) return;
         const update = () => wrap.classList.toggle('has-more', bar.scrollLeft + bar.clientWidth < bar.scrollWidth - 4);
         const reveal = () => {

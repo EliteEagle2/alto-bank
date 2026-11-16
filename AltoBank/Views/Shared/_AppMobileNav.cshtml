@@ -1,13 +1,14 @@
-@* Bottom tab bar shown only on phones/tablets (like a mobile banking app). *@
+@* Bottom tab bar shown only on phones/tablets (like a mobile banking app): the same groups as the sidebar
+   (ViewModels/CustomerNav.cs). Alerts and Profile are in the top bar (bell, avatar menu). *@
 @{
     var controller = ViewContext.RouteData.Values["controller"]?.ToString();
     var action = ViewContext.RouteData.Values["action"]?.ToString();
-    string Active(bool on) => on ? "active" : "";
+    var tabs = new[] { (CustomerNav.Home, "Home"), (CustomerNav.Accounts, "Accounts"), (CustomerNav.MoveMoney, "Move"), (CustomerNav.Pay, "Pay"), (CustomerNav.Insights, "Insights") };
 }
 <nav class="mobile-tabbar d-lg-none" aria-label="Quick navigation">
-    <a class="@Active(controller == "Dashboard")" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-grid-1x2"></i>Home</a>
-    <a class="@Active(controller == "Accounts" || action == "History")" asp-controller="Accounts" asp-action="Index"><i class="bi bi-wallet2"></i>Accounts</a>
-    <a class="@Active(action == "Transfer")" asp-controller="Transactions" asp-action="Transfer"><i class="bi bi-arrow-left-right"></i>Transfer</a>
-    <a class="@Active(action == "Deposit" || action == "Withdraw")" asp-controller="Transactions" asp-action="Deposit"><i class="bi bi-cash-stack"></i>Deposit</a>
-    <a class="@Active(controller == "Profile")" asp-controller="Profile" asp-action="Index"><i class="bi bi-person"></i>Profile</a>
+    @foreach (var (g, label) in tabs)
+    {
+        var on = g.IsCurrent(controller, action);
+        <a class="@(on ? "active" : "")" asp-controller="@g.Home.Controller" asp-action="@g.Home.Action" aria-current="@(on ? "page" : null)"><i class="bi @g.Icon" aria-hidden="true"></i>@label</a>
+    }
 </nav>

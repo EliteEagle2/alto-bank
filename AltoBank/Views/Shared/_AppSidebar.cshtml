@@ -1,14 +1,13 @@
 @* Left sidebar for online banking. On large screens it is always visible;
    on phones/tablets Bootstrap's "offcanvas-lg" turns it into a slide-out drawer
-   opened by the menu button in the top bar. *@
+   opened by the menu button in the top bar.
+   Seven places to go (ViewModels/CustomerNav.cs). Groups with several pages (Move money, Pay & request,
+   Insights) show those pages as tabs at the top of the page (_SectionTabs). *@
 @inject IBankService Bank
 @inject UserManager<ApplicationUser> Users
 @{
     var controller = ViewContext.RouteData.Values["controller"]?.ToString();
     var action = ViewContext.RouteData.Values["action"]?.ToString();
-    // Highlight the link for the current page. History pages count as "Accounts".
-    string Active(string c, string? a = null) =>
-        controller == c && (a == null || action == a) ? "active" : "";
     // The Summit Savings promo is only for customers who don't already have an open savings account.
     var userId = Users.GetUserId(User);
     var hasSavings = userId != null && (await Bank.GetAccountsAsync(userId)).Any(a => a.AccountType == AccountType.Savings && a.Status != AccountStatus.Closed);
@@ -23,35 +22,29 @@
         <div class="offcanvas-body d-flex flex-column">
             <a class="sidebar-brand d-none d-lg-block" asp-controller="Dashboard" asp-action="Index"><partial name="_Logo" /></a>
 
-            <div class="sidebar-label">Banking</div>
-            <a class="side-link @Active("Dashboard")" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-grid-1x2"></i>Dashboard</a>
-            <a class="side-link @Active("Accounts", "Index") @Active("Transactions", "History")" asp-controller="Accounts" asp-action="Index"><i class="bi bi-wallet2"></i>Accounts</a>
-            <a class="side-link @Active("Accounts", "Apply") @Active("Accounts", "Decision")" asp-controller="Accounts" asp-action="Apply"><i class="bi bi-plus-circle"></i>Open Account</a>
-
-            <div class="sidebar-label">Move money</div>
-            <a class="side-link @Active("Transactions", "Transfer")" asp-controller="Transactions" asp-action="Transfer"><i class="bi bi-arrow-left-right"></i>Transfer</a>
-            <a class="side-link @Active("Transactions", "Deposit")" asp-controller="Transactions" asp-action="Deposit"><i class="bi bi-arrow-down-circle"></i>Deposit</a>
-            <a class="side-link @Active("Transactions", "Withdraw")" asp-controller="Transactions" asp-action="Withdraw"><i class="bi bi-arrow-up-circle"></i>Withdraw</a>
-
-            <div class="sidebar-label">Pay &amp; request</div>
-            <a class="side-link @Active("Payments")" asp-controller="Payments" asp-action="Index"><i class="bi bi-send"></i>Send &amp; Request</a>
-            <a class="side-link @Active("BillPay")" asp-controller="BillPay" asp-action="Index"><i class="bi bi-receipt"></i>Bill Pay</a>
-            <a class="side-link @Active("Upcoming")" asp-controller="Upcoming" asp-action="Index"><i class="bi bi-calendar-week"></i>Upcoming</a>
-
-            <div class="sidebar-label">Track spending</div>
-            <a class="side-link @Active("Insights")" asp-controller="Insights" asp-action="Index"><i class="bi bi-pie-chart"></i>Insights</a>
-            <a class="side-link @Active("Budgets")" asp-controller="Budgets" asp-action="Index"><i class="bi bi-sliders"></i>Budgets</a>
-
-            <div class="sidebar-label">Settings &amp; help</div>
-            <a class="side-link @Active("Alerts")" asp-controller="Alerts" asp-action="Index"><i class="bi bi-bell"></i>Alerts</a>
-            <a class="side-link @Active("Profile")" asp-controller="Profile" asp-action="Index"><i class="bi bi-person"></i>Profile</a>
-            <a class="side-link" asp-controller="Support" asp-action="Help"><i class="bi bi-question-circle"></i>Help Center</a>
-            @if (User.IsInRole(AltoBank.Data.SeedData.AdminRole))
-            {
-                @* Staff who also bank here: jump back to the admin console. *@
-                <div class="sidebar-label">Staff</div>
-                <a class="side-link side-link--admin" asp-area="Admin" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-speedometer2"></i>Admin console</a>
-            }
+            <nav class="side-nav" aria-label="Main">
+                @foreach (var g in CustomerNav.Main)
+                {
+                    var on = g.IsCurrent(controller, action);
+                    <a class="side-link @(on ? "active" : "")" asp-controller="@g.Home.Controller" asp-action="@g.Home.Action" aria-current="@(on ? "page" : null)">
+                        <i class="bi @g.Icon" aria-hidden="true"></i>@g.Label
+                    </a>
+                }
+                <div class="side-divider" role="separator"></div>
+                @foreach (var g in CustomerNav.Settings)
+                {
+                    var on = g.IsCurrent(controller, action);
+                    <a class="side-link @(on ? "active" : "")" asp-controller="@g.Home.Controller" asp-action="@g.Home.Action" aria-current="@(on ? "page" : null)">
+                        <i class="bi @g.Icon" aria-hidden="true"></i>@g.Label
+                    </a>
+                }
+                <a class="side-link" asp-controller="Support" asp-action="Help"><i class="bi bi-question-circle" aria-hidden="true"></i>Help</a>
+                @if (User.IsInRole(AltoBank.Data.SeedData.AdminRole))
+                {
+                    @* Staff who also bank here: jump back to the admin console. *@
+                    <a class="side-link side-link--admin" asp-area="Admin" asp-controller="Dashboard" asp-action="Index"><i class="bi bi-speedometer2" aria-hidden="true"></i>Admin console</a>
+                }
+            </nav>
 
             <div class="mt-auto pt-4">
                 @if (!hasSavings)

@@ -1532,3 +1532,31 @@ h1 span.text-gradient, h2 span.text-gradient, h3 span.text-gradient { color: inh
     .month-picker { width: 100%; }
     .month-picker .form-select { flex: 1; min-width: 0; }
 }
+
+/* =====================================================================
+   SIMPLER CUSTOMER NAV (ViewModels/CustomerNav.cs)
+   Sidebar: seven places, no section headings. Groups with several pages get section tabs on the page itself,
+   styled like the Account Details tabs (underline on desktop, sideways-scrolling pills on phones).
+   ===================================================================== */
+.side-nav { display: flex; flex-direction: column; gap: .15rem; margin-top: .5rem; }
+.side-divider { height: 1px; background: var(--border); margin: .75rem .9rem; }
+
+.section-tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+.section-tabs::-webkit-scrollbar { display: none; }
+.section-tab { display: inline-flex; align-items: center; gap: .5rem; padding: .7rem 1rem; color: var(--muted); text-decoration: none; white-space: nowrap;
+               font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.section-tab i { font-size: 1rem; }
+.section-tab:hover { color: var(--text); }
+.section-tab.active { color: var(--text); border-bottom-color: var(--primary); }
+.section-tab.active i { color: var(--primary); }
+.section-tab:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; border-radius: 6px; }
+/* The tabs sit right above the page, so the page's own top padding is enough. */
+.app-content > .container.pt-4:has(.section-tabs) + .container,
+.app-content > .container.pt-4:has(.section-tabs) + div > .container:first-child { padding-top: 1.25rem !important; }
+
+@media (max-width: 767.98px) {
+    .tab-scroller .section-tabs { border-bottom: 0; gap: .4rem; padding: .1rem 0 .35rem; scroll-snap-type: x proximity; }
+    .tab-scroller .section-tab { border: 1px solid var(--border); border-radius: 999px; padding: .45rem .95rem; margin-bottom: 0; scroll-snap-align: start; }
+    .tab-scroller .section-tab.active { background: var(--surface); border-color: var(--primary); color: #fff; }
+    .tab-scroller:has(.section-tabs) { margin-bottom: 0; }
+}

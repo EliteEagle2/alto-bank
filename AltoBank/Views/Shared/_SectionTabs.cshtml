@@ -1,0 +1,24 @@
+@* Tabs for the pages that share one sidebar entry (Move money, Pay & request, Insights): shown at the top of each
+   of those pages so its siblings are one click away. Nothing is shown on single-page sections.
+   On phones the bar scrolls sideways (the same pill bar as Account Details). *@
+@{
+    var controller = ViewContext.RouteData.Values["controller"]?.ToString();
+    var action = ViewContext.RouteData.Values["action"]?.ToString();
+    var group = CustomerNav.Current(controller, action);
+}
+@if (group is { HasTabs: true })
+{
+    <div class="container pt-4">
+        <div class="tab-scroller" data-tab-scroller>
+            <nav class="section-tabs" aria-label="@group.Label">
+                @foreach (var p in group.Pages)
+                {
+                    var on = p.IsCurrent(controller, action);
+                    <a class="section-tab @(on ? "active" : "")" asp-controller="@p.Controller" asp-action="@p.Action" aria-current="@(on ? "page" : null)">
+                        <i class="bi @p.Icon" aria-hidden="true"></i>@p.Label
+                    </a>
+                }
+            </nav>
+        </div>
+    </div>
+}
