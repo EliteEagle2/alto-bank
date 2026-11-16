@@ -18,7 +18,7 @@
         _ => "bi-arrow-counterclockwise"
     };
     var reversed = t.Status == TransactionStatus.Reversed;
-    var returnUrl = $"{Context.Request.Path}#activity";
+    var returnUrl = $"{Context.Request.Path}{Context.Request.QueryString}#activity";   // keeps any filters
 }
 <div class="tx-row @(reversed ? "is-reversed" : "")" data-tx-id="@t.Id">
     <button type="button" class="tx-main" aria-expanded="false" aria-controls="tx-more-@t.Id">

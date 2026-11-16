@@ -5,8 +5,9 @@
 @{
     var (icon, status) = Model.State switch
     {
+        "over" when Model.Remaining == 0 => ("bi-exclamation-octagon-fill", "At your limit"),
         "over" => ("bi-exclamation-octagon-fill", $"Over by {(-Model.Remaining):C}"),
-        "near" => ("bi-exclamation-triangle-fill", $"{Math.Floor(Model.Percent)}% used, {Model.Remaining:C} left"),
+        "near" => ("bi-exclamation-triangle-fill", $"{Math.Min(99, Math.Floor(Model.Percent))}% used, {Model.Remaining:C} left"),
         _ => ("bi-check-circle-fill", $"{Model.Remaining:C} left")
     };
     var width = Math.Min(100m, Model.Percent);

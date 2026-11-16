@@ -39,13 +39,16 @@ public partial class BankService : IBankService
     private readonly ICardService _cards;
     private readonly IAlertService _alerts;
     private readonly IBudgetService _budgets;
+    private readonly ILogger<BankService> _log;
 
     // Spending Insights: (customer, category) pairs that got a new debit in the current money movement.
     // Their budgets are checked once the movement has committed (see InTransactionAsync).
     private readonly HashSet<(string UserId, TransactionCategory Category)> _budgetTouched = new();
 
-    public BankService(ApplicationDbContext db, IAuditLogger audit, ICardService cards, IAlertService alerts, IBudgetService budgets)
+    public BankService(ApplicationDbContext db, IAuditLogger audit, ICardService cards, IAlertService alerts, IBudgetService budgets,
+                       ILogger<BankService> log)
     {
+        _log = log;
         _db = db;
         _audit = audit;
         _cards = cards;
@@ -608,7 +611,8 @@ public partial class BankService : IBankService
     /// <summary>
     /// After a money movement has COMMITTED: add a budget alert for any budget the new debits pushed past 75% or 100%
     /// (once per budget per month). It runs after the commit on purpose, so a problem saving an alert can never undo
-    /// or block the payment itself.
+    /// or block the payment itself. It NEVER throws: the money has already moved, so an error here must not turn into
+    /// an error page (the customer would think the payment failed and pay again). Problems are logged instead.
     /// </summary>
     private async Task RaiseBudgetAlertsAsync()
     {
@@ -625,6 +629,12 @@ public partial class BankService : IBankService
         {
             // e.g. the same alert was just added by a parallel request (unique dedupe key): it exists, nothing to do.
             _db.ChangeTracker.Clear();
+        }
+        catch (Exception ex)
+        {
+            // e.g. the database was busy. Only the alert is lost; the payment is committed.
+            _db.ChangeTracker.Clear();
+            _log.LogWarning(ex, "Budget alert check failed after a committed money movement; no alert was added.");
         }
     }
 

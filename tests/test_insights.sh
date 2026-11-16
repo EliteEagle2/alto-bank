@@ -93,6 +93,7 @@ check "'auto' -> back to the rule's category" "$(recat $C $COFFEE auto)" 200
 check "back to Food & Dining, not overridden" "$(cat_of $COFFEE)" "FoodAndDining:0"
 check "unknown category -> 400" "$(recat $C $COFFEE Pizza)" 400
 check "numeric category -> 400" "$(recat $C $COFFEE 99)" 400
+check "combined categories (\"Groceries,Gas\") -> 400" "$(recat $C $COFFEE "Groceries,Gas")" 400
 check "empty body -> 400" "$(curl -s -o /dev/null -w '%{http_code}' -b $C -X POST -H "$J" -d '{}' $B/api/insights/transactions/$COFFEE/category)" 400
 MAYATX=$(sql "SELECT t.Id FROM Transactions t JOIN Accounts a ON a.Id = t.AccountId WHERE a.UserId = '$MID' LIMIT 1")
 check "Maya's transaction -> 404 (IDOR)" "$(recat $C $MAYATX Groceries)" 404

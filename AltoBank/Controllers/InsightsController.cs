@@ -136,13 +136,12 @@ public class BudgetsController : Controller
     {
         ViewData["Title"] = "Budgets";
         var month = BankTime.FirstOfThisMonth;
-        var last = await _insights.GetMonthAsync(UserId, month.AddMonths(-1));
+
         return new BudgetsPageViewModel
         {
             Month = month,
             Budgets = await _budgets.GetProgressAsync(UserId, month),
-            // Only a real previous month counts as a hint (GetMonthAsync clamps to the first month you banked).
-            LastMonth = last.Month == month.AddMonths(-1) ? last.Categories.ToDictionary(c => c.Category, c => c.Amount) : new(),
+            LastMonth = await _insights.GetSpendingByCategoryAsync(UserId, month.AddMonths(-1)),
             Form = form
         };
     }

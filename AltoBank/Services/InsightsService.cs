@@ -35,10 +35,11 @@ public record BudgetProgress(int BudgetId, TransactionCategory Category, decimal
 {
     public string Label => Categories.Label(Category);
     public string Icon => Categories.Icon(Category);
+    /// <summary>For display only (rounded). The state below uses the exact amounts, so $99.96 of $100 isn't "over".</summary>
     public decimal Percent => Limit <= 0 ? 0 : Math.Round(Spent / Limit * 100m, 1);
     public decimal Remaining => Limit - Spent;
-    /// <summary>"ok" under 75%, "near" from 75% (amber), "over" from 100% (red).</summary>
-    public string State => Percent >= 100 ? "over" : Percent >= 75 ? "near" : "ok";
+    /// <summary>"ok" under 75%, "near" from 75% (amber), "over" once spending reaches the limit (red).</summary>
+    public string State => Spent >= Limit ? "over" : Spent >= Limit * 0.75m ? "near" : "ok";
 }
 
 public record InsightsMonth(
@@ -60,6 +61,8 @@ public interface IInsightsService
     Task<InsightsMonth> GetMonthAsync(string userId, DateOnly month);
     /// <summary>The month's transactions in one category, newest first (Insights drill-down).</summary>
     Task<List<Transaction>> GetCategoryTransactionsAsync(string userId, DateOnly month, TransactionCategory category);
+    /// <summary>Spending per category in one bank month (the Budgets page's "last month you spent" hint).</summary>
+    Task<Dictionary<TransactionCategory, decimal>> GetSpendingByCategoryAsync(string userId, DateOnly month);
     /// <summary>First month the customer had an account (bank time).</summary>
     Task<DateOnly> GetEarliestMonthAsync(string userId);
 }
@@ -119,6 +122,7 @@ internal static class Spending
 public class InsightsService : IInsightsService
 {
     private const int TrendMonths = 6;
+    public const int DrillDownLimit = 100;
     private readonly ApplicationDbContext _db;
     private readonly IBudgetService _budgets;
 
@@ -151,8 +155,9 @@ public class InsightsService : IInsightsService
         var monthEnd = month.AddMonths(1);
         // The current month is compared with the SAME days of last month (Nov 1-16 vs Oct 1-16), so a half-finished
         // month isn't measured against a whole one. Past months are compared whole.
-        var compared = isCurrent ? BankTime.Today.Day : DateTime.DaysInMonth(month.Year, month.Month);
-        var prevCompareEnd = prev.AddDays(Math.Min(compared, DateTime.DaysInMonth(prev.Year, prev.Month)));
+        var prevDays = DateTime.DaysInMonth(prev.Year, prev.Month);
+        var compared = isCurrent ? Math.Min(BankTime.Today.Day, prevDays) : prevDays;
+        var prevCompareEnd = isCurrent ? prev.AddDays(compared) : month;   // past months: the WHOLE previous month
 
         var trendStart = month.AddMonths(-(TrendMonths - 1));
         if (trendStart < earliest) trendStart = earliest;
@@ -200,15 +205,24 @@ public class InsightsService : IInsightsService
             categories, trend, merchants, callouts, budgets);
     }
 
+    public async Task<Dictionary<TransactionCategory, decimal>> GetSpendingByCategoryAsync(string userId, DateOnly month)
+    {
+        month = Spending.MonthOf(month);
+        return Spending.ByCategory(await Spending.LoadAsync(_db, userId, month, month.AddMonths(1)));
+    }
+
     public async Task<List<Transaction>> GetCategoryTransactionsAsync(string userId, DateOnly month, TransactionCategory category)
     {
         month = Spending.MonthOf(month);
         var start = BankTime.StartOfDayUtc(month);
         var end = BankTime.StartOfDayUtc(month.AddMonths(1));
+        // Same rows the totals count (posted, no reversal pairs), so the list adds up to the amount in the legend.
         return await _db.Transactions.AsNoTracking().Include(t => t.Account)
-            .Where(t => t.Account!.UserId == userId && t.Category == category && t.Date >= start && t.Date < end)
+            .Where(t => t.Account!.UserId == userId && t.Category == category && t.Date >= start && t.Date < end
+                        && t.Status == TransactionStatus.Posted
+                        && t.Type != TransactionType.ReversalCredit && t.Type != TransactionType.ReversalDebit)
             .OrderByDescending(t => t.Date).ThenByDescending(t => t.Id)
-            .Take(100)
+            .Take(DrillDownLimit + 1)   // one extra tells the page there are more
             .ToListAsync();
     }
 
@@ -243,10 +257,12 @@ public class InsightsService : IInsightsService
         {
             var daysLeft = DateTime.DaysInMonth(month.Year, month.Month) - BankTime.Today.Day;
             foreach (var b in budgets.Where(b => b.State == "over").OrderByDescending(b => b.Percent).Take(1))
-                list.Add(new("over", "bi-exclamation-octagon", $"You're over your {b.Label} budget by {(-b.Remaining):C}."));
+                list.Add(new("over", "bi-exclamation-octagon", b.Remaining == 0
+                    ? $"You've reached your {b.Label} budget for this month."
+                    : $"You're over your {b.Label} budget by {(-b.Remaining):C}."));
             foreach (var b in budgets.Where(b => b.State == "near").OrderByDescending(b => b.Percent).Take(1))
                 list.Add(new("warn", "bi-exclamation-triangle",
-                    $"You've used {Math.Floor(b.Percent)}% of your {b.Label} budget with {daysLeft} day{(daysLeft == 1 ? "" : "s")} left."));
+                    $"You've used {Math.Min(99, Math.Floor(b.Percent))}% of your {b.Label} budget with {daysLeft} day{(daysLeft == 1 ? "" : "s")} left."));
         }
 
         if (hasPrevious)
@@ -334,10 +350,22 @@ public class BudgetService : IBudgetService
             message = wasRemoved ? $"{label} budget set to {monthlyLimit:C} a month."
                                  : $"{label} budget changed from {beforeLimit:C} to {monthlyLimit:C} a month.";
         }
-        await _db.SaveChangesAsync();
-        _audit.Add("Budget.Save", message, "Budget", budget.Id.ToString(), after: new { category = category.ToString(), monthlyLimit });
-        await QueueAlertsAsync(userId, new[] { category });   // a new, lower limit may already be reached
-        await _db.SaveChangesAsync();
+        // The budget and its audit row commit together (one DB transaction), so a change is never saved unaudited.
+        try
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            await _db.SaveChangesAsync();
+            _audit.Add("Budget.Save", message, "Budget", budget.Id.ToString(), after: new { category = category.ToString(), monthlyLimit });
+            await _db.SaveChangesAsync();
+            await tx.CommitAsync();
+        }
+        catch (DbUpdateException)
+        {
+            // Two "Add budget" requests at once (double-click): the unique (customer, category) index kept one.
+            _db.ChangeTracker.Clear();
+            return new(false, $"You already have a {label} budget. Use Change or remove to adjust it.");
+        }
+        await AlertSafelyAsync(userId, category);   // a new, lower limit may already be reached
         return new(true, message);
     }
 
@@ -382,13 +410,24 @@ public class BudgetService : IBudgetService
             "Transaction", t.Id.ToString(),
             before: new { category = before.ToString(), overridden = wasOverridden },
             after: new { category = t.Category.ToString(), overridden = t.CategoryOverridden });
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync();   // the change and its audit row together
         if (BankTime.DateOf(DateTime.SpecifyKind(t.Date, DateTimeKind.Utc)) >= BankTime.FirstOfThisMonth)
+            await AlertSafelyAsync(userId, t.Category);
+        return (new BankResult(true, $"Moved to {Categories.Label(t.Category)}."), t);
+    }
+
+    /// <summary>Budget alerts after a change that is already saved: a problem only loses the alert, never the change.</summary>
+    private async Task AlertSafelyAsync(string userId, TransactionCategory category)
+    {
+        try
         {
-            await QueueAlertsAsync(userId, new[] { t.Category });
+            await QueueAlertsAsync(userId, new[] { category });
             await _db.SaveChangesAsync();
         }
-        return (new BankResult(true, $"Moved to {Categories.Label(t.Category)}."), t);
+        catch (Exception)
+        {
+            _db.ChangeTracker.Clear();   // e.g. the same alert was added by a parallel request
+        }
     }
 
     public async Task QueueAlertsAsync(string userId, IEnumerable<TransactionCategory> categories)
@@ -407,9 +446,12 @@ public class BudgetService : IBudgetService
             var key = $"budget:{b.Id}:{month:yyyy-MM}:";
             if (p.State == "over")
                 await _alerts.AddAsync(userId, AlertType.BudgetNearLimit, $"{p.Label} budget reached",
-                    $"You've spent {p.Spent:C} on {p.Label} this month, over your {p.Limit:C} budget.", "/budgets", key + "100");
+                    p.Remaining == 0
+                        ? $"You've spent {p.Spent:C} on {p.Label} this month, your whole {p.Limit:C} budget."
+                        : $"You've spent {p.Spent:C} on {p.Label} this month, {(-p.Remaining):C} over your {p.Limit:C} budget.",
+                    "/budgets", key + "100");
             else if (p.State == "near")
-                await _alerts.AddAsync(userId, AlertType.BudgetNearLimit, $"{p.Label} budget at {Math.Floor(p.Percent)}%",
+                await _alerts.AddAsync(userId, AlertType.BudgetNearLimit, $"{p.Label} budget at {Math.Min(99, Math.Floor(p.Percent))}%",
                     $"You've spent {p.Spent:C} of your {p.Limit:C} {p.Label} budget. {p.Remaining:C} left this month.", "/budgets", key + "75");
         }
     }

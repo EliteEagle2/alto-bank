@@ -94,9 +94,14 @@ public static class Categories
         _ => "#7f8aa0"
     };
 
-    /// <summary>Parses "FoodAndDining" (case-insensitive). Numbers aren't accepted, so "99" can't sneak in.</summary>
-    public static bool TryParse(string? value, out TransactionCategory category) =>
-        Enum.TryParse(value, ignoreCase: true, out category) && !int.TryParse(value, out _) && Enum.IsDefined(category);
+    /// <summary>Parses a category KEY such as "FoodAndDining" (case-insensitive). Only exact names count, so numbers
+    /// ("99") and combinations ("Groceries,Gas") are refused.</summary>
+    public static bool TryParse(string? value, out TransactionCategory category)
+    {
+        var match = All.Where(c => string.Equals(c.ToString(), value?.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+        category = match.FirstOrDefault();
+        return match.Count == 1;
+    }
 }
 
 /// <summary>

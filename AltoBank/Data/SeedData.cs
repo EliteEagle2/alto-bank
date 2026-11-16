@@ -133,18 +133,22 @@ public static class SeedData
     /// <summary>
     /// SPENDING INSIGHTS backfill: transactions saved before categories existed got "Other" from the migration.
     /// Give each one its automatic category (CategoryRules), and each reversal the category of what it undid.
-    /// A customer's own choice (CategoryOverridden) is never touched. Only rows that change are saved, so on later
-    /// startups this finds nothing to do.
+    /// A customer's own choice (CategoryOverridden) is never touched. Only rows that change are saved. Rows that
+    /// really are "Other" (ATM withdrawals, for example) are looked at again on each startup; that's a quick pass.
     /// </summary>
     private static async Task CategorizeTransactionsAsync(ApplicationDbContext db)
     {
         var rows = await db.Transactions.Where(t => !t.CategoryOverridden && t.Category == TransactionCategory.Other).ToListAsync();
         if (rows.Count == 0) return;
+        // Ordinary rows first...
+        foreach (var t in rows.Where(t => t.ReversalOfTransactionId == null))
+            t.Category = CategoryRules.For(t.Type, t.Description);
+        // ...then each reversal copies its original's category. The original may have been fixed in the loop above
+        // (it's tracked in this same context), so look it up there before going to the database.
         var reversed = rows.Where(t => t.ReversalOfTransactionId != null).Select(t => t.ReversalOfTransactionId!.Value).ToList();
-        var originals = await db.Transactions.AsNoTracking().Where(t => reversed.Contains(t.Id))
-            .ToDictionaryAsync(t => t.Id, t => t.Category);
-        foreach (var t in rows)
-            t.Category = t.ReversalOfTransactionId is int of && originals.TryGetValue(of, out var c) ? c : CategoryRules.For(t.Type, t.Description);
+        var originals = await db.Transactions.Where(t => reversed.Contains(t.Id)).ToDictionaryAsync(t => t.Id, t => t.Category);
+        foreach (var t in rows.Where(t => t.ReversalOfTransactionId != null))
+            t.Category = originals.TryGetValue(t.ReversalOfTransactionId!.Value, out var c) ? c : CategoryRules.For(t.Type, t.Description);
         await db.SaveChangesAsync();
     }
 
