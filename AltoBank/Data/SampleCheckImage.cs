@@ -27,8 +27,8 @@ public static class SampleCheckImage
 
         c.Text(36, 214, "PAY TO THE", 3, Faint);
         c.Text(36, 240, "ORDER OF", 3, Faint);
-        c.Text(200, 222, d.Payee.ToUpperInvariant(), 5, Ink);
-        c.Line(200, 266, 820, Faint);
+        c.Text(240, 222, d.Payee.ToUpperInvariant(), 5, Ink);
+        c.Line(240, 266, 840, Faint);
         c.Rect(860, 200, 300, 70, Border); c.Rect(864, 204, 292, 62, Paper);          // amount box
         c.Text(880, 220, $"${d.Amount:0.00}", 5, Ink);
 
