@@ -681,7 +681,7 @@
     // ---------- Render everything from the current state ----------
     function render() {
         // Conditional sections
-        $('[data-show-when]').forEach(el => { el.hidden = !isShown(el); });
+        $$('[data-show-when]').forEach(el => { el.hidden = !isShown(el); });
         refreshStepTitles();
 
         // Buttons
