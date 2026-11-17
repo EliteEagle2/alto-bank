@@ -86,8 +86,8 @@ public static class DisputeRules
 {
     public const int MaxAgeDays = 60;
 
-    /// <summary>Withdrawals, bill payments and P2P sends. Not transfers between your own accounts.</summary>
-    public static readonly TransactionType[] Types = { TransactionType.Withdrawal, TransactionType.BillPayment, TransactionType.PaymentSent };
+    /// <summary>Withdrawals, bill payments, P2P sends and credit card purchases. Not transfers between your own accounts.</summary>
+    public static readonly TransactionType[] Types = { TransactionType.Withdrawal, TransactionType.BillPayment, TransactionType.PaymentSent, TransactionType.CardPurchase };
 
     /// <summary>Null if the transaction can be disputed, otherwise why not (in the customer's words).</summary>
     public static string? WhyNot(Transaction t, bool alreadyDisputed, bool hasRefund)
@@ -96,7 +96,7 @@ public static class DisputeRules
         if (!Types.Contains(t.Type))
             return t.Type is TransactionType.TransferOut or TransactionType.TransferIn
                 ? "Transfers between your own accounts can't be disputed."
-                : "Only withdrawals, bill payments and payments you sent can be disputed.";
+                : "Only withdrawals, bill payments, card purchases and payments you sent can be disputed.";
         if (t.Status != TransactionStatus.Posted || t.ReversedByTransactionId != null || hasRefund)
             return "This transaction was already reversed or refunded.";
         if (AltoBank.Services.BankTime.DateOf(DateTime.SpecifyKind(t.Date, DateTimeKind.Utc)) < AltoBank.Services.BankTime.Today.AddDays(-MaxAgeDays))

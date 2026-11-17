@@ -4,7 +4,8 @@
     ViewData["IsDecision"] = true;
     var pending = Model.Status == ApplicationStatus.Pending;
     ViewData["Title"] = pending ? "Application under review" : "Application decision";
-    var product = Model.AccountType == AccountType.Checking ? "Alto Checking" : "Summit Savings";
+    var isCard = Model.AccountType == AccountType.CreditCard;
+    var product = Model.AccountType switch { AccountType.Checking => "Alto Checking", AccountType.Savings => "Summit Savings", _ => "Alto Peak Card" };
 }
 
 <div class="apply-grid decision" id="decision" data-animate="false" data-user-key="@Model.UserId">
@@ -23,10 +24,16 @@
                     Thanks, @Model.FirstName! A member of our team is looking over your @product application.
                     Most reviews finish within one business day. We'll show the decision on your Profile page.
                 </p>
+                @if (isCard)
+                {
+                    <p class="small text-muted-alto mb-3">@(Model.DecisionNote ?? "")</p>
+                    <div class="mb-4"><span class="demo-note">Demo decision, no credit check</span></div>
+                }
             }
             else
             {
                 <div class="denied-icon" aria-hidden="true"><i class="bi bi-x-lg"></i></div>
+                @if (isCard) { <div class="mb-2"><span class="demo-note">Demo decision, no credit check</span></div> }
                 <h1 class="h3 mt-2 mb-2">We couldn't approve this application</h1>
                 <p class="text-muted-alto mb-3">Your @product application was reviewed and not approved.</p>
                 @if (!string.IsNullOrWhiteSpace(Model.DenialReason))
@@ -43,6 +50,10 @@
                 <div><dt>Product</dt><dd>@product</dd></div>
                 <div><dt>Submitted</dt><dd>@BankTime.ToLocal(Model.SubmittedAt).ToString("MMM d, yyyy h:mm tt")</dd></div>
                 <div><dt>Status</dt><dd>@Model.Status</dd></div>
+                @if (isCard && Model.Status == ApplicationStatus.Pending && Model.CreditLimit is decimal proposed)
+                {
+                    <div><dt>Proposed limit</dt><dd><money amount="@proposed" /></dd></div>
+                }
             </dl>
 
             <div class="d-flex flex-wrap gap-3 justify-content-center">

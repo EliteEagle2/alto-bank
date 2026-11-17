@@ -50,7 +50,7 @@ public class DashboardController : Controller
             FirstName = prefs.PreferredName ?? user.FirstName,   // Profile → preferred name
             Greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening",
             Accounts = accounts,
-            TotalBalance = accounts.Sum(a => a.Balance), // summed in memory (SQLite can't SUM decimals)
+            TotalBalance = accounts.Where(a => a.IsDepositAccount).Sum(a => a.Balance),   // cash only; net worth (minus cards and loans) comes with Feature 7 // summed in memory (SQLite can't SUM decimals)
             RecentTransactions = recent,
             Flows = await _bank.GetDailyFlowsAsync(user.Id, days: 30),
             Budgets = new BudgetWidgetViewModel(budgets.Any(), budgets.Where(b => b.State != "ok").ToList())

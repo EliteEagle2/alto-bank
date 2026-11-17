@@ -23,6 +23,7 @@ public static class AdminNav
         new("Money", new[]
         {
             new AdminNavLink("Accounts", "bi-wallet2", "Accounts"),
+            new AdminNavLink("CreditCards", "bi-credit-card-2-front", "Credit Cards"),
             new AdminNavLink("Transactions", "bi-arrow-left-right", "Transactions"),
             new AdminNavLink("Payments", "bi-send", "P2P Payments"),
             new AdminNavLink("Scheduled", "bi-calendar-week", "Scheduled Payments"),

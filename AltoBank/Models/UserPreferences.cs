@@ -61,7 +61,7 @@ public class UserPreferences
         AlertType.MoneyReceived => AlertCategory.MoneyIn,
         AlertType.RequestReceived or AlertType.RequestPaid or AlertType.RequestDeclined
             or AlertType.RequestCancelled or AlertType.RequestExpired => AlertCategory.Requests,
-        AlertType.BillPaid or AlertType.TransferScheduled => AlertCategory.Bills,
+        AlertType.BillPaid or AlertType.TransferScheduled or AlertType.CardStatement or AlertType.CardPaymentDue => AlertCategory.Bills,
         AlertType.LowBalance or AlertType.LargeDebit => AlertCategory.Balance,
         AlertType.BudgetNearLimit => AlertCategory.Budgets,
         AlertType.CheckReceived or AlertType.CheckApproved or AlertType.CheckRejected => AlertCategory.Deposits,

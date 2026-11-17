@@ -1711,3 +1711,49 @@ h2 .check-status { font-size: .85rem; margin-left: .4rem; }
     .dispute-list a { flex-direction: column; align-items: flex-start; }
     .dispute-list-side { justify-content: flex-start; }
 }
+
+/* ===== Alto Peak credit card (Feature 6) ===== */
+/* Card art: dusk-to-summit, the one design with a warm amber-to-rose sky. */
+.alto-card--peak {
+    background:
+        radial-gradient(circle at 85% 10%, rgba(255, 214, 140, 0.55), transparent 40%),
+        linear-gradient(150deg, #E98E5E 0%, #9A4F6E 40%, #3A2C55 72%, #18233A 100%);
+    border-color: rgba(255, 214, 140, 0.5);
+}
+.alto-card--peak .peak-mark path { stroke: #FFE3B0; }
+
+/* Credit used: a thin bar; color changes at 30% and 90% (with the % in text next to it, never color alone). */
+.util-bar { height: 8px; border-radius: 999px; background: rgba(135, 150, 174, 0.18); overflow: hidden; }
+.util-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--success); min-width: 2px; }
+.util-bar.util-mid > span { background: var(--primary); }
+.util-bar.util-high > span { background: var(--danger); }
+
+/* "Demo decision, no credit check": shown wherever a credit decision appears. */
+.demo-note {
+    display: inline-flex; align-items: center; gap: .35rem; font-size: .78rem; font-weight: 600;
+    padding: .2rem .6rem; border-radius: 999px; border: 1px dashed rgba(143, 184, 232, 0.6); color: var(--accent);
+    background: rgba(143, 184, 232, 0.08); white-space: nowrap;
+}
+
+.demo-purchase { padding: 1rem 1.1rem; margin-top: .9rem; max-width: 640px; }
+.rewards-balance { font: 700 2rem/1.2 "Bricolage Grotesque", sans-serif; margin: .25rem 0 .5rem; color: var(--success); }
+
+/* Pay card choices: one row each, the amount on the right so the choice is about money, not jargon. */
+.pay-options { display: grid; gap: .6rem; }
+.pay-option {
+    display: flex; align-items: center; gap: .9rem; padding: .85rem 1rem; border: 1px solid var(--border);
+    border-radius: 12px; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.pay-option:hover { border-color: rgba(242, 181, 68, 0.5); }
+.pay-option:has(input:checked) { border-color: var(--primary); background: rgba(242, 181, 68, 0.07); }
+.pay-option:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+.pay-option.is-disabled { opacity: .55; cursor: not-allowed; }
+.pay-option .form-check-input { margin: 0; flex: none; }
+.pay-option-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.pay-option-label { font-weight: 600; }
+.pay-option-help { font-size: .82rem; color: var(--muted); }
+.pay-option-amount { font: 700 1.1rem "Bricolage Grotesque", sans-serif; white-space: nowrap; }
+@media (max-width: 575.98px) { .pay-option { align-items: flex-start; } .pay-option-amount { font-size: 1rem; } }
+.account-card.credit::before { background: linear-gradient(90deg, #E98E5E, #9A4F6E); }
+.choice-card.is-unavailable { opacity: .6; cursor: not-allowed; }
+.choice-card.is-unavailable:hover { transform: none; }

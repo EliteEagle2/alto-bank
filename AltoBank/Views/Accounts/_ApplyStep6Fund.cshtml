@@ -1,13 +1,53 @@
 @model AccountApplicationViewModel
 @using System.Globalization
-@* STEP 6 — optional opening deposit from an Alto account (a real transfer) or an external bank (simulated).
-   data-balance lets apply.js warn about overdrafts; the server checks again on submit. *@
+@* STEP 6 — checking/savings: optional opening deposit from an Alto account (a real transfer) or an external bank
+   (simulated); data-balance lets apply.js warn about overdrafts. Alto Peak card: monthly housing payment + Cardmember
+   Agreement instead (used by the SIMULATED decision, no credit check). The server checks everything again on submit. *@
 <section class="step-pane" data-step="6" aria-labelledby="s6-title">
     <p class="step-kicker">Step 6 of 7</p>
-    <h1 class="step-title" id="s6-title">Fund your new account</h1>
-    <p class="step-lead">There's no minimum. Add money now or skip this and fund it later.</p>
+    <div data-show-when="AccountType!=CreditCard">
+        <h1 class="step-title" id="s6-title">Fund your new account</h1>
+        <p class="step-lead">There's no minimum. Add money now or skip this and fund it later.</p>
+    </div>
+    <div data-show-when="AccountType=CreditCard" hidden>
+        <h1 class="step-title">A few card details</h1>
+        <p class="step-lead">We use your income (step 4), your housing payment and your history with Alto to suggest a credit limit.</p>
+    </div>
 
-    <div class="row g-4">
+    <div class="row g-4" data-show-when="AccountType=CreditCard" hidden>
+        <div class="col-lg-6">
+            <div class="field" data-field="MonthlyHousingPayment">
+                <label asp-for="MonthlyHousingPayment" class="form-label">Monthly rent or mortgage</label>
+                <div class="input-group input-group-lg">
+                    <span class="input-group-text">$</span>
+                    <input asp-for="MonthlyHousingPayment" type="text" class="form-control" inputmode="decimal" placeholder="0.00" autocomplete="off" />
+                </div>
+                <div class="form-text text-muted-alto">Your share only. Enter 0 if you don't pay rent or a mortgage.</div>
+                <div class="field-msg" data-msg="MonthlyHousingPayment"><span asp-validation-for="MonthlyHousingPayment"></span></div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="review-card p-3 small">
+                <div class="fw-semibold mb-1"><i class="bi bi-info-circle me-1"></i>How the decision works</div>
+                <p class="mb-2">This is a demo. There's no credit check and we never ask for your full SSN. The decision comes from your answers and how long you've banked with Alto.</p>
+                <span class="demo-note">Demo decision, no credit check</span>
+            </div>
+        </div>
+        <div class="col-12">
+            <div class="field" data-field="AgreeCardmemberAgreement">
+                <div class="form-check">
+                    <input asp-for="AgreeCardmemberAgreement" class="form-check-input" />
+                    <label asp-for="AgreeCardmemberAgreement" class="form-check-label">
+                        I have read and agree to the <a href="#" data-bs-toggle="modal" data-bs-target="#discCard">Cardmember Agreement</a>
+                        (@Model.CardAprPercent.ToString("0.00")% purchase APR, $0 annual fee, late fee if the minimum is paid late)
+                    </label>
+                </div>
+                <div class="field-msg" data-msg="AgreeCardmemberAgreement"><span asp-validation-for="AgreeCardmemberAgreement"></span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4" data-show-when="AccountType!=CreditCard">
         <div class="col-lg-6">
             <div class="field" data-field="InitialDeposit">
                 <label asp-for="InitialDeposit" class="form-label">Opening deposit <span class="opt">(optional)</span></label>

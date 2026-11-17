@@ -30,6 +30,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<Budget> Budgets => Set<Budget>();
     public DbSet<CheckDeposit> CheckDeposits => Set<CheckDeposit>();
     public DbSet<Dispute> Disputes => Set<Dispute>();
+    public DbSet<CreditCardStatement> CreditCardStatements => Set<CreditCardStatement>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -46,6 +47,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             a.Property(x => x.AccountType).HasConversion<string>();
             // Default "Active" also fills in existing rows when the column is added by the migration.
             a.Property(x => x.Status).HasConversion<string>().HasMaxLength(10).HasDefaultValue(AccountStatus.Active);
+            a.Property(x => x.Autopay).HasConversion<string>().HasMaxLength(20).HasDefaultValue(CardAutopay.None);
             a.HasOne(x => x.User).WithMany(u => u.Accounts)
              .HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
         });
@@ -73,6 +75,14 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             c.HasIndex(x => x.FrontHash);
             c.HasIndex(x => new { x.Status, x.SubmittedAt });   // the admin queue
             c.HasIndex(x => new { x.UserId, x.SubmittedAt });   // the customer list + daily limit
+        });
+
+        // ----- Alto Peak statements: one per (card, close date), so a restart can't close a month twice -----
+        builder.Entity<CreditCardStatement>(s =>
+        {
+            s.HasOne(x => x.Account).WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
+            s.HasIndex(x => new { x.AccountId, x.PeriodEnd }).IsUnique();
+            s.HasIndex(x => x.DueDate);
         });
 
         // ----- Disputes: ONE per transaction (the unique index makes simultaneous submits create only one) -----

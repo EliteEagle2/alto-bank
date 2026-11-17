@@ -11,7 +11,7 @@
     <h2 class="sub-title">Disclosures</h2>
     @* Each link opens a modal from _ApplyDisclosures.cshtml. All three boxes are required. *@
     <div class="disclosures">
-        <div class="field" data-field="AgreeAccountAgreement">
+        <div class="field" data-field="AgreeAccountAgreement" data-show-when="AccountType!=CreditCard">
             <div class="form-check disclosure-check">
                 <input asp-for="AgreeAccountAgreement" class="form-check-input" />
                 <label asp-for="AgreeAccountAgreement" class="form-check-label">

@@ -281,3 +281,11 @@ a:focus-visible, button:focus-visible, .btn:focus-visible { outline: 2px solid #
 /* Form accents in the console are glacier too (input-group labels, switches, checkboxes) */
 .admin-body .input-group-text { color: #8FB8E8; }
 .admin-body .form-check-input:checked { background-color: #8FB8E8; border-color: #8FB8E8; }
+
+/* Alto Peak (Feature 6): same utilization bar and demo note as the customer site. */
+.util-bar { height: 8px; border-radius: 999px; background: rgba(135, 150, 174, 0.18); overflow: hidden; }
+.util-bar > span { display: block; height: 100%; border-radius: 999px; background: #4CC38A; min-width: 2px; }
+.util-bar.util-mid > span { background: #F2B544; }
+.util-bar.util-high > span { background: #EF6B5B; }
+.demo-note { display: inline-block; font-size: .75rem; font-weight: 600; padding: .1rem .55rem; border-radius: 999px;
+    border: 1px dashed rgba(143, 184, 232, 0.6); color: #8FB8E8; background: rgba(143, 184, 232, 0.08); margin-left: .35rem; white-space: nowrap; }

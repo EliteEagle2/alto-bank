@@ -1,0 +1,120 @@
+@model AccountDetailsViewModel
+@* Top of an ALTO PEAK credit card's page. The account's Balance is stored negative (money owed); everything here shows
+   positive amounts in plain words: what you owe, what you can still spend, and what's due when. *@
+@{
+    var a = Model.Account;
+    var s = Model.LatestStatement;
+    var owner = Model.OwnerName;
+    var today = BankTime.Today;
+    var dueSoon = s != null && Model.MinimumLeft > 0 && s.DueDate >= today;
+    var pastDue = s != null && Model.MinimumLeft > 0 && s.DueDate < today;
+    var util = a.Utilization;
+    var utilTone = util >= 90 ? "high" : util >= 30 ? "mid" : "low";
+    var canPurchase = a.Status == AccountStatus.Active && Model.CurrentCard?.Status == CardStatus.Active;
+}
+
+@if (a.Status == AccountStatus.Frozen)
+{
+    <div class="status-banner frozen" role="alert"><i class="bi bi-snow"></i>
+        <div><strong>This card account is frozen.</strong> Purchases are paused. You can still make payments. Please <a asp-controller="Support" asp-action="Contact">contact support</a>.</div></div>
+}
+else if (a.Status == AccountStatus.Closed)
+{
+    <div class="status-banner closed" role="alert"><i class="bi bi-slash-circle"></i>
+        <div><strong>This card was closed@(a.ClosedAt == null ? "" : " on " + a.ClosedAt.Value.ToString("MMM d, yyyy")).</strong> You can still see its history and statements.</div></div>
+}
+else if (pastDue)
+{
+    <div class="status-banner frozen" role="alert"><i class="bi bi-exclamation-triangle"></i>
+        <div><strong>Your minimum payment of <money amount="@Model.MinimumLeft" /> was due @s!.DueDate.ToString("MMM d").</strong> Pay it now to bring the card up to date.</div></div>
+}
+
+<div class="acct-header">
+    <div class="acct-card-wrap">
+        <div class="card-stage card-stage--sm">
+            <partial name="_CardArt" model='new CardArtViewModel("Credit", CardDesigns.CssClass(CardDesigns.Peak) + " static" + (Model.CurrentCard?.Status == CardStatus.Frozen ? " is-frozen" : ""), "••••  " + (Model.CurrentCard?.Last4 ?? a.Last4), owner, "Alto Peak")' />
+        </div>
+    </div>
+
+    <div class="acct-summary">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+            <span class="account-type">Credit card</span>
+            <span class="acct-status acct-status--@a.Status.ToString().ToLowerInvariant()">@a.Status</span>
+            <span class="text-muted-alto small">Opened @a.OpenedAt.ToString("MMM d, yyyy")</span>
+        </div>
+        <h1 class="acct-name" data-account-name>@a.DisplayName</h1>
+        <div class="account-digits mb-3">•••• @a.Last4</div>
+
+        <div class="acct-balances">
+            <div>
+                <div class="acct-label">Current balance <span class="text-muted-alto">(you owe)</span></div>
+                <div class="acct-balance"><money amount="@a.AmountOwed" /></div>
+                @if (a.Balance > 0) { <div class="small text-success-alto">Plus a <money amount="@a.Balance" /> credit balance</div> }
+            </div>
+            <div>
+                <div class="acct-label">Available credit</div>
+                <div class="acct-available"><money amount="@a.AvailableCredit" /></div>
+                <div class="small text-muted-alto">of a <money amount="@(a.CreditLimit ?? 0)" /> limit</div>
+            </div>
+            <div>
+                <div class="acct-label">Statement balance</div>
+                <div class="acct-available">@if (s == null) { <span class="text-muted-alto small">First statement @a.NextStatementDate?.ToString("MMM d")</span> } else { <money amount="@s.StatementBalance" /> }</div>
+                @if (s != null) { <div class="small text-muted-alto">closed @s.PeriodEnd.ToString("MMM d")</div> }
+            </div>
+            <div>
+                <div class="acct-label">Minimum payment due</div>
+                <div class="acct-available @(pastDue ? "text-danger-alto" : "")"><money amount="@Model.MinimumLeft" /></div>
+                @if (s != null && s.MinimumPayment > 0)
+                {
+                    <div class="small @(pastDue ? "text-danger-alto" : "text-muted-alto")">@(Model.MinimumLeft == 0 ? "Paid. Thank you!" : (pastDue ? "Was due " : "Due ") + s.DueDate.ToString("MMM d"))</div>
+                }
+            </div>
+        </div>
+
+        <div class="util mt-3" style="max-width: 520px">
+            <div class="d-flex justify-content-between small mb-1">
+                <span>Credit used</span>
+                <span class="text-muted-alto"><money amount="@a.AmountOwed" /> of <money amount="@(a.CreditLimit ?? 0)" /> (@util%)</span>
+            </div>
+            <div class="util-bar util-@utilTone" role="progressbar" aria-valuenow="@Math.Round(util)" aria-valuemin="0" aria-valuemax="100" aria-label="Credit used">
+                <span style="width: @util.ToString(System.Globalization.CultureInfo.InvariantCulture)%"></span>
+            </div>
+            @if (util >= 30) { <div class="small text-muted-alto mt-1">Keeping it under 30% of your limit is a good habit.</div> }
+        </div>
+
+        <div class="acct-actions">
+            @if (a.Status != AccountStatus.Closed && a.AmountOwed > 0)
+            {
+                <a class="btn btn-alto" asp-controller="CreditCard" asp-action="Pay" asp-route-id="@a.Id"><i class="bi bi-cash-coin me-1"></i>Pay card</a>
+            }
+            else
+            {
+                <span class="btn btn-alto disabled" aria-disabled="true" title="Nothing to pay"><i class="bi bi-cash-coin me-1"></i>Pay card</span>
+            }
+            @if (canPurchase)
+            {
+                <button type="button" class="btn btn-alto-ghost" data-bs-toggle="collapse" data-bs-target="#demoPurchase" aria-expanded="false" aria-controls="demoPurchase">
+                    <i class="bi bi-bag me-1"></i>Make a purchase</button>
+            }
+            <a class="btn btn-link text-muted-alto" asp-controller="Accounts" asp-action="Index"><i class="bi bi-chevron-left"></i> Back to accounts</a>
+        </div>
+
+        @if (canPurchase)
+        {
+            <div class="collapse" id="demoPurchase">
+                <form class="demo-purchase glass" method="post" asp-controller="CreditCard" asp-action="Purchase" asp-route-id="@a.Id">
+                    <p class="small text-muted-alto mb-2"><i class="bi bi-info-circle me-1"></i>Demo: there's no real store. This adds a purchase to the card so you can see how the balance, cash back and Insights respond.</p>
+                    <div class="row g-2 align-items-end">
+                        <div class="col-sm-6"><label class="form-label small" for="merchant">Merchant</label>
+                            <input id="merchant" name="merchant" class="form-control" maxlength="60" required placeholder="e.g. Peak Coffee Co." /></div>
+                        <div class="col-sm-3"><label class="form-label small" for="purchaseAmount">Amount</label>
+                            <div class="input-group"><span class="input-group-text">$</span>
+                                <input id="purchaseAmount" name="amount" class="form-control" type="number" step="0.01" min="0.01" max="@a.AvailableCredit.ToString(System.Globalization.CultureInfo.InvariantCulture)" required placeholder="0.00" /></div></div>
+                        <div class="col-sm-3"><button type="submit" class="btn btn-alto w-100">Buy</button></div>
+                    </div>
+                    <p class="small text-muted-alto mt-2 mb-0">Up to <money amount="@a.AvailableCredit" /> (your available credit). You earn @Model.CashBackPercent.ToString("0.##")% cash back.</p>
+                </form>
+            </div>
+        }
+    </div>
+</div>

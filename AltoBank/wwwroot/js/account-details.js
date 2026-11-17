@@ -110,7 +110,10 @@
         desc.appendChild(sub);
         const amounts = el('span', 'tx-amounts');
         amounts.appendChild(el('span', 'money tx-amount ' + (t.isCredit ? 'amount-credit' : 'amount-debit'), (t.isCredit ? '+' : '−') + fmt(t.amount)));
-        const bal = el('span', 'tx-bal', 'Bal '); bal.appendChild(el('span', 'money', fmt(t.balanceAfter)));
+        // A credit card's balance is stored negative (money owed): show what's owed instead.
+        const onCard = root.dataset.credit === 'true';
+        const bal = el('span', 'tx-bal', onCard ? 'Owed ' : 'Bal ');
+        bal.appendChild(el('span', 'money', fmt(onCard ? Math.max(0, -t.balanceAfter) : t.balanceAfter)));
         amounts.appendChild(bal);
         const caret = el('i', 'bi bi-chevron-down tx-caret'); caret.setAttribute('aria-hidden', 'true');
         btn.append(icon, desc, amounts, caret);

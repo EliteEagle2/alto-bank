@@ -28,10 +28,12 @@ public class AccountsController : Controller
     private readonly ITimeLimitedDataProtector _identityProtector;
     private readonly ICheckDepositService _checks;
     private readonly IDisputeService _disputes;
+    private readonly ICreditCardService _creditCards;
 
     public AccountsController(IBankService bank, UserManager<ApplicationUser> userManager, IDataProtectionProvider dataProtection,
-                              ICheckDepositService checks, IDisputeService disputes)
+                              ICheckDepositService checks, IDisputeService disputes, ICreditCardService creditCards)
     {
+        _creditCards = creditCards;
         _disputes = disputes;
         _checks = checks;
         _bank = bank;
@@ -74,7 +76,7 @@ public class AccountsController : Controller
 
         ViewData["Title"] = account.DisplayName;
         var (disputable, disputeStatuses, partlyRefunded) = await _disputes.GetRowInfoAsync(UserId, activity.Items);
-        return View(new AccountDetailsViewModel
+        var vm = new AccountDetailsViewModel
         {
             Account = account,
             Cards = account.Cards.OrderByDescending(c => c.IssuedAt).ToList(),
@@ -96,7 +98,20 @@ public class AccountsController : Controller
             Disputable = disputable,
             DisputeStatuses = disputeStatuses,
             PartlyRefunded = partlyRefunded
-        });
+        };
+        if (account.IsCreditCard)
+        {
+            var (statement, paid, minLeft, stmtLeft) = await _bank.GetCardDueAsync(account);
+            vm.LatestStatement = statement;
+            vm.PaidSinceClose = paid;
+            vm.MinimumLeft = minLeft;
+            vm.StatementLeft = stmtLeft;
+            vm.Statements = await _creditCards.GetStatementsAsync(UserId, account.Id);
+            vm.PayFromAccounts = await _creditCards.GetPayFromAccountsAsync(UserId);
+            vm.CardAprPercent = settings.CardPurchaseAprPercent;
+            vm.CashBackPercent = settings.CardCashBackRate * 100m;
+        }
+        return View(vm);
     }
 
     // GET /accounts/5/statements/2026/10 — printable monthly statement (simulated). Owner-only.
@@ -242,6 +257,8 @@ public class AccountsController : Controller
             SourceOfFunds = string.Join(", ", model.SourceOfFunds.Distinct()),
             SsnLast4 = ssnLast4!,
             OpeningDeposit = deposit,
+            MonthlyHousingPayment = model.AccountType == AccountType.CreditCard ? model.MonthlyHousingPayment : null,
+            AgreedCardmemberAgreement = model.AccountType == AccountType.CreditCard && model.AgreeCardmemberAgreement,
             FundingSource = deposit > 0 ? (model.FundingAccountId == null ? $"External: {fundingLabel}" : fundingLabel) : null,
             ESignName = model.ESignName!.Trim(),
             ESignedAt = DateTime.UtcNow
@@ -309,6 +326,9 @@ public class AccountsController : Controller
     private string? ValidateApplication(AccountApplicationViewModel m, out decimal deposit, out string? phoneDigits)
     {
         deposit = m.InitialDeposit ?? 0m;
+        var isCard = m.AccountType == AccountType.CreditCard;
+        if (isCard) deposit = 0m;   // a credit card has no opening deposit
+        if (isCard && m.CardUnavailableReason != null) ModelState.AddModelError(nameof(m.AccountType), m.CardUnavailableReason);
 
         // ----- Step 1 -----
         if (m.AccountType == AccountType.Checking && !CardDesigns.All.Contains(m.CardDesign))
@@ -370,7 +390,17 @@ public class AccountsController : Controller
         }
 
         // ----- Step 6 -----
-        if (decimal.Round(deposit, 2) != deposit)
+        if (isCard)
+        {
+            ModelState.Remove(nameof(m.InitialDeposit));
+            if (m.MonthlyHousingPayment is not decimal housing)
+                ModelState.AddModelError(nameof(m.MonthlyHousingPayment), "Enter your monthly rent or mortgage payment (enter 0 if none).");
+            else if (decimal.Round(housing, 2) != housing)
+                ModelState.AddModelError(nameof(m.MonthlyHousingPayment), "Use dollars and cents (at most 2 decimal places).");
+            if (!m.AgreeCardmemberAgreement)
+                ModelState.AddModelError(nameof(m.AgreeCardmemberAgreement), "Please agree to the Cardmember Agreement.");
+        }
+        else if (decimal.Round(deposit, 2) != deposit)
             ModelState.AddModelError(nameof(m.InitialDeposit), "Opening deposit can have at most 2 decimal places.");
         if (deposit > 0)
         {
@@ -392,7 +422,7 @@ public class AccountsController : Controller
         }
 
         // ----- Step 7 -----
-        if (!m.AgreeAccountAgreement) ModelState.AddModelError(nameof(m.AgreeAccountAgreement), "Please agree to the Account Agreement.");
+        if (!isCard && !m.AgreeAccountAgreement) ModelState.AddModelError(nameof(m.AgreeAccountAgreement), "Please agree to the Account Agreement.");
         if (!m.AgreePrivacy) ModelState.AddModelError(nameof(m.AgreePrivacy), "Please acknowledge the Privacy Notice.");
         if (!m.AgreeESign) ModelState.AddModelError(nameof(m.AgreeESign), "Please agree to the E-Sign Consent.");
         if (m.ESignName != null && !ApplicationRules.SignatureMatches(m.ESignName, m.FirstName, m.MiddleInitial, m.LastName))
@@ -420,11 +450,19 @@ public class AccountsController : Controller
     private async Task PrepareFormAsync(AccountApplicationViewModel model, ApplicationUser user)
     {
         // Only ACTIVE accounts can fund a new account (frozen/closed ones can't send money).
-        model.FundingAccounts = (await _bank.GetAccountsAsync(user.Id)).Where(a => a.Status == AccountStatus.Active).ToList();
+        model.FundingAccounts = (await _bank.GetAccountsAsync(user.Id)).Where(a => a.Status == AccountStatus.Active && a.IsDepositAccount).ToList();
         model.Email = user.Email ?? "";
         model.IsReturning = user.HasApplicationProfile;
         model.UserKey = user.Id;
         model.VerifiedLast4 ??= ReadIdentityToken(model.IdentityToken);
+        var settings = await _bank.GetSettingsAsync();
+        model.CardAprPercent = settings.CardPurchaseAprPercent;
+        model.CardCashBackPercent = settings.CardCashBackRate * 100m;
+        var all = await _bank.GetAccountsAsync(user.Id);
+        if (all.Any(a => a.IsCreditCard && a.Status != AccountStatus.Closed))
+            model.CardUnavailableReason = "You already have an Alto Peak card.";
+        else if ((await _bank.GetApplicationsAsync(user.Id)).Any(a => a.AccountType == AccountType.CreditCard && a.Status == ApplicationStatus.Pending))
+            model.CardUnavailableReason = "Your Alto Peak application is being reviewed.";
 
         ViewBag.States = new SelectList(ApplicationOptions.States, "Key", "Value");
         ViewBag.EmploymentStatuses = new SelectList(ApplicationOptions.EmploymentStatuses);

@@ -29,6 +29,12 @@
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const TITLES = ['Account', 'About you', 'Contact & address', 'Employment', 'Verify identity', 'Fund account', 'Review & sign'];
+    // Step 6 is "Card details" for the Alto Peak card (no funding).
+    const stepTitle = i => (i === 5 && get('AccountType') === 'CreditCard') ? 'Card details' : TITLES[i];
+    function refreshStepTitles() {
+        const t6 = document.querySelector('[data-nav-step="6"] .step-nav-title');
+        if (t6) t6.textContent = stepTitle(5);
+    }
     const LAST = 7;
     const CITIZENSHIP = { US: 'U.S. citizen', PR: 'Permanent resident', Other: 'Other' };
     const DESIGNS = { aurora: 'Summit Gold', violet: 'Glacier', onyx: 'Onyx' };
@@ -86,10 +92,11 @@
     }
 
     // ---------- Show / hide conditional sections ----------
-    // data-show-when="Field=Value" (several conditions joined with &)
+    // data-show-when="Field=Value" or "Field!=Value" (several conditions joined with &)
     const conditionMet = expr => expr.split('&').every(part => {
-        const [name, expected] = part.split('=');
-        return String(get(name)) === expected;
+        const not = part.includes('!=');
+        const [name, expected] = part.split(not ? '!=' : '=');
+        return not ? String(get(name)) !== expected : String(get(name)) === expected;
     });
     function isShown(el) {
         for (let n = el; n && n !== form; n = n.parentElement) {
@@ -134,7 +141,7 @@
     }
 
     const RULES = {
-        AccountType: () => get('AccountType') ? '' : 'Choose Checking or Savings.',
+        AccountType: () => get('AccountType') ? '' : 'Choose an account to open.',
         Nickname: () => get('Nickname').length > 30 ? 'Nickname can be at most 30 characters.' : '',
         CardDesign: () => DESIGNS[get('CardDesign')] ? '' : 'Choose a debit card design.',
         FirstName: () => nameRule(get('FirstName'), 'first name'),
@@ -172,6 +179,13 @@
             return '';
         },
         FundingAccountId: () => '',
+        MonthlyHousingPayment: () => {
+            if (get('MonthlyHousingPayment') === '') return "Enter your monthly rent or mortgage payment (enter 0 if none).";
+            const m = money(get('MonthlyHousingPayment'));
+            if (!m.ok) return 'Enter a valid amount: numbers only, no negatives, at most 2 decimal places.';
+            return m.value > 100000 ? 'Enter a monthly amount between $0 and $100,000.' : '';
+        },
+        AgreeCardmemberAgreement: () => get('AgreeCardmemberAgreement') ? '' : 'Please agree to the Cardmember Agreement.',
         ExternalBankName: () => get('ExternalBankName').length >= 2 ? '' : 'Enter the name of your other bank.',
         ExternalLast4: () => /^\d{4}$/.test(get('ExternalLast4')) ? '' : 'Enter the last 4 digits of that account.',
         AgreeAccountAgreement: () => get('AgreeAccountAgreement') ? '' : 'Please agree to the Account Agreement.',
@@ -537,7 +551,7 @@
         const dep = depositValue();
         const sections = [
             [1, 'Account', [
-                ['Account type', type === 'Checking' ? 'Alto Checking' : type === 'Savings' ? 'Summit Savings' : '—'],
+                ['Account type', type === 'Checking' ? 'Alto Checking' : type === 'Savings' ? 'Summit Savings' : type === 'CreditCard' ? 'Alto Peak Card' : '—'],
                 ['Nickname', get('Nickname') || 'None'],
                 ...(type === 'Checking' ? [['Debit card design', DESIGNS[get('CardDesign')]]] : []),
             ]],
@@ -563,7 +577,13 @@
                 ['Status', get('IdentityToken') ? `Verified (SSN on file ***-**-${last4Input.value})` : 'Not verified'],
                 ['Security check', get('QuizStreet') && get('QuizZip') ? 'Completed' : 'Not completed'],
             ]],
-            [6, 'Funding', [
+            type === 'CreditCard'
+                ? [6, 'Card details', [
+                    ['Monthly rent or mortgage', fmtMoney(money(get('MonthlyHousingPayment')).value)],
+                    ['Cardmember Agreement', get('AgreeCardmemberAgreement') ? 'Agreed' : 'Not agreed'],
+                    ['Decision', 'Demo decision, no credit check'],
+                ]]
+                : [6, 'Funding', [
                 ['Opening deposit', dep > 0 ? fmtMoney(dep) : '$0.00 (fund later)'],
                 ...(dep > 0 ? [['From', src ? src.name : `${get('ExternalBankName')} ••${get('ExternalLast4')} (simulated)`]] : []),
             ]],
@@ -661,7 +681,8 @@
     // ---------- Render everything from the current state ----------
     function render() {
         // Conditional sections
-        $$('[data-show-when]').forEach(el => { el.hidden = !isShown(el); });
+        $('[data-show-when]').forEach(el => { el.hidden = !isShown(el); });
+        refreshStepTitles();
 
         // Buttons
         const onConfirm = paneForStep(current) === panes.confirm;
@@ -686,7 +707,7 @@
             btn.setAttribute('aria-current', n === current ? 'step' : 'false');
         });
         const num = $('[data-nav-num]', document); if (num) num.textContent = current;
-        const title = $('[data-nav-title]', document); if (title) title.textContent = TITLES[current - 1];
+        const title = $('[data-nav-title]', document); if (title) title.textContent = stepTitle(current - 1);
         const bar = $('[data-nav-bar]', document); if (bar) bar.style.width = (current / LAST * 100) + '%';
 
         // Choice styling

@@ -63,9 +63,9 @@ dsub $C $XFER Other "$DESC" >/dev/null
 has "own transfer refused" "$(flash $C $B/accounts)" "Transfers between your own accounts can"
 DEP=$(sql "SELECT Id FROM Transactions WHERE AccountId = $JCHK AND Type = 'Deposit' ORDER BY Date DESC LIMIT 1")
 dsub $C $DEP Other "$DESC" >/dev/null
-has "deposit refused" "$(flash $C $B/accounts)" "Only withdrawals, bill payments and payments you sent"
+has "deposit refused" "$(flash $C $B/accounts)" "Only withdrawals, bill payments, card purchases and payments you sent"
 OLD=$(pick $JCHK 5)
-sql "UPDATE Transactions SET Date = datetime('now','-61 days') WHERE Id = $OLD" >/dev/null
+sql "UPDATE Transactions SET Date = datetime('now','-62 days') WHERE Id = $OLD" >/dev/null   # 62, not 61: "now" is UTC and the bank day is New York, so 61 can land on day 60 in the evening
 dsub $C $OLD Other "$DESC" >/dev/null
 has "older than 60 days refused" "$(flash $C $B/accounts)" "within 60 days"
 check "New page for an old one sends you back with the reason" "$(code -b $C "$B/disputes/new?transactionId=$OLD")" 302

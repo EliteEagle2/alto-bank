@@ -32,6 +32,16 @@ namespace AltoBank.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Autopay")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("None");
+
+                    b.Property<int?>("AutopayFromAccountId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<decimal>("Balance")
                         .IsConcurrencyToken()
                         .HasColumnType("decimal(18,2)");
@@ -43,6 +53,9 @@ namespace AltoBank.Migrations
                     b.Property<DateTime?>("ClosedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<decimal?>("CreditLimit")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal?>("DailyTransferLimit")
                         .HasColumnType("decimal(18,2)");
 
@@ -53,12 +66,21 @@ namespace AltoBank.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateOnly?>("NextStatementDate")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Nickname")
                         .HasMaxLength(40)
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("OpenedAt")
                         .HasColumnType("TEXT");
+
+                    b.Property<decimal>("RewardsBalance")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("StatementCloseDay")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -101,6 +123,9 @@ namespace AltoBank.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("AgreedCardmemberAgreement")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Apt")
                         .HasMaxLength(50)
                         .HasColumnType("TEXT");
@@ -119,7 +144,14 @@ namespace AltoBank.Migrations
                         .HasMaxLength(60)
                         .HasColumnType("TEXT");
 
+                    b.Property<decimal?>("CreditLimit")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<DateOnly>("DateOfBirth")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DecisionNote")
+                        .HasMaxLength(300)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("DenialReason")
@@ -176,6 +208,9 @@ namespace AltoBank.Migrations
                     b.Property<string>("MiddleInitial")
                         .HasMaxLength(1)
                         .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("MonthlyHousingPayment")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Nickname")
                         .HasMaxLength(30)
@@ -491,6 +526,21 @@ namespace AltoBank.Migrations
                     b.Property<bool>("AutoApproveApplications")
                         .HasColumnType("INTEGER");
 
+                    b.Property<decimal>("CardCashBackRate")
+                        .HasColumnType("decimal(6,4)");
+
+                    b.Property<decimal>("CardLateFee")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("CardMinimumPaymentFloor")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("CardMinimumPaymentPercent")
+                        .HasColumnType("decimal(6,4)");
+
+                    b.Property<decimal>("CardPurchaseAprPercent")
+                        .HasColumnType("decimal(5,2)");
+
                     b.Property<decimal>("CheckingApy")
                         .HasColumnType("decimal(9,6)");
 
@@ -535,6 +585,11 @@ namespace AltoBank.Migrations
                         {
                             Id = 1,
                             AutoApproveApplications = true,
+                            CardCashBackRate = 0.015m,
+                            CardLateFee = 29m,
+                            CardMinimumPaymentFloor = 25m,
+                            CardMinimumPaymentPercent = 0.02m,
+                            CardPurchaseAprPercent = 21.99m,
                             CheckingApy = 0.0000m,
                             DefaultDailyTransferLimit = 5000m,
                             LargeTransactionThreshold = 2500m,
@@ -716,6 +771,85 @@ namespace AltoBank.Migrations
                     b.HasIndex("UserId", "SubmittedAt");
 
                     b.ToTable("CheckDeposits");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.CreditCardStatement", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AccountId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("AprPercent")
+                        .HasColumnType("decimal(4,2)");
+
+                    b.Property<DateTime?>("AutopayAttemptedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AutopayResult")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ClosedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("DueDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("DueDateProcessed")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("FeesCharged")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("InterestCharged")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("LastTransactionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("LateFeeCharged")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("LateFeeTransactionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("LateFeeWaived")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("MinimumPayment")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("PaymentsAndCredits")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateOnly>("PeriodEnd")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly>("PeriodStart")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("PreviousBalance")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("Purchases")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("StatementBalance")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DueDate");
+
+                    b.HasIndex("AccountId", "PeriodEnd")
+                        .IsUnique();
+
+                    b.ToTable("CreditCardStatements");
                 });
 
             modelBuilder.Entity("AltoBank.Models.CustomerNote", b =>
@@ -1516,6 +1650,17 @@ namespace AltoBank.Migrations
                     b.Navigation("Account");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.CreditCardStatement", b =>
+                {
+                    b.HasOne("AltoBank.Models.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Account");
                 });
 
             modelBuilder.Entity("AltoBank.Models.CustomerNote", b =>

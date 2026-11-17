@@ -46,7 +46,7 @@ public class PreferencesService : IPreferencesService
         var theme = (s.Theme ?? "").Trim().ToLowerInvariant();
         if (!UserPreferences.Themes.Contains(theme)) return new BankResult(false, "Choose one of the listed themes.");
         if (s.DefaultAccountId is int id &&
-            !await _db.Accounts.AnyAsync(a => a.Id == id && a.UserId == userId && a.Status != AccountStatus.Closed))   // ownership check
+            !await _db.Accounts.AnyAsync(a => a.Id == id && a.UserId == userId && a.Status != AccountStatus.Closed && a.AccountType != AccountType.CreditCard))   // ownership check
             return new BankResult(false, "Choose one of your open accounts as the default.");
 
         var p = await LoadOrCreateAsync(userId);
@@ -92,7 +92,7 @@ public class PreferencesService : IPreferencesService
     {
         var id = await _db.UserPreferences.Where(p => p.UserId == userId).Select(p => p.DefaultAccountId).FirstOrDefaultAsync();
         if (id == null) return null;
-        return await _db.Accounts.AnyAsync(a => a.Id == id && a.UserId == userId && a.Status != AccountStatus.Closed) ? id : null;
+        return await _db.Accounts.AnyAsync(a => a.Id == id && a.UserId == userId && a.Status != AccountStatus.Closed && a.AccountType != AccountType.CreditCard) ? id : null;
     }
 
     public async Task<List<AltoBank.ViewModels.SignInEntry>> RecentSignInsAsync(string userId, int take = 5) =>

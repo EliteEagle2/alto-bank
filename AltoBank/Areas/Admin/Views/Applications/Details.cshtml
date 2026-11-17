@@ -3,12 +3,14 @@
 @{
     var app = Model;
     var name = $"{app.FirstName} {app.LastName}";
-    var product = app.AccountType == AccountType.Checking ? "Alto Checking" : "Summit Savings";
+    var isCard = app.AccountType == AccountType.CreditCard;
+    var product = app.AccountType switch { AccountType.Checking => "Alto Checking", AccountType.Savings => "Summit Savings", _ => "Alto Peak Card" };
+    var limitText = isCard ? $" with a {(app.CreditLimit ?? AltoBank.Services.CreditDecisionRules.MinLimit):C} credit limit (the proposed limit)" : "";
     var depositText = app.OpeningDeposit > 0
         ? $"{app.OpeningDeposit:C} will be moved in from {(app.FundingSource ?? "an external bank (simulated)")}; funds and limits are re-checked now."
         : "There is no opening deposit.";
     var approve = new ConfirmModalViewModel("approveModal", $"Approve application ALTO-{app.Id:D6}",
-        $"A new {product} account will be opened for {name}" + (app.AccountType == AccountType.Checking ? " with a virtual debit card" : "") + $". {depositText} The customer sees the approval right away.",
+        $"A new {product} account will be opened for {name}" + (app.AccountType == AccountType.Checking ? " with a virtual debit card" : "") + limitText + $". {(isCard ? "" : depositText + " ")}The customer sees the approval right away.",
         Url.Action("Approve", new { id = app.Id })!, "Approve & open account", "primary");
     var deny = new ConfirmModalViewModel("denyModal", $"Deny application ALTO-{app.Id:D6}",
         $"No account will be opened and no money moves. {name} will see the application as Denied, together with the reason you type below, so write it for the customer.",
@@ -68,8 +70,18 @@
                 <dt>Employment</dt><dd>@app.EmploymentStatus@(app.Employer == null ? "" : $" · {app.Occupation} at {app.Employer}")</dd>
                 <dt>Income</dt><dd>@app.IncomeRange</dd>
                 <dt>Source of funds</dt><dd>@app.SourceOfFunds</dd>
-                <dt>Opening deposit</dt><dd><money amount="@app.OpeningDeposit" /></dd>
-                <dt>Funded from</dt><dd>@(app.FundingSource ?? "—")</dd>
+                @if (isCard)
+                {
+                    <dt>Monthly housing</dt><dd><money amount="@(app.MonthlyHousingPayment ?? 0)" /></dd>
+                    <dt>Proposed limit</dt><dd>@(app.CreditLimit is decimal l ? l.ToString("C") : "—")</dd>
+                    <dt>Decision</dt><dd>@(app.DecisionNote ?? "—") <span class="demo-note">Demo decision, no credit check</span></dd>
+                    <dt>Cardmember Agreement</dt><dd>@(app.AgreedCardmemberAgreement ? "Agreed" : "Not agreed")</dd>
+                }
+                else
+                {
+                    <dt>Opening deposit</dt><dd><money amount="@app.OpeningDeposit" /></dd>
+                    <dt>Funded from</dt><dd>@(app.FundingSource ?? "—")</dd>
+                }
                 <dt>E-signature</dt><dd>@app.ESignName · @Local(app.ESignedAt)</dd>
             </dl>
         </div>

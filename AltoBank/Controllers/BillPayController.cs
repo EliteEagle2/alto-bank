@@ -43,7 +43,7 @@ public class BillPayController : Controller
     public async Task<IActionResult> Index(int? payee)
     {
         ViewData["Title"] = "Bill Pay";
-        var accounts = (await _bank.GetAccountsAsync(UserId)).Where(a => a.Status == AccountStatus.Active).ToList();
+        var accounts = (await _bank.GetAccountsAsync(UserId)).Where(a => a.Status == AccountStatus.Active && a.IsDepositAccount).ToList();
         var schedules = await _bills.GetSchedulesAsync(UserId);
         var today = BankTime.Today;
         return View(new BillPayPageViewModel

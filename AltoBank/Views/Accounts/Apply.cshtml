@@ -13,7 +13,7 @@
         "EmploymentStatus" or "Employer" or "Occupation" or "IncomeRange" or "SourceOfFunds" => 4,
         "IdentityToken" or "QuizStreet" or "QuizZip" => 5,
         "AgreeAccountAgreement" or "AgreePrivacy" or "AgreeESign" or "ESignName" => 7,
-        _ => 6 // deposit / funding fields and service errors like "Insufficient funds"
+        _ => 6 // deposit / funding / card fields and service errors like "Insufficient funds"
     };
     var hasErrors = !ViewData.ModelState.IsValid;
     var startStep = hasErrors

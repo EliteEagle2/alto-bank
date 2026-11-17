@@ -1,0 +1,94 @@
+@model PayCardViewModel
+@* PAY CARD — /credit-card/{id}/pay. Four choices shown with their amounts, so the customer sees what each one means
+   (minimum avoids a late fee, statement balance avoids interest). The server works out the amount again on POST. *@
+@{
+    var c = Model.Card;
+    var s = Model.Statement;
+    var f = Model.Form;
+    var owed = c.AmountOwed;
+    var today = BankTime.Today;
+    var pastDue = s != null && Model.MinimumLeft > 0 && s.DueDate < today;
+    var options = new List<(CardPaymentOption Option, string Label, decimal? Amount, string Help)>
+    {
+        (CardPaymentOption.Minimum, "Minimum payment", Model.MinimumLeft,
+            s == null ? "No statement yet." : Model.MinimumLeft == 0 ? "Already paid for this statement." : (pastDue ? "Past due. " : "") + $"Pay at least this by {s.DueDate:MMM d} to avoid a late fee. Interest may apply."),
+        (CardPaymentOption.StatementBalance, "Statement balance", Model.StatementLeft,
+            s == null ? "No statement yet." : Model.StatementLeft == 0 ? "Paid in full. Nice!" : $"Pay this by {s.DueDate:MMM d} and you won't pay interest."),
+        (CardPaymentOption.CurrentBalance, "Current balance", owed, "Everything you owe right now, including purchases since your last statement."),
+        (CardPaymentOption.Custom, "Other amount", null, $"Any amount up to {owed:C}.")
+    };
+    var selected = options.Any(o => o.Option == f.Option && (o.Amount is null or > 0)) ? f.Option
+                 : options.First(o => o.Amount is null or > 0).Option;
+}
+
+<div class="container py-4 pay-card-page" style="max-width: 760px">
+    <a asp-controller="Accounts" asp-action="Details" asp-route-id="@c.Id" class="small text-decoration-none"><i class="bi bi-chevron-left"></i> @c.DisplayName ••@c.Last4</a>
+    <div class="feature-head mt-1">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-cash-coin text-gradient me-2"></i>Pay your card</h2>
+            <p class="text-muted-alto mb-0">You owe <strong><money amount="@owed" /></strong>@if (s != null && Model.MinimumLeft > 0) {<span>. Minimum <money amount="@Model.MinimumLeft" /> due @s.DueDate.ToString("MMM d")</span>}.</p>
+        </div>
+    </div>
+
+    @if (!Model.FromAccounts.Any())
+    {
+        <div class="glass p-4"><partial name="_EmptyState" model='@(new EmptyStateViewModel("bi-wallet2", "You need an active checking or savings account to pay your card."))' /></div>
+    }
+    else
+    {
+        <form method="post" asp-action="Pay" asp-route-id="@c.Id" class="glass p-4" id="payCardForm" novalidate>
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger small" role="alert"></div>
+
+            <fieldset class="mb-4">
+                <legend class="h6 mb-3">How much?</legend>
+                <div class="pay-options">
+                    @foreach (var o in options)
+                    {
+                        var disabled = o.Amount is decimal amt && amt <= 0;
+                        var id = "opt" + o.Option;
+                        <label class="pay-option @(disabled ? "is-disabled" : "")" for="@id">
+                            <input type="radio" class="form-check-input" name="Option" id="@id" value="@o.Option" checked="@(o.Option == selected)" disabled="@disabled"
+                                   @(o.Option == CardPaymentOption.Custom ? "data-custom-option" : "") />
+                            <span class="pay-option-text">
+                                <span class="pay-option-label">@o.Label</span>
+                                <span class="pay-option-help">@o.Help</span>
+                            </span>
+                            @if (o.Amount is decimal v) { <span class="pay-option-amount"><money amount="@v" /></span> }
+                        </label>
+                    }
+                </div>
+                <div class="mt-3" data-custom-amount @(selected == CardPaymentOption.Custom ? "" : "hidden")>
+                    <label class="form-label" for="CustomAmount">Amount</label>
+                    <div class="input-group" style="max-width: 220px">
+                        <span class="input-group-text">$</span>
+                        <input asp-for="Form.CustomAmount" id="CustomAmount" name="CustomAmount" class="form-control" type="number" step="0.01" min="0.01"
+                               max="@owed.ToString(System.Globalization.CultureInfo.InvariantCulture)" placeholder="0.00" />
+                    </div>
+                    <span class="field-validation-error" data-valmsg-for="CustomAmount">@Html.ValidationMessage("CustomAmount")</span>
+                </div>
+            </fieldset>
+
+            <div class="mb-4">
+                <label class="form-label h6" for="FromAccountId">Pay from</label>
+                <select id="FromAccountId" name="FromAccountId" class="form-select" style="max-width: 420px">
+                    @foreach (var a in Model.FromAccounts)
+                    {
+                        <option value="@a.Id" selected="@(a.Id == f.FromAccountId)">@a.DisplayName ••@a.Last4 · @a.Balance.ToString("C") available</option>
+                    }
+                </select>
+                <span class="field-validation-error">@Html.ValidationMessage("FromAccountId")</span>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <button type="submit" class="btn btn-alto"><i class="bi bi-check2 me-1"></i>Pay now</button>
+                <a asp-controller="Accounts" asp-action="Details" asp-route-id="@c.Id" class="btn btn-alto-ghost">Cancel</a>
+                <span class="small text-muted-alto ms-sm-2">The payment posts right away and lowers what you owe.</span>
+            </div>
+        </form>
+        <p class="small text-muted-alto mt-3">Want this to happen on its own? Turn on <a asp-controller="Accounts" asp-action="Details" asp-route-id="@c.Id" asp-fragment="rewards">autopay</a>.</p>
+    }
+</div>
+
+@section Scripts {
+    <script src="~/js/credit-card.js" asp-append-version="true"></script>
+}

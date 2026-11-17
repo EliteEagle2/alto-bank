@@ -1,4 +1,4 @@
-@* The three disclosure modals for step 7 (short placeholder text for the demo).
+@* The disclosure modals (Account Agreement, Privacy, E-Sign in step 7; Cardmember Agreement in step 6 for Alto Peak) (short placeholder text for the demo).
    Each "I agree" button ticks its matching checkbox (see apply.js: data-agree-target). *@
 @{
     var disclosures = new[]
@@ -9,6 +9,13 @@
             "Deposits, withdrawals, and transfers must be positive amounts of no more than $1,000,000 each. Any withdrawal or transfer larger than your available balance is declined; Alto never charges overdraft fees.",
             "Summit Savings advertises 4.10% APY and allows up to 6 withdrawals per month. Rates may change.",
             "You are responsible for keeping your login private and telling us promptly about any activity you don't recognize."
+        }),
+        (Id: "discCard", Field: "AgreeCardmemberAgreement", Title: "Alto Peak Cardmember Agreement", Paragraphs: new[]
+        {
+            "Alto Peak is a simulated credit card for an academic demo. No credit check is done, no real credit is extended, and decisions are made by simple demo rules.",
+            "Your statement closes on the same day each month. Your payment is due 25 days later. Pay the full statement balance by the due date and you pay no interest on purchases.",
+            "If you carry a balance, interest is charged at the purchase APR using the daily balance method. The minimum payment is the larger of a set dollar amount or a percentage of your balance (or the whole balance if it's smaller).",
+            "If the minimum isn't paid by the due date, a late fee may be charged. You earn cash back on purchases and can redeem it once you have at least $10."
         }),
         (Id: "discPrivacy", Field: "AgreePrivacy", Title: "Privacy Notice", Paragraphs: new[]
         {

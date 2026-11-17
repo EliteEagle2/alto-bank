@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using AltoBank.Models;
 
 namespace AltoBank.ViewModels;
@@ -45,13 +46,25 @@ public class AccountDetailsViewModel
         : $"{Account.User.Street}{(Account.User.Apt == null ? "" : ", " + Account.User.Apt)}, {Account.User.City}, {Account.User.State} {Account.User.Zip}";
 
     public bool IsChecking => Account.AccountType == AccountType.Checking;
+    public bool IsCreditCard => Account.IsCreditCard;
+
+    // ----- Alto Peak card only -----
+    public CreditCardStatement? LatestStatement { get; set; }
+    public List<CreditCardStatement> Statements { get; set; } = new();
+    public decimal MinimumLeft { get; set; }       // minimum due on the latest statement, after payments since it closed
+    public decimal StatementLeft { get; set; }     // statement balance still to pay
+    public decimal PaidSinceClose { get; set; }
+    public List<Account> PayFromAccounts { get; set; } = new();
+    public decimal CardAprPercent { get; set; }
+    public decimal CashBackPercent { get; set; }
+    public Account? AutopayFrom => PayFromAccounts.FirstOrDefault(a => a.Id == Account.AutopayFromAccountId);
     public bool CanSend => Account.Status == AccountStatus.Active;
     public bool CanReceive => Account.Status != AccountStatus.Closed;
 }
 
 /// <summary>One activity row (_TransactionRow partial). Counterparty = the other account in a transfer.</summary>
 public record TransactionRowViewModel(Transaction Transaction, string? Counterparty, bool CanDispute = false, DisputeStatus? Dispute = null,
-                                      bool PartlyRefunded = false);
+                                      bool PartlyRefunded = false, bool OnCreditCard = false);
 
 /// <summary>
 /// A value with optional Show + Copy buttons (_CopyField partial).
@@ -61,3 +74,22 @@ public record TransactionRowViewModel(Transaction Transaction, string? Counterpa
 public record CopyFieldViewModel(
     string Id, string Label, string Display,
     string? CopyValue = null, string? RevealUrl = null, string? RevealField = null, bool Monospace = true);
+
+/// <summary>Pay card form (/credit-card/{id}/pay).</summary>
+public class PayCardForm
+{
+    public CardPaymentOption Option { get; set; } = CardPaymentOption.StatementBalance;
+    [Range(0.01, 1_000_000)] public decimal? CustomAmount { get; set; }
+    public int? FromAccountId { get; set; }
+}
+
+public class PayCardViewModel
+{
+    public Account Card { get; set; } = null!;
+    public CreditCardStatement? Statement { get; set; }
+    public decimal PaidSinceClose { get; set; }
+    public decimal MinimumLeft { get; set; }
+    public decimal StatementLeft { get; set; }
+    public List<Account> FromAccounts { get; set; } = new();
+    public PayCardForm Form { get; set; } = new();
+}

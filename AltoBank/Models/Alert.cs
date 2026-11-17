@@ -23,7 +23,10 @@ public enum AlertType
     AccountUnfrozen,
     PaymentReversed,
     LowBalance,
-    LargeDebit
+    LargeDebit,
+    CardStatement,
+    CardPaymentDue,
+    CardLateFee
 }
 
 /// <summary>
@@ -71,6 +74,9 @@ public class Alert
         AlertType.PaymentReversed => "bi-arrow-counterclockwise",
         AlertType.LowBalance => "bi-battery-low",
         AlertType.LargeDebit => "bi-cash-stack",
+        AlertType.CardStatement => "bi-file-earmark-text",
+        AlertType.CardPaymentDue => "bi-calendar-event",
+        AlertType.CardLateFee => "bi-exclamation-triangle",
         _ => "bi-bell"
     };
 }

@@ -38,7 +38,14 @@
         </span>
         <span class="tx-amounts">
             <money amount="@t.SignedAmount" colorize="true" show-sign="true" class="tx-amount" />
-            <span class="tx-bal">Bal <money amount="@t.BalanceAfter" /></span>
+            @if (Model.OnCreditCard)
+            {
+                <span class="tx-bal">Owed <money amount="@Math.Max(0m, -t.BalanceAfter)" /></span>
+            }
+            else
+            {
+                <span class="tx-bal">Bal <money amount="@t.BalanceAfter" /></span>
+            }
         </span>
         <i class="bi bi-chevron-down tx-caret" aria-hidden="true"></i>
     </button>

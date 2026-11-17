@@ -17,7 +17,7 @@
         {
             <div class="card-stage card-stage--sm" id="cardArt" data-card-id="@card.Id"
                  data-reveal-url="@Url.Action("RevealCard", "AccountsApi", new { id = a.Id, cardId = card.Id })">
-                <partial name="_CardArt" model='new CardArtViewModel("Debit", CardDesigns.CssClass(card.Design) + " static" + (card.Status == CardStatus.Frozen ? " is-frozen" : ""),
+                <partial name="_CardArt" model='new CardArtViewModel(Model.IsCreditCard ? "Credit" : "Debit", CardDesigns.CssClass(card.Design) + " static" + (card.Status == CardStatus.Frozen ? " is-frozen" : ""),
                     card.MaskedNumber, card.NameOnCard, a.Nickname)' />
             </div>
         }
@@ -34,7 +34,7 @@
         @if (card != null)
         {
             <div class="d-flex align-items-center gap-2 mb-2">
-                <h2 class="h5 mb-0">Alto Debit ••@card.Last4</h2>
+                <h2 class="h5 mb-0">@(Model.IsCreditCard ? "Alto Peak" : "Alto Debit") ••@card.Last4</h2>
                 <span class="acct-status acct-status--@card.Status.ToString().ToLowerInvariant()">@card.Status</span>
             </div>
             <p class="text-muted-alto small">Virtual card · issued @card.IssuedAt.ToString("MMM d, yyyy") · expires @card.Expiry</p>

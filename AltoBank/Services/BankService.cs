@@ -387,7 +387,37 @@ public partial class BankService : IBankService
             application.FundingAccountId = request.InitialDeposit > 0 ? request.FundingAccountId : null;
 
             BankResult r;
-            if (settings.AutoApproveApplications)
+            if (application.AccountType == AccountType.CreditCard)
+            {
+                // SIMULATED credit decision (CreditDecisionRules): income range + housing + Alto history. No credit check.
+                var decision = CreditDecisionRules.Decide(application.IncomeRange, application.MonthlyHousingPayment ?? 0m, await CreditHistoryAsync(userId));
+                application.DecisionNote = decision.Note;
+                application.CreditLimit = decision.CreditLimit;
+                if (decision.Outcome == CreditOutcome.Approved && settings.AutoApproveApplications)
+                {
+                    var (opened, card) = await OpenAccountCoreAsync(userId, request with { CreditLimit = decision.CreditLimit });
+                    if (!opened.Success || card == null) return opened;
+                    application.AccountId = card.Id;
+                    application.Status = ApplicationStatus.Approved;
+                    application.ReviewedAt = DateTime.UtcNow;
+                    application.ReviewedBy = "Automatic decision (demo, no credit check)";
+                    r = opened;
+                }
+                else if (decision.Outcome == CreditOutcome.Denied)
+                {
+                    application.Status = ApplicationStatus.Denied;
+                    application.DenialReason = decision.Note;
+                    application.ReviewedAt = DateTime.UtcNow;
+                    application.ReviewedBy = "Automatic decision (demo, no credit check)";
+                    r = new BankResult(true, "We've made a decision on your application.");
+                }
+                else
+                {
+                    application.Status = ApplicationStatus.Pending;
+                    r = new BankResult(true, "Thanks! Your application was submitted and is being reviewed.");
+                }
+            }
+            else if (settings.AutoApproveApplications)
             {
                 var (opened, account) = await OpenAccountCoreAsync(userId, request);
                 if (!opened.Success || account == null) return opened;
@@ -413,6 +443,19 @@ public partial class BankService : IBankService
             return r;
         });
         return (result, result.Success ? application : null);
+    }
+
+    /// <summary>What Alto knows about a customer for the simulated card decision (no credit bureau).</summary>
+    private async Task<CreditHistory> CreditHistoryAsync(string userId)
+    {
+        var accounts = await _db.Accounts.AsNoTracking().Where(a => a.UserId == userId).ToListAsync();
+        var deposit = accounts.Where(a => a.IsDepositAccount && a.Status != AccountStatus.Closed).ToList();
+        var since = deposit.Count == 0 ? (DateTime?)null : deposit.Min(a => a.OpenedAt);
+        return new CreditHistory(
+            DaysAsCustomer: since is DateTime d ? Math.Max(1, (int)(DateTime.UtcNow - d).TotalDays) : 0,
+            DepositBalance: deposit.Sum(a => a.Balance),
+            HasFrozenAccount: accounts.Any(a => a.Status == AccountStatus.Frozen),
+            HasOpenCreditCard: accounts.Any(a => a.IsCreditCard && a.Status != AccountStatus.Closed));
     }
 
     // Remember the applicant's details so the next application can prefill them.
@@ -454,6 +497,12 @@ public partial class BankService : IBankService
         }
 
         bool isChecking = request.Type == AccountType.Checking;
+        bool isCard = request.Type == AccountType.CreditCard;
+        if (isCard && request.InitialDeposit > 0) return (new(false, "A credit card can't take an opening deposit."), null);
+        if (isCard && (request.CreditLimit is not decimal lim || lim < CreditDecisionRules.MinLimit || lim > 25_000m))
+            return (new(false, "A credit card needs a credit limit between $500 and $25,000."), null);
+        if (isCard && await _db.Accounts.AnyAsync(a => a.UserId == userId && a.AccountType == AccountType.CreditCard && a.Status != AccountStatus.Closed))
+            return (new(false, "You already have an Alto Peak card."), null);
         var account = new Account
         {
             UserId = userId,
@@ -464,13 +513,22 @@ public partial class BankService : IBankService
             Status = AccountStatus.Active,
             // Card design only applies to checking; goals only apply to savings.
             CardDesign = isChecking ? (CardDesigns.All.Contains(request.CardDesign) ? request.CardDesign : CardDesigns.Aurora) : null,
-            GoalAmount = isChecking ? null : request.GoalAmount,
-            GoalName = isChecking ? null : Clean(request.GoalName)
+            GoalAmount = isChecking || isCard ? null : request.GoalAmount,
+            GoalName = isChecking || isCard ? null : Clean(request.GoalName)
         };
+        if (isCard)
+        {
+            // Alto Peak: limit, the Peak card design, and a statement that closes on today's day of the month (1-28).
+            var today = BankTime.Today;
+            account.CardDesign = CardDesigns.Peak;
+            account.CreditLimit = request.CreditLimit;
+            account.StatementCloseDay = Math.Min(today.Day, 28);
+            account.NextStatementDate = CardMath.NextClose(today.AddDays(1), account.StatementCloseDay.Value);
+        }
         _db.Accounts.Add(account);
         await _db.SaveChangesAsync(); // saves the account so it gets an Id for its transactions
 
-        if (isChecking)
+        if (isChecking || isCard)
         {
             var user = _db.Users.Local.FirstOrDefault(u => u.Id == userId) ?? await _db.Users.FirstAsync(u => u.Id == userId);
             await _cards.IssueAsync(account, $"{user.FirstName} {user.LastName}", account.CardDesign);
@@ -504,7 +562,9 @@ public partial class BankService : IBankService
                    after: new { account.AccountType, account.Nickname, opening = request.InitialDeposit, fundingAccountId = source?.Id });
         await _db.SaveChangesAsync();
 
-        return (new(true, $"Your new {account.AccountType} account ending in {account.Last4} is open."), account);
+        return (new(true, isCard
+            ? $"Your Alto Peak card ending in {account.Last4} is ready, with a {account.CreditLimit:C} credit limit."
+            : $"Your new {account.AccountType} account ending in {account.Last4} is open."), account);
     }
 
     // =====================================================================
@@ -549,14 +609,20 @@ public partial class BankService : IBankService
     {
         AccountStatus.Frozen => new(false, $"{account.DisplayName} is frozen, so withdrawals and transfers out are blocked. Deposits are still allowed. Please contact support."),
         AccountStatus.Closed => new(false, $"{account.DisplayName} is closed, so money can't be moved out of it."),
+        _ when !account.IsDepositAccount => new(false, NotForTransfers(account)),
         _ => null
     };
 
     /// <summary>Can money come IN to this account? (deposits, incoming transfers) Frozen accounts can still receive.</summary>
     public static BankResult? CanReceive(Account account) =>
-        account.Status == AccountStatus.Closed
+        !account.IsDepositAccount ? new(false, NotForTransfers(account))
+        : account.Status == AccountStatus.Closed
             ? new(false, $"{account.DisplayName} is closed, so it can't receive money.")
             : null;
+
+    // A credit card isn't a place to keep money: it has its own Pay card / purchase actions.
+    private static string NotForTransfers(Account account) =>
+        $"{account.DisplayName} is a credit card, so it can't be used for deposits, withdrawals or transfers. Use Pay card on the card's page instead.";
 
     private async Task<BankResult?> CheckDailyLimitAsync(Account from, decimal amount)
     {
@@ -681,7 +747,7 @@ public partial class BankService : IBankService
             _alerts.Add(account.UserId, AlertType.LargeDebit, "Large purchase",
                 $"{amount:C} left {label}. You asked to be told about anything {large:C} or more.", $"/accounts/{account.Id}");
         var before = account.Balance + amount;
-        if (prefs.LowBalanceAlert is decimal low && before >= low && account.Balance < low)
+        if (account.IsDepositAccount && prefs.LowBalanceAlert is decimal low && before >= low && account.Balance < low)
             _alerts.Add(account.UserId, AlertType.LowBalance, "Low balance",
                 $"{label} is down to {account.Balance:C}, below your {low:C} alert.", $"/accounts/{account.Id}");
     }

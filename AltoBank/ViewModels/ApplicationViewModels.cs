@@ -18,7 +18,7 @@ public class AccountApplicationViewModel
     private const string NameMessage = "Use letters, spaces, apostrophes, periods, or hyphens.";
 
     // ===== Step 1: choose your account =====
-    [Required(ErrorMessage = "Choose Checking or Savings.")]
+    [Required(ErrorMessage = "Choose an account to open.")]
     [Display(Name = "Account type")]
     public AccountType? AccountType { get; set; }
 
@@ -128,6 +128,12 @@ public class AccountApplicationViewModel
     [StringLength(60)] [Display(Name = "Bank name")] public string? ExternalBankName { get; set; }
     [Display(Name = "Account last 4")] public string? ExternalLast4 { get; set; }
 
+    // ===== Step 6 (Alto Peak card instead of funding) =====
+    [Range(typeof(decimal), "0", "100000", ErrorMessage = "Enter a monthly amount between $0 and $100,000.")]
+    [Display(Name = "Monthly rent or mortgage")]
+    public decimal? MonthlyHousingPayment { get; set; }
+    public bool AgreeCardmemberAgreement { get; set; }
+
     // ===== Step 7: review & sign =====
     public bool AgreeAccountAgreement { get; set; }
     public bool AgreePrivacy { get; set; }
@@ -140,6 +146,9 @@ public class AccountApplicationViewModel
 
     // ===== Data for the view only (never trusted from the form) =====
     [ValidateNever] public List<Account> FundingAccounts { get; set; } = new();
+    [ValidateNever] public string? CardUnavailableReason { get; set; }   // already has a Peak card / a pending card application
+    [ValidateNever] public decimal CardAprPercent { get; set; }
+    [ValidateNever] public decimal CardCashBackPercent { get; set; }
     [ValidateNever] public bool IsReturning { get; set; }
     [ValidateNever] public string UserKey { get; set; } = string.Empty;   // sessionStorage key suffix
     [ValidateNever] public string? VerifiedLast4 { get; set; }            // decoded from IdentityToken on re-display

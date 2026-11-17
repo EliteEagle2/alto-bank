@@ -126,10 +126,194 @@ public static class SeedData
         await EnsureBillPayDemoDataAsync(services, db, userManager);
         if (freshPayments) await SpreadTodaysDemoActivityAsync(db, seedStarted);
         await EnsurePreferencesDemoDataAsync(db, userManager);
+        await EnsureCreditCardDemoDataAsync(services, db, userManager);   // before Insights: budgets are sized on this month's spending
         await CategorizeTransactionsAsync(db);
         await EnsureInsightsDemoDataAsync(services, db, userManager);
         await EnsureCheckDepositDemoDataAsync(services, db, userManager);
         await EnsureDisputeDemoDataAsync(services, db, userManager);
+    }
+
+    /// <summary>
+    /// Alto Peak demo (SIMULATED credit, no credit check). About three months of card history replayed day by day
+    /// through the real code: purchases through IBankService.CardPurchaseAsync, statement close / interest / late fee
+    /// through RunCardCycleAsync for each past bank day, then each new row is moved back to that day.
+    ///   Jordan: pays every statement in full (no interest ever), autopay = statement balance from checking.
+    ///   Maya:   pays only the minimum (so interest is charged), and one payment was late (late fee, not waived).
+    ///   Samuel: a card application waiting for staff review.
+    /// Payments come "from an external bank" (seed only) so the checking accounts' running balances aren't rewritten.
+    /// Purchases dated in the current month are uncategorized ("Other") so the seeded budgets keep their states.
+    /// </summary>
+    private static async Task EnsureCreditCardDemoDataAsync(IServiceProvider services, ApplicationDbContext db, UserManager<ApplicationUser> userManager)
+    {
+        if (await db.Accounts.AnyAsync(a => a.AccountType == AccountType.CreditCard)
+            || await db.AccountApplications.AnyAsync(a => a.AccountType == AccountType.CreditCard)) return;
+        var jordan = await userManager.FindByEmailAsync(DemoEmail);
+        var maya = await userManager.FindByEmailAsync("maya@altobank.com");
+        var sam = await userManager.FindByEmailAsync("sam@altobank.com");
+        if (jordan == null || maya == null || sam == null) return;
+        var bank = services.GetRequiredService<AltoBank.Services.IBankService>();
+        var today = AltoBank.Services.BankTime.Today;
+        var monthStart = new DateOnly(today.Year, today.Month, 1);
+
+        // Statement closes: c3 is 10 days ago (kept on day 1-28), c2 and c1 a month apart before it.
+        var c3 = today.AddDays(-10);
+        while (c3.Day > 28) c3 = c3.AddDays(-1);
+        var c2 = c3.AddMonths(-1);
+        var c1 = c3.AddMonths(-2);
+        var opened = c1.AddMonths(-1).AddDays(1);
+
+        DateTime At(DateOnly day, int hour, int minute = 0) =>
+            AltoBank.Services.BankTime.StartOfDayUtc(day).AddHours(hour).AddMinutes(minute);
+
+        // Moves every card row created since lastId to the given time (rows are created "now").
+        async Task<int> Backdate(int cardId, int lastId, DateTime when)
+        {
+            var rows = await db.Transactions.Where(t => t.AccountId == cardId && t.Id > lastId).ToListAsync();
+            foreach (var t in rows) t.Date = when;
+            await db.SaveChangesAsync();
+            return rows.Count == 0 ? lastId : rows.Max(t => t.Id);
+        }
+
+        async Task<Account?> OpenCard(ApplicationUser user, SeedCustomer c, decimal housing, int daysAsCustomer, decimal deposits, string checkingNumber, CardAutopay autopay)
+        {
+            var decision = AltoBank.Services.CreditDecisionRules.Decide(c.Income, housing,
+                new AltoBank.Services.CreditHistory(daysAsCustomer, deposits, false, false));
+            var limit = decision.CreditLimit ?? AltoBank.Services.CreditDecisionRules.MinLimit;
+            var (r, card) = await bank.OpenAccountAsync(user.Id, new AltoBank.Services.OpenAccountRequest(
+                AccountType.CreditCard, null, null, null, null, 0m, null, null, CreditLimit: limit));
+            if (!r.Success || card == null) { Console.WriteLine($"  Credit card demo: couldn't open a card ({r.Message})."); return null; }
+            db.ChangeTracker.Clear();
+            var a = await db.Accounts.FirstAsync(x => x.Id == card.Id);
+            a.OpenedAt = At(opened, 10);
+            a.StatementCloseDay = c1.Day;
+            a.NextStatementDate = c1;
+            foreach (var plastic in await db.Cards.Where(x => x.AccountId == a.Id).ToListAsync()) plastic.IssuedAt = a.OpenedAt;
+            var checking = await db.Accounts.FirstOrDefaultAsync(x => x.UserId == user.Id && x.AccountNumber == checkingNumber);
+            if (autopay != CardAutopay.None && checking != null) { a.Autopay = autopay; a.AutopayFromAccountId = checking.Id; }
+            db.AccountApplications.Add(new AccountApplication
+            {
+                UserId = user.Id, Status = ApplicationStatus.Approved, SubmittedAt = a.OpenedAt.AddMinutes(-20),
+                ReviewedAt = a.OpenedAt, ReviewedBy = "Automatic decision (demo, no credit check)",
+                AccountType = AccountType.CreditCard, AccountId = a.Id, CreditLimit = limit, DecisionNote = decision.Note,
+                MonthlyHousingPayment = housing, AgreedCardmemberAgreement = true,
+                FirstName = c.First, MiddleInitial = c.Middle, LastName = c.Last, DateOfBirth = c.Dob, Citizenship = "US",
+                Email = c.Email, Phone = c.Phone, Street = c.Street, Apt = c.Apt, City = c.City, State = c.State, Zip = c.Zip,
+                LivedAtAddressTwoYears = true, EmploymentStatus = "Employed", Employer = c.Employer, Occupation = c.Occupation,
+                IncomeRange = c.Income, SourceOfFunds = "Employment", SsnLast4 = new Random(c.RandomSeed + 7).Next(0, 10000).ToString("D4"),
+                OpeningDeposit = 0m, ESignName = $"{c.First} {c.Last}", ESignedAt = a.OpenedAt.AddMinutes(-20)
+            });
+            await db.SaveChangesAsync();
+            return a;
+        }
+
+        // Replays one card's history: purchases[(day, merchant, amount)], payments[(day, amount or null = "the minimum")].
+        async Task Replay(Account card, string userId, (DateOnly Day, string Merchant, decimal Amount)[] purchases,
+                          (DateOnly Day, Func<CreditCardStatement, decimal> Amount)[] payments)
+        {
+            var lastId = await db.Transactions.Where(t => t.AccountId == card.Id).Select(t => (int?)t.Id).MaxAsync() ?? 0;
+            for (var day = opened; day < today; day = day.AddDays(1))
+            {
+                var hour = 9;
+                foreach (var p in purchases.Where(p => p.Day == day))
+                {
+                    var r = await bank.CardPurchaseAsync(userId, card.Id, p.Merchant, p.Amount);
+                    if (!r.Success) Console.WriteLine($"  Credit card demo: purchase skipped ({r.Message}).");
+                    lastId = await Backdate(card.Id, lastId, At(day, hour++, 17));
+                }
+                foreach (var pay in payments.Where(p => p.Day == day))
+                {
+                    db.ChangeTracker.Clear();
+                    var latest = await db.CreditCardStatements.AsNoTracking().Where(s => s.AccountId == card.Id).OrderByDescending(s => s.PeriodEnd).FirstAsync();
+                    var a = await db.Accounts.FirstAsync(x => x.Id == card.Id);
+                    var amount = Math.Min(pay.Amount(latest), a.AmountOwed);
+                    if (amount <= 0) continue;
+                    a.Balance += amount;
+                    db.Transactions.Add(new Transaction
+                    {
+                        AccountId = a.Id, Type = TransactionType.CardPayment, Amount = amount, BalanceAfter = a.Balance,
+                        Description = "Payment from external bank ••6012, thank you", Memo = "Demo history (simulated)",
+                        Date = At(day, 18), Category = CategoryRules.For(TransactionType.CardPayment, null)
+                    });
+                    await db.SaveChangesAsync();
+                    lastId = await db.Transactions.Where(t => t.AccountId == card.Id).MaxAsync(t => t.Id);
+                }
+                // End of the bank day: statement close (+ interest), late fee. New rows are dated late that evening.
+                await bank.RunCardCycleAsync(card.Id, day);
+                lastId = await Backdate(card.Id, lastId, At(day, 23, 30));
+                foreach (var s in await db.CreditCardStatements.Where(s => s.AccountId == card.Id && s.PeriodEnd == day).ToListAsync())
+                    s.ClosedAt = At(day, 23, 30);
+                await db.SaveChangesAsync();
+            }
+        }
+
+        // Current month: uncategorized merchants only (the seeded budgets are sized on this month's spending).
+        string M(DateOnly day, string categorized, string other) => day >= monthStart ? other : categorized;
+        var j = Customers.First(c => c.Email == DemoEmail);
+        var m = Customers.First(c => c.Email == "maya@altobank.com");
+        var s3 = Customers.First(c => c.Email == "sam@altobank.com");
+
+        // ----- Jordan: paid in full every month -----
+        if (await OpenCard(jordan, j, j.Rent, 400, 6000m, "4410274821", CardAutopay.StatementBalance) is { } jc)
+        {
+            var p = new List<(DateOnly, string, decimal)>();
+            foreach (var (start, end) in new[] { (opened, c1), (c1.AddDays(1), c2), (c2.AddDays(1), c3), (c3.AddDays(1), today.AddDays(-1)) })
+            {
+                var len = end.DayNumber - start.DayNumber;
+                if (len < 4) continue;
+                p.Add((start.AddDays(1), M(start.AddDays(1), "Summit Grocer", "Peak Hardware Supply"), 86.42m));
+                p.Add((start.AddDays(len / 3), M(start.AddDays(len / 3), "Ridgeline Coffee", "Trailhead Parking"), 12.75m));
+                p.Add((start.AddDays(len / 2), M(start.AddDays(len / 2), "ShopNest online order", "Alpine Fitness Club"), 64.99m));
+                p.Add((start.AddDays(2 * len / 3), M(start.AddDays(2 * len / 3), "Valley Fuel", "Harbor Bookshop"), 41.30m));
+                p.Add((end.AddDays(-1), M(end.AddDays(-1), "Lantern Bistro", "Cedar Dry Cleaning"), 38.60m));
+            }
+            await Replay(jc, jordan.Id, p.ToArray(), new (DateOnly, Func<CreditCardStatement, decimal>)[]
+            {
+                (c1.AddDays(18), s => s.StatementBalance),   // full statement balance, before the due date
+                (c2.AddDays(18), s => s.StatementBalance),
+            });
+        }
+
+        // ----- Maya: carries a balance (minimum payments), one late payment -----
+        if (await OpenCard(maya, m, m.Rent, 400, 4000m, "5520831402", CardAutopay.None) is { } mc)
+        {
+            var p = new List<(DateOnly, string, decimal)>
+            {
+                (opened.AddDays(3), M(opened.AddDays(3), "Northgate Outfitters", "Peak Hardware Supply"), 412.80m),
+                (opened.AddDays(9), M(opened.AddDays(9), "Summit Grocer", "Alpine Fitness Club"), 132.15m),
+                (opened.AddDays(16), M(opened.AddDays(16), "Riverbend Furniture store", "Cedar Dry Cleaning"), 389.00m),
+                (c1.AddDays(5), M(c1.AddDays(5), "Lantern Bistro", "Trailhead Parking"), 74.20m),
+                (c1.AddDays(14), M(c1.AddDays(14), "Valley Fuel", "Harbor Bookshop"), 52.10m),
+                (c2.AddDays(6), M(c2.AddDays(6), "ShopNest online order", "Peak Hardware Supply"), 118.45m),
+                (c3.AddDays(3), M(c3.AddDays(3), "Summit Grocer", "Alpine Fitness Club"), 46.90m),
+            };
+            await Replay(mc, maya.Id, p.ToArray(), new (DateOnly, Func<CreditCardStatement, decimal>)[]
+            {
+                (c1.AddDays(20), s => s.MinimumPayment),   // on time, minimum only -> interest next statement
+                (c2.AddDays(28), s => s.MinimumPayment),   // 3 days after the due date -> late fee
+            });
+        }
+
+        // ----- Samuel: an application waiting for review (housing is a large share of his income) -----
+        var sd = AltoBank.Services.CreditDecisionRules.Decide(s3.Income, 1400m, new AltoBank.Services.CreditHistory(60, 1500m, false, false));
+        var submitted = DateTime.UtcNow.AddHours(-26);
+        db.AccountApplications.Add(new AccountApplication
+        {
+            UserId = sam.Id, Status = ApplicationStatus.Pending, SubmittedAt = submitted,
+            AccountType = AccountType.CreditCard, CreditLimit = sd.CreditLimit, DecisionNote = sd.Note,
+            MonthlyHousingPayment = 1400m, AgreedCardmemberAgreement = true,
+            FirstName = s3.First, MiddleInitial = s3.Middle, LastName = s3.Last, DateOfBirth = s3.Dob, Citizenship = "US",
+            Email = s3.Email, Phone = s3.Phone, Street = s3.Street, Apt = s3.Apt, City = s3.City, State = s3.State, Zip = s3.Zip,
+            LivedAtAddressTwoYears = true, EmploymentStatus = "Employed", Employer = s3.Employer, Occupation = s3.Occupation,
+            IncomeRange = s3.Income, SourceOfFunds = "Employment", SsnLast4 = new Random(s3.RandomSeed + 7).Next(0, 10000).ToString("D4"),
+            OpeningDeposit = 0m, ESignName = $"{s3.First} {s3.Last}", ESignedAt = submitted
+        });
+        await db.SaveChangesAsync();
+
+        // Old card alerts (statements, late fee) are history: mark all but the newest of each read.
+        var cardAlerts = await db.Alerts.Where(a => a.Type == AlertType.CardStatement || a.Type == AlertType.CardLateFee).ToListAsync();
+        foreach (var g in cardAlerts.GroupBy(a => (a.UserId, a.Type)))
+            foreach (var a in g.OrderByDescending(a => a.Id).Skip(1)) a.ReadAt ??= DateTime.UtcNow;
+        await db.SaveChangesAsync();
     }
 
     /// <summary>

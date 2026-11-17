@@ -25,6 +25,8 @@ public class AccountsController : AdminControllerBase
     {
         var vm = await _admin.GetAccountAsync(id);
         if (vm == null) return NotFound();
+        // An Alto Peak card has its own page (statements, limit, fee waivers, close at $0).
+        if (vm.Account.IsCreditCard) return RedirectToAction("Details", "CreditCards", new { id });
         ViewData["Title"] = $"{vm.Account.DisplayName} ••{vm.Account.Last4}";
         return View(vm);
     }

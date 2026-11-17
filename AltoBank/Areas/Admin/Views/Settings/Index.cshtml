@@ -56,6 +56,23 @@
                         <span asp-validation-for="MobileDepositDailyLimit" class="field-validation-error"></span>
                         <div class="small text-muted-alto">Per customer, per bank day. Pending and approved checks count.</div>
                     </div>
+                    <div class="col-12"><h3 class="h6 mt-2 mb-0">Alto Peak credit card</h3></div>
+                    @foreach (var (field, prefix, suffix, step) in new[] {
+                        ("CardPurchaseAprPercent", "", "%", "0.01"), ("CardLateFee", "$", "", "0.01"), ("CardCashBackPercent", "", "%", "0.01"),
+                        ("CardMinimumPaymentFloor", "$", "", "0.01"), ("CardMinimumPaymentPercent", "", "%", "0.01") })
+                    {
+                        <div class="col-sm-6 col-lg-4">
+                            <label for="@field" class="form-label">@Html.DisplayName(field)</label>
+                            <div class="input-group">
+                                @if (prefix != "") { <span class="input-group-text">@prefix</span> }
+                                <input id="@field" name="@field" class="form-control" type="number" step="@step" min="0"
+                                       value="@(((decimal?)Model.GetType().GetProperty(field)!.GetValue(Model))?.ToString(System.Globalization.CultureInfo.InvariantCulture))" />
+                                @if (suffix != "") { <span class="input-group-text">@suffix</span> }
+                            </div>
+                            <span class="field-validation-error" data-valmsg-for="@field"></span>
+                        </div>
+                    }
+                    <div class="col-12 small text-muted-alto">Interest uses the daily balance method and is only charged when the last statement wasn't paid in full by its due date. The minimum payment is the larger of the two amounts (or the whole balance if that's less).</div>
                     <div class="col-12">
                         <div class="form-check form-switch">
                             <input asp-for="ProvisionalCreditOnDisputes" class="form-check-input" role="switch" />

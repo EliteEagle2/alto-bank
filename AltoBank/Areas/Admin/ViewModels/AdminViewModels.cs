@@ -209,6 +209,13 @@ public class SettingsInput
     [Range(1, 1_000_000), Display(Name = "Mobile deposit: max per day")] public decimal MobileDepositDailyLimit { get; set; }
     [Display(Name = "Provisional credit on new disputes")] public bool ProvisionalCreditOnDisputes { get; set; }
 
+    // Alto Peak card. Optional: a field that isn't posted keeps its current value.
+    [Range(0, 36), Display(Name = "Card purchase APR (%)")] public decimal? CardPurchaseAprPercent { get; set; }
+    [Range(0, 100), Display(Name = "Card late fee")] public decimal? CardLateFee { get; set; }
+    [Range(0, 5), Display(Name = "Card cash back (%)")] public decimal? CardCashBackPercent { get; set; }
+    [Range(0, 100), Display(Name = "Minimum payment: at least")] public decimal? CardMinimumPaymentFloor { get; set; }
+    [Range(0, 10), Display(Name = "Minimum payment: % of balance")] public decimal? CardMinimumPaymentPercent { get; set; }
+
     [Required(ErrorMessage = "Enter a reason for this change."), StringLength(500, MinimumLength = 5, ErrorMessage = "Reason must be at least 5 characters.")]
     public string Reason { get; set; } = "";
 

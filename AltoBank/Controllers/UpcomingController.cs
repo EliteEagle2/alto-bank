@@ -120,7 +120,7 @@ public class UpcomingController : Controller
     private async Task<bool> OwnsAsync(int id) => await _bills.GetScheduleAsync(UserId, id) != null;
 
     private async Task<List<SelectListItem>> ActiveAccountsAsync() =>
-        (await _bank.GetAccountsAsync(UserId)).Where(a => a.Status != AccountStatus.Closed)
+        (await _bank.GetAccountsAsync(UserId)).Where(a => a.Status != AccountStatus.Closed && a.IsDepositAccount)
             .Select(a => new SelectListItem($"{a.DisplayName} ••{a.Last4} — {a.Balance:C}", a.Id.ToString())).ToList();
 
     private IActionResult Flash(bool ok, string message)

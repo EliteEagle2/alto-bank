@@ -134,7 +134,7 @@ public class TransactionsController : Controller
     // frozen ones are labeled (BankService still decides what's allowed and explains why if not).
     private async Task<List<SelectListItem>> BuildOptionsAsync() =>
         (await _bank.GetAccountsAsync(UserId))
-            .Where(a => a.Status != AccountStatus.Closed)
+            .Where(a => a.Status != AccountStatus.Closed && a.IsDepositAccount)   // a credit card has its own Pay card page
             .Select(a => new SelectListItem(
                 $"{a.DisplayName} ••{a.Last4} — {a.Balance:C}{(a.Status == AccountStatus.Frozen ? " (frozen)" : "")}", a.Id.ToString()))
             .ToList();

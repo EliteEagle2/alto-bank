@@ -20,7 +20,14 @@ public enum TransactionType
     BillPayment,        // Bill Pay: money paid to a payee, now or on a schedule (debit)
     CheckDeposit,       // Mobile check deposit, posted when an admin approves it (credit)
     ProvisionalCredit,  // Dispute: money returned right away while the dispute is reviewed (credit)
-    ProvisionalClawback // Dispute denied: the provisional credit taken back; may overdraw (debit)
+    ProvisionalClawback,// Dispute denied: the provisional credit taken back; may overdraw (debit)
+    CardPurchase,       // Alto Peak: a purchase on the credit card (debit: adds to what's owed)
+    CardPayment,        // Alto Peak: a payment to the card (credit: lowers what's owed)
+    InterestCharge,     // Alto Peak: interest at statement close (debit)
+    LateFee,            // Alto Peak: minimum not paid by the due date (debit)
+    FeeWaiver,          // Alto Peak: a fee taken back by staff (credit)
+    CashBackCredit,     // Alto Peak: cash back redeemed as a statement credit (credit)
+    RewardRedemption    // Alto Peak: cash back redeemed into checking (credit on the checking account)
 }
 
 /// <summary>
@@ -96,7 +103,8 @@ public class Transaction
     {
         TransactionType.Deposit, TransactionType.TransferIn, TransactionType.Interest,
         TransactionType.AdjustmentCredit, TransactionType.ReversalCredit, TransactionType.PaymentReceived,
-        TransactionType.CheckDeposit, TransactionType.ProvisionalCredit
+        TransactionType.CheckDeposit, TransactionType.ProvisionalCredit,
+        TransactionType.CardPayment, TransactionType.FeeWaiver, TransactionType.CashBackCredit, TransactionType.RewardRedemption
     };
 
     /// <summary>Money sent to another account. These count toward the daily transfer limit (withdrawals don't).</summary>
@@ -131,6 +139,13 @@ public class Transaction
         TransactionType.CheckDeposit => "Mobile check deposit",
         TransactionType.ProvisionalCredit => "Provisional credit",
         TransactionType.ProvisionalClawback => "Provisional credit reversed",
+        TransactionType.CardPurchase => "Card purchase",
+        TransactionType.CardPayment => "Payment",
+        TransactionType.InterestCharge => "Interest charged",
+        TransactionType.LateFee => "Late fee",
+        TransactionType.FeeWaiver => "Fee waived",
+        TransactionType.CashBackCredit => "Cash back (statement credit)",
+        TransactionType.RewardRedemption => "Cash back",
         _ => type.ToString()
     };
 }

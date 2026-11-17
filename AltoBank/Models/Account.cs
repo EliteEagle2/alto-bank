@@ -3,11 +3,17 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace AltoBank.Models;
 
-/// <summary>The two kinds of accounts a customer can open.</summary>
+/// <summary>
+/// The kinds of accounts. Checking and Savings hold the customer's money ("deposit accounts").
+/// CreditCard (Alto Peak) is money the customer OWES: its Balance is stored as a NEGATIVE number, so a purchase is a debit
+/// like any other (Insights, budgets and disputes treat it as spending) and a payment is a credit. It can't be used for
+/// deposits, withdrawals or transfers; it has its own purchase / pay / rewards actions (BankService.CreditCards.cs).
+/// </summary>
 public enum AccountType
 {
     Checking,
-    Savings
+    Savings,
+    CreditCard
 }
 
 /// <summary>
@@ -70,6 +76,16 @@ public class Account
     public DateTime? StatusChangedAt { get; set; }
     public DateTime? ClosedAt { get; set; }
 
+    // ----- Alto Peak credit card only -----
+    [Column(TypeName = "decimal(18,2)")] public decimal? CreditLimit { get; set; }
+    // Cash back earned and not yet redeemed (whole cents).
+    [Column(TypeName = "decimal(18,2)")] public decimal RewardsBalance { get; set; }
+    // The statement closes on this day of every month (1-28) and the next close is NextStatementDate (bank date).
+    public int? StatementCloseDay { get; set; }
+    public DateOnly? NextStatementDate { get; set; }
+    public CardAutopay Autopay { get; set; } = CardAutopay.None;
+    public int? AutopayFromAccountId { get; set; }
+
     // Max total of outgoing transfers per day. null = use the bank-wide default (BankSetting).
     [Column(TypeName = "decimal(18,2)")]
     public decimal? DailyTransferLimit { get; set; }
@@ -87,5 +103,17 @@ public class Account
     public string Last4 => AccountNumber.Length >= 4 ? AccountNumber[^4..] : AccountNumber;
 
     [NotMapped]
-    public string DisplayName => string.IsNullOrWhiteSpace(Nickname) ? $"Alto {AccountType}" : Nickname!;
+    public string DisplayName => string.IsNullOrWhiteSpace(Nickname)
+        ? (AccountType == AccountType.CreditCard ? "Alto Peak Card" : $"Alto {AccountType}")
+        : Nickname!;
+
+    /// <summary>Checking or savings: holds the customer's money and can send / receive it.</summary>
+    [NotMapped] public bool IsDepositAccount => AccountType is AccountType.Checking or AccountType.Savings;
+    [NotMapped] public bool IsCreditCard => AccountType == AccountType.CreditCard;
+    /// <summary>Credit card: what the customer owes now (0 if they're paid up or have a credit balance).</summary>
+    [NotMapped] public decimal AmountOwed => IsCreditCard ? Math.Max(0m, -Balance) : 0m;
+    /// <summary>Credit card: how much more can be spent (limit minus what's owed; a credit balance adds to it).</summary>
+    [NotMapped] public decimal AvailableCredit => IsCreditCard ? Math.Max(0m, (CreditLimit ?? 0m) + Balance) : 0m;
+    /// <summary>Credit card: share of the limit in use, 0-100.</summary>
+    [NotMapped] public decimal Utilization => IsCreditCard && CreditLimit > 0 ? Math.Min(100m, Math.Round(AmountOwed / CreditLimit.Value * 100m, 1)) : 0m;
 }

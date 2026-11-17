@@ -1,5 +1,5 @@
 @model AccountApplicationViewModel
-@* STEP 1 — choose Checking or Savings (+ optional nickname and debit card design). *@
+@* STEP 1 — choose Checking, Savings or the Alto Peak credit card (+ optional nickname and debit card design). *@
 @{
     var products = new[]
     {
@@ -7,6 +7,8 @@
          Points: new[] { "No monthly fee or minimum", "Alto debit card in your design", "Unlimited instant transfers" }),
         (Type: AccountType.Savings, Icon: "bi-piggy-bank", Title: "Summit Savings", Rate: "4.10%", RateLabel: "APY",
          Points: new[] { "4.10% APY on every dollar", "No minimum balance", "Up to 6 withdrawals per month" }),
+        (Type: AccountType.CreditCard, Icon: "bi-credit-card-2-front", Title: "Alto Peak Card", Rate: Model.CardCashBackPercent.ToString("0.##") + "%", RateLabel: "cash back",
+         Points: new[] { "$0 annual fee", $"{Model.CardAprPercent:0.00}% APR, none if you pay in full", "Decision in minutes" }),
     };
     var design = CardDesigns.All.Contains(Model.CardDesign) ? Model.CardDesign : CardDesigns.Aurora;
 }
@@ -19,9 +21,10 @@
         <div class="row g-3" role="radiogroup" aria-labelledby="s1-title">
             @foreach (var p in products)
             {
-                <div class="col-md-6">
-                    <label class="choice-card">
-                        <input type="radio" name="AccountType" value="@p.Type" class="visually-hidden" checked="@(Model.AccountType == p.Type)" />
+                var unavailable = p.Type == AccountType.CreditCard ? Model.CardUnavailableReason : null;
+                <div class="col-md-6 col-xl-4">
+                    <label class="choice-card @(unavailable != null ? "is-unavailable" : "")">
+                        <input type="radio" name="AccountType" value="@p.Type" class="visually-hidden" checked="@(Model.AccountType == p.Type && unavailable == null)" disabled="@(unavailable != null)" />
                         <span class="choice-check" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
                         <span class="d-flex align-items-center gap-3 mb-3">
                             <span class="feature-icon mb-0"><i class="bi @p.Icon"></i></span>
@@ -33,6 +36,8 @@
                         <ul class="check-list mb-0">
                             @foreach (var point in p.Points) { <li>@point</li> }
                         </ul>
+                        @if (unavailable != null) { <span class="d-block small text-muted-alto mt-2"><i class="bi bi-info-circle me-1"></i>@unavailable</span> }
+                        else if (p.Type == AccountType.CreditCard) { <span class="demo-note mt-3">Demo decision, no credit check</span> }
                     </label>
                 </div>
             }
@@ -47,14 +52,14 @@
     <div class="collapse" id="compareAccounts">
         <div class="table-responsive review-card mt-2">
             <table class="table alto-table compare-table mb-0">
-                <thead><tr><th></th><th>Alto Checking</th><th>Summit Savings</th></tr></thead>
+                <thead><tr><th></th><th>Alto Checking</th><th>Summit Savings</th><th>Alto Peak Card</th></tr></thead>
                 <tbody>
-                    <tr><td class="text-muted-alto">Monthly fee</td><td>$0</td><td>$0</td></tr>
-                    <tr><td class="text-muted-alto">Interest</td><td>None</td><td>4.10% APY</td></tr>
-                    <tr><td class="text-muted-alto">Minimum balance</td><td>$0</td><td>$0</td></tr>
-                    <tr><td class="text-muted-alto">Debit card</td><td><i class="bi bi-check-lg text-success-alto"></i> Included</td><td>—</td></tr>
-                    <tr><td class="text-muted-alto">Withdrawals</td><td>Unlimited</td><td>6 per month</td></tr>
-                    <tr><td class="text-muted-alto">Best for</td><td>Everyday spending</td><td>Growing your savings</td></tr>
+                    <tr><td class="text-muted-alto">What it is</td><td>Where your money lives</td><td>Where your money grows</td><td>Borrow and pay back monthly</td></tr>
+                    <tr><td class="text-muted-alto">Monthly or annual fee</td><td>$0</td><td>$0</td><td>$0</td></tr>
+                    <tr><td class="text-muted-alto">Interest</td><td>None</td><td>You earn 4.10% APY</td><td>You pay @Model.CardAprPercent.ToString("0.00")% APR only on balances you carry</td></tr>
+                    <tr><td class="text-muted-alto">Card</td><td>Debit card</td><td>—</td><td>Credit card</td></tr>
+                    <tr><td class="text-muted-alto">Rewards</td><td>—</td><td>—</td><td>@Model.CardCashBackPercent.ToString("0.##")% cash back</td></tr>
+                    <tr><td class="text-muted-alto">Best for</td><td>Everyday spending</td><td>Growing your savings</td><td>Purchases you'll pay off each month</td></tr>
                 </tbody>
             </table>
         </div>

@@ -9,8 +9,10 @@ namespace AltoBank.Services.Scheduling;
 ///   1. every Active scheduled item whose NextRunDate is today or earlier (bank time) is run through
 ///      IBankService.ExecuteScheduledAsync. After downtime, older missed dates are recorded as "missed" (no money
 ///      moves) and only the most recent due date is paid; each date is handled at most once;
-///   2. money requests older than 14 days are expired (with an alert to the requester);
-///   3. a SchedulerRunLog row is saved (shown on the admin Scheduled Payments page).
+///   2. every open Alto Peak card's cycle: statement close (with interest if the last one wasn't paid in full), autopay on
+///      the due date, a late fee after it (BankService.RunCardCycleAsync);
+///   3. money requests older than 14 days are expired (with an alert to the requester);
+///   4. a SchedulerRunLog row is saved (shown on the admin Scheduled Payments page).
 /// Each item runs in its OWN transaction, so one failure never undoes another payment.
 /// </summary>
 public class SchedulerRunner : ISchedulerRunner
@@ -68,6 +70,28 @@ public class SchedulerRunner : ISchedulerRunner
                     case ScheduledRunStatus.Failed: failed++; break;
                     case ScheduledRunStatus.Skipped: skipped++; break;
                 }
+            }
+        }
+
+        // Alto Peak cards: statement close + interest, autopay on the due date, late fee after it (each idempotent).
+        var cards = await _db.Accounts.AsNoTracking()
+            .Where(a => a.AccountType == AccountType.CreditCard && a.Status != AccountStatus.Closed)
+            .Select(a => a.Id).ToListAsync(cancellationToken);
+        foreach (var cardId in cards)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+            try
+            {
+                var c = await _bank.RunCardCycleAsync(cardId, today);
+                processed += c.StatementsClosed + c.AutopaysMade + c.AutopaysFailed + c.LateFees;
+                succeeded += c.StatementsClosed + c.AutopaysMade;
+                failed += c.AutopaysFailed;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Scheduler: credit card {Id} cycle threw; moving on", cardId);
+                _db.ChangeTracker.Clear();
+                failed++;
             }
         }
 

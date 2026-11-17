@@ -13,7 +13,8 @@ public record BankResult(bool Success, string Message);
 public record OpenAccountRequest(
     AccountType Type, string? Nickname, string? CardDesign,
     decimal? GoalAmount, string? GoalName,
-    decimal InitialDeposit, int? FundingAccountId, string? ExternalSource = null);
+    decimal InitialDeposit, int? FundingAccountId, string? ExternalSource = null,
+    decimal? CreditLimit = null);   // Alto Peak card only
 
 /// <summary>Filters for the Account Details activity list. Kind: in, out, deposit, withdrawal, transfer, interest, adjustment, reversal.</summary>
 public record ActivityFilter(string? Search, string? Kind, DateTime? From, DateTime? To);
@@ -86,6 +87,15 @@ public interface IBankService
     /// Overdrew tells the caller so it can flag and audit it.
     /// </summary>
     Task<(BankResult Result, Transaction? Transaction, bool Overdrew)> PostProvisionalClawbackInCurrentTransactionAsync(Dispute dispute);
+
+    // ----- Alto Peak credit card (money side; BankService.CreditCards.cs) -----
+    Task<BankResult> CardPurchaseAsync(string userId, int cardAccountId, string? merchant, decimal amount);
+    Task<BankResult> PayCardAsync(string userId, int cardAccountId, int fromAccountId, CardPaymentOption option, decimal? customAmount);
+    Task<BankResult> RedeemCashBackAsync(string userId, int cardAccountId, int? toAccountId);
+    /// <summary>The latest statement and what's left of its minimum / statement balance after payments since it closed.</summary>
+    Task<(CreditCardStatement? Statement, decimal PaidSinceClose, decimal MinimumLeft, decimal StatementLeft)> GetCardDueAsync(Account card);
+    /// <summary>Called by the scheduler: statement close + interest, autopay, late fee for one card (idempotent).</summary>
+    Task<CardCycleOutcome> RunCardCycleAsync(int cardAccountId, DateOnly today);
 
     // ----- Opening accounts -----
     Task<(BankResult Result, Account? Account)> OpenAccountAsync(string userId, OpenAccountRequest request);

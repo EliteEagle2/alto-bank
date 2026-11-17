@@ -86,6 +86,13 @@ public class AccountApplication
     // Kept so an admin can approve a pending application later; funds are re-checked at approval time.
     public int? FundingAccountId { get; set; }
 
+    // ----- Alto Peak card step (credit card applications only) -----
+    [Column(TypeName = "decimal(18,2)")] public decimal? MonthlyHousingPayment { get; set; }
+    public bool AgreedCardmemberAgreement { get; set; }
+    // The simulated decision: the credit limit offered (approved, or proposed for a pending review) and why.
+    [Column(TypeName = "decimal(18,2)")] public decimal? CreditLimit { get; set; }
+    [StringLength(300)] public string? DecisionNote { get; set; }
+
     // ----- Step 7: electronic signature -----
     [Required, StringLength(110)] public string ESignName { get; set; } = string.Empty;
     public DateTime ESignedAt { get; set; }

@@ -5,7 +5,7 @@
     var owner = $"{a.User?.FirstName} {a.User?.LastName}";
     var label = $"{a.DisplayName} ••{a.Last4}";
     var isSavings = a.AccountType == AccountType.Savings;
-    var moveOptions = Model.OtherAccounts.Select(o => new KeyValuePair<string, string>(o.Id.ToString(), $"{o.DisplayName} ••{o.Last4} ({o.Balance:C})")).ToList();
+    var moveOptions = Model.OtherAccounts.Where(o => o.IsDepositAccount).Select(o => new KeyValuePair<string, string>(o.Id.ToString(), $"{o.DisplayName} ••{o.Last4} ({o.Balance:C})")).ToList();
 
     // Each modal says EXACTLY what will happen. All require a reason (checked again by IAdminService).
     var freeze = new ConfirmModalViewModel("freezeModal", $"Freeze {label}",

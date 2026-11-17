@@ -219,7 +219,7 @@
                                         <tr>
                                             <td class="text-muted-alto text-nowrap">@BankTime.ToLocal(app.SubmittedAt).ToString("MMM d, yyyy")</td>
                                             <td>
-                                                @(app.AccountType == AccountType.Checking ? "Alto Checking" : "Summit Savings")
+                                                @(app.AccountType switch { AccountType.Checking => "Alto Checking", AccountType.Savings => "Summit Savings", _ => "Alto Peak Card" })
                                                 @if (app.Account != null)
                                                 {
                                                     <a class="small d-block" asp-controller="Accounts" asp-action="Details" asp-route-id="@app.Account.Id">@app.Account.DisplayName ••@app.Account.Last4</a>

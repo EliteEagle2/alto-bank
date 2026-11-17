@@ -1,0 +1,117 @@
+@model AccountDetailsViewModel
+@* ALTO PEAK tabs: Statements, and Rewards & autopay. (Activity and Card are shared with the other account types.) *@
+@{
+    var a = Model.Account;
+    var redeemable = a.RewardsBalance >= BankService.MinimumRedemption;
+}
+
+@* ===================== STATEMENTS ===================== *@
+<section class="tab-pane fade" id="statements" role="tabpanel" aria-label="Statements">
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="glass overflow-hidden">
+                @if (!Model.Statements.Any())
+                {
+                    <partial name="_EmptyState" model='@(new EmptyStateViewModel("bi-file-earmark-text", $"Your first statement closes on {a.NextStatementDate:MMM d}."))' />
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table alto-table mb-0">
+                            <thead><tr><th>Closed</th><th class="text-end">Balance</th><th class="text-end">Minimum</th><th>Due</th><th>Status</th><th></th></tr></thead>
+                            <tbody>
+                                @foreach (var s in Model.Statements)
+                                {
+                                    var latest = s.Id == Model.LatestStatement?.Id;
+                                    <tr>
+                                        <td class="text-nowrap">@s.PeriodEnd.ToString("MMM d, yyyy")</td>
+                                        <td class="text-end"><money amount="@s.StatementBalance" /></td>
+                                        <td class="text-end"><money amount="@s.MinimumPayment" /></td>
+                                        <td class="text-nowrap">@s.DueDate.ToString("MMM d")</td>
+                                        <td class="small">
+                                            @if (s.StatementBalance == 0) { <span class="text-muted-alto">Nothing owed</span> }
+                                            else if (s.LateFeeCharged && !s.LateFeeWaived) { <span class="text-danger-alto"><i class="bi bi-exclamation-triangle me-1"></i>Late fee</span> }
+                                            else if (latest && !s.DueDateProcessed) { <span>@(Model.StatementLeft == 0 ? "Paid in full" : Model.MinimumLeft == 0 ? "Minimum paid" : "Due " + s.DueDate.ToString("MMM d"))</span> }
+                                            else { <span class="text-muted-alto">Closed</span> }
+                                            @if (s.InterestCharged > 0) { <div class="text-muted-alto">Interest <money amount="@s.InterestCharged" /></div> }
+                                        </td>
+                                        <td class="text-end"><a asp-controller="CreditCard" asp-action="Statement" asp-route-statementId="@s.Id" target="_blank" rel="noopener"><i class="bi bi-file-earmark-text me-1"></i>View</a></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="glass p-4">
+                <h2 class="h5 mb-3">How your card works</h2>
+                <dl class="info-list">
+                    <div><dt>Purchase APR</dt><dd>@Model.CardAprPercent.ToString("0.00")%</dd></div>
+                    <div><dt>Statement closes</dt><dd>Day @a.StatementCloseDay of each month</dd></div>
+                    <div><dt>Payment due</dt><dd>25 days after the statement closes</dd></div>
+                    <div><dt>Cash back</dt><dd>@Model.CashBackPercent.ToString("0.##")% on purchases</dd></div>
+                </dl>
+                <p class="small text-muted-alto mb-0"><strong>No interest</strong> if you pay the full statement balance by the due date. If you don't, interest is charged at the next statement on your balance each day (the daily balance method). Pay at least the minimum by the due date to avoid a late fee.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+@* ===================== REWARDS & AUTOPAY ===================== *@
+<section class="tab-pane fade" id="rewards" role="tabpanel" aria-label="Rewards and autopay">
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="glass p-4 h-100">
+                <h2 class="h5 mb-1">Cash back</h2>
+                <div class="rewards-balance"><money amount="@a.RewardsBalance" /></div>
+                <p class="small text-muted-alto">You earn @Model.CashBackPercent.ToString("0.##")% on every purchase. Redeem once you have <money amount="@BankService.MinimumRedemption" /> or more.</p>
+                @if (a.Status != AccountStatus.Closed)
+                {
+                    <form method="post" asp-controller="CreditCard" asp-action="Redeem" asp-route-id="@a.Id">
+                        <fieldset @(redeemable ? "" : "disabled")>
+                            <legend class="form-label small">Redeem all <money amount="@a.RewardsBalance" /> to</legend>
+                            <div class="form-check"><input class="form-check-input" type="radio" name="to" id="toStatement" value="statement" checked />
+                                <label class="form-check-label" for="toStatement">A statement credit (lowers what you owe)</label></div>
+                            @foreach (var acct in Model.PayFromAccounts)
+                            {
+                                <div class="form-check"><input class="form-check-input" type="radio" name="to" id="to@(acct.Id)" value="@acct.Id" />
+                                    <label class="form-check-label" for="to@(acct.Id)">@acct.DisplayName ••@acct.Last4</label></div>
+                            }
+                            <button type="submit" class="btn btn-alto btn-sm mt-2">Redeem cash back</button>
+                        </fieldset>
+                        @if (!redeemable)
+                        {
+                            <p class="small text-muted-alto mt-2 mb-0"><money amount="@(BankService.MinimumRedemption - a.RewardsBalance)" /> more to go before you can redeem.</p>
+                        }
+                    </form>
+                }
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="glass p-4 h-100">
+                <h2 class="h5 mb-1">Autopay</h2>
+                <p class="small text-muted-alto">Pays automatically on each due date. If a payment can't go through, we send you an alert right away.</p>
+                @if (a.Status != AccountStatus.Closed)
+                {
+                    <form method="post" asp-controller="CreditCard" asp-action="Autopay" asp-route-id="@a.Id">
+                        @foreach (var (mode, label) in new[] { (CardAutopay.None, "Off"), (CardAutopay.Minimum, "The minimum payment"), (CardAutopay.StatementBalance, "The full statement balance (no interest)") })
+                        {
+                            <div class="form-check"><input class="form-check-input" type="radio" name="mode" id="ap@(mode)" value="@mode" checked="@(a.Autopay == mode)" />
+                                <label class="form-check-label" for="ap@(mode)">@label</label></div>
+                        }
+                        <label class="form-label small mt-2" for="apFrom">Pay from</label>
+                        <select id="apFrom" name="fromAccountId" class="form-select">
+                            @foreach (var acct in Model.PayFromAccounts)
+                            {
+                                <option value="@acct.Id" selected="@(acct.Id == a.AutopayFromAccountId)">@acct.DisplayName ••@acct.Last4 (@acct.Balance.ToString("C"))</option>
+                            }
+                        </select>
+                        <button type="submit" class="btn btn-alto btn-sm mt-3">Save autopay</button>
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+</section>

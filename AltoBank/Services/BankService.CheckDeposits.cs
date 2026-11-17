@@ -17,6 +17,7 @@ public partial class BankService
         if (account == null) return (new(false, "The account for this check no longer exists."), null);
         // Stricter than ordinary deposits (which a frozen account can still take): a check on a frozen account waits
         // until the freeze is lifted, because a freeze often means the account is under review for fraud.
+        if (!account.IsDepositAccount) return (new(false, "A check can only go into a checking or savings account."), null);
         if (account.Status == AccountStatus.Frozen)
             return (new(false, $"{account.DisplayName} ••{account.Last4} is frozen. Unfreeze it first, or reject the check."), null);
         if (account.Status == AccountStatus.Closed)

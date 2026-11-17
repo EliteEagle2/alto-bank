@@ -1,0 +1,59 @@
+@model CreditCardListViewModel
+@* /admin/creditcards — every Alto Peak card. Balances are what the customer OWES. *@
+@{
+    var q = Model.Query;
+    string Tab(AccountStatus? s) => Url.Action("Index", new { status = s?.ToString(), customer = q.Customer })!;
+    var today = BankTime.Today;
+}
+@section PageActions {
+    <a class="btn btn-admin-ghost btn-sm" asp-controller="Applications" asp-action="Index" asp-route-status="Pending">
+        <i class="bi bi-file-earmark-check me-1"></i>Pending applications (@Model.PendingApplications)</a>
+}
+
+<ul class="nav admin-tabs mb-3">
+    @foreach (var s in new AccountStatus?[] { null, AccountStatus.Active, AccountStatus.Frozen, AccountStatus.Closed })
+    {
+        <li class="nav-item"><a class="nav-link @(q.Status == s ? "active" : "")" href="@Tab(s)">@(s?.ToString() ?? "All")</a></li>
+    }
+</ul>
+
+<form method="get" class="filter-bar" role="search">
+    @if (q.Status is AccountStatus st) { <input type="hidden" name="status" value="@st" /> }
+    <div><label for="customer">Customer</label><input id="customer" name="customer" class="form-control" value="@q.Customer" placeholder="Name or email" /></div>
+    <div class="filter-actions"><button type="submit" class="btn btn-admin btn-sm">Filter</button></div>
+</form>
+
+<div class="admin-card p-0">
+    <div class="table-responsive">
+        <table class="table admin-table table-hover mb-0">
+            <thead><tr><th>Card</th><th>Customer</th><th class="text-end">Owed</th><th class="text-end">Limit</th><th>Used</th><th>Last statement</th><th>Status</th></tr></thead>
+            <tbody>
+                @if (!Model.Cards.Items.Any()) { <tr><td colspan="7" class="text-center text-muted-alto py-4">No cards here.</td></tr> }
+                @foreach (var a in Model.Cards.Items)
+                {
+                    var s = Model.LatestStatements.GetValueOrDefault(a.Id);
+                    <tr>
+                        <td><a asp-action="Details" asp-route-id="@a.Id">@a.DisplayName ••@a.Last4</a></td>
+                        <td>@a.User?.FirstName @a.User?.LastName<div class="small text-muted-alto">@a.User?.Email</div></td>
+                        <td class="text-end"><money amount="@a.AmountOwed" /></td>
+                        <td class="text-end"><money amount="@(a.CreditLimit ?? 0)" /></td>
+                        <td style="min-width:7rem">
+                            <div class="util-bar util-@(a.Utilization >= 90 ? "high" : a.Utilization >= 30 ? "mid" : "low")" role="img" aria-label="@a.Utilization% of the limit used"><span style="width:@a.Utilization.ToString(System.Globalization.CultureInfo.InvariantCulture)%"></span></div>
+                            <div class="small text-muted-alto">@a.Utilization%</div>
+                        </td>
+                        <td class="small">
+                            @if (s == null) { <span class="text-muted-alto">None yet</span> }
+                            else
+                            {
+                                <money amount="@s.StatementBalance" /> <span class="text-muted-alto">due @s.DueDate.ToString("MMM d")</span>
+                                @if (s.LateFeeCharged && !s.LateFeeWaived) { <div class="text-danger-alto"><i class="bi bi-exclamation-triangle me-1"></i>late fee</div> }
+                            }
+                        </td>
+                        <td><partial name="_StatusPill" model="a.Status.ToString()" /></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <partial name="_Pager" model="Model.Cards.Pager" />
+</div>

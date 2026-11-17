@@ -1,11 +1,16 @@
+@inject AltoBank.Services.IBankService Bank
 @{
     ViewData["Title"] = "Credit Cards";
+    // Alto Peak terms come from the bank settings (Admin → Settings), so this page never disagrees with the card.
+    var st = await Bank.GetSettingsAsync();
+    var cashBack = (st.CardCashBackRate * 100m).ToString("0.##") + "%";
+    var apr = st.CardPurchaseAprPercent.ToString("0.00") + "%";
 
     // (card art, name, tagline, highlights) for each card in the lineup
     var cards = new[]
     {
-        (Art: new CardArtViewModel("Peak", "static"), Name: "Alto Peak", Tagline: "Flat 2% cash back on everything",
-            Points: new[] { "2% cash back on every purchase", "$0 annual fee", "0% intro APR for 15 months*" }),
+        (Art: new CardArtViewModel("Peak", "alto-card--peak static"), Name: "Alto Peak", Tagline: $"Flat {cashBack} cash back on everything",
+            Points: new[] { $"{cashBack} cash back on every purchase", "$0 annual fee", "No interest when you pay in full by the due date" }),
         (Art: new CardArtViewModel("Summit", "alto-card--violet static"), Name: "Alto Summit", Tagline: "Travel rewards without the fuss",
             Points: new[] { "3x points on travel & dining", "No foreign transaction fees", "$95 annual fee" }),
         (Art: new CardArtViewModel("Base", "alto-card--onyx static"), Name: "Alto Base", Tagline: "Build credit, the smart way",
@@ -20,9 +25,9 @@
     };
 }
 
-<partial name="_PageHero" model='new PageHeroViewModel("Alto Credit Cards · Coming soon", "Rewards that rise with you.",
-    "Three cards, zero gimmicks. Create a free Alto account and we will invite you as soon as applications open.",
-    "Get on the list", "Auth", "Register")' />
+<partial name="_PageHero" model='new PageHeroViewModel("Alto Credit Cards", "Rewards that rise with you.",
+    $"Alto Peak is open for applications: {cashBack} cash back, no annual fee, and a decision in minutes. Summit and Base are coming soon.",
+    "Apply for Alto Peak", "Accounts", "Apply")' />
 
 <div class="container">
     <div class="row g-4">
@@ -36,7 +41,15 @@
                     <ul class="check-list flex-grow-1">
                         @foreach (var p in c.Points) { <li>@p</li> }
                     </ul>
-                    <a class="btn btn-alto-outline mt-2" asp-controller="Auth" asp-action="Register">Join the waitlist</a>
+                    @if (c.Name == "Alto Peak")
+                    {
+                        <a class="btn btn-alto mt-2" asp-controller="Accounts" asp-action="Apply" asp-route-type="CreditCard">Apply now</a>
+                        <p class="small text-muted-alto mt-2 mb-0">Demo decision, no credit check. Already an Alto customer? Sign in first.</p>
+                    }
+                    else
+                    {
+                        <span class="btn btn-alto-outline mt-2 disabled" aria-disabled="true">Coming soon</span>
+                    }
                 </div>
             </div>
         }
@@ -49,10 +62,12 @@
                 <table class="table alto-table compare-table">
                     <thead><tr><th></th><th>Alto Peak</th><th>Alto Summit</th><th>Alto Base</th></tr></thead>
                     <tbody>
-                        <tr><td class="text-muted-alto">Rewards</td><td>2% cash back</td><td>3x travel &amp; dining, 1x else</td><td>1% cash back</td></tr>
+                        <tr><td class="text-muted-alto">Availability</td><td>Apply now</td><td>Coming soon</td><td>Coming soon</td></tr>
+                        <tr><td class="text-muted-alto">Rewards</td><td>@cashBack cash back</td><td>3x travel &amp; dining, 1x else</td><td>1% cash back</td></tr>
                         <tr><td class="text-muted-alto">Annual fee</td><td>$0</td><td>$95</td><td>$0</td></tr>
-                        <tr><td class="text-muted-alto">Intro APR</td><td>0% for 15 months*</td><td>—</td><td>—</td></tr>
-                        <tr><td class="text-muted-alto">Foreign transaction fee</td><td>3%</td><td>None</td><td>3%</td></tr>
+                        <tr><td class="text-muted-alto">Purchase APR</td><td>@apr</td><td>—</td><td>—</td></tr>
+                        <tr><td class="text-muted-alto">Late fee</td><td>Up to @st.CardLateFee.ToString("C0")</td><td>—</td><td>—</td></tr>
+                        <tr><td class="text-muted-alto">Foreign transaction fee</td><td>None</td><td>None</td><td>3%</td></tr>
                         <tr><td class="text-muted-alto">Best for</td><td>Everyday spending</td><td>Frequent travelers</td><td>Building credit</td></tr>
                     </tbody>
                 </table>
@@ -68,6 +83,6 @@
                 <div class="col-md-4"><partial name="_BenefitCard" model="b" /></div>
             }
         </div>
-        <p class="footnote mt-4">*Card terms are illustrative for this academic demo. Alto credit cards are not available and no applications are accepted.</p>
+        <p class="footnote mt-4">*Card terms are illustrative for this academic demo. Alto Bank is not a real bank: Alto Peak decisions are simulated from your answers and Alto history, with no credit check, and no real credit is extended.</p>
     </section>
 </div>

@@ -61,7 +61,8 @@ public class CheckDepositService : ICheckDepositService
 
     public Task<List<Account>> GetEligibleAccountsAsync(string userId) =>
         _db.Accounts.AsNoTracking()
-            .Where(a => a.UserId == userId && a.Status == AccountStatus.Active)
+            .Where(a => a.UserId == userId && a.Status == AccountStatus.Active
+                        && (a.AccountType == AccountType.Checking || a.AccountType == AccountType.Savings))
             .OrderBy(a => a.AccountType).ThenBy(a => a.OpenedAt)
             .ToListAsync();
 
@@ -84,6 +85,7 @@ public class CheckDepositService : ICheckDepositService
 
         var account = await _db.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == accountId && a.UserId == userId);
         if (account == null) return (new(false, "Choose one of your accounts."), null);
+        if (!account.IsDepositAccount) return (new(false, "A check can only go into a checking or savings account."), null);
         if (account.Status != AccountStatus.Active)
             return (new(false, $"{account.DisplayName} is {account.Status.ToString().ToLowerInvariant()}, so it can't take a mobile deposit."), null);
 

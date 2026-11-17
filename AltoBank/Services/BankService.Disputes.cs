@@ -15,7 +15,11 @@ public partial class BankService
         RequireTransaction(nameof(PostProvisionalCreditInCurrentTransactionAsync));
         var (account, original) = await LoadDisputedAsync(dispute);
         if (account == null || original == null) return (new(false, "The disputed transaction no longer exists."), null);
-        if (CanReceive(account) is { } blocked) return (blocked, null);
+        // A credit card can take a provisional credit (only a closed account can't); other accounts use the usual rule.
+        var blocked = account.IsCreditCard
+            ? (account.Status == AccountStatus.Closed ? new BankResult(false, $"{account.DisplayName} is closed.") : null)
+            : CanReceive(account);
+        if (blocked != null) return (blocked, null);
 
         account.Balance += dispute.RefundAmount;
         var t = AddTransaction(account, TransactionType.ProvisionalCredit, dispute.RefundAmount,

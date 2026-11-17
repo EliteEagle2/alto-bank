@@ -112,7 +112,7 @@ public class PaymentsController : Controller
     private async Task<PaymentsPageViewModel> BuildPageAsync()
     {
         var accounts = await _bank.GetAccountsAsync(UserId);
-        var canSend = accounts.Where(a => a.Status == AccountStatus.Active).ToList();
+        var canSend = accounts.Where(a => a.Status == AccountStatus.Active && a.IsDepositAccount).ToList();
         var preferred = await _prefs.DefaultAccountIdAsync(UserId);   // Profile → Preferences
         var first = canSend.FirstOrDefault(a => a.Id == preferred) ?? canSend.FirstOrDefault(a => a.AccountType == AccountType.Checking) ?? canSend.FirstOrDefault();
         var settings = await _bank.GetSettingsAsync();

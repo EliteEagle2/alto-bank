@@ -9,6 +9,8 @@ public static class CardDesigns
     public const string Aurora = "aurora"; // "Summit Gold": navy with a gold highlight (default). Keys are stored on accounts, so they never change.
     public const string Violet = "violet";
     public const string Onyx = "onyx";
+    /// <summary>The Alto Peak credit card's own design (not offered for debit cards).</summary>
+    public const string Peak = "peak";
 
     public static readonly string[] All = { Aurora, Violet, Onyx };
 
@@ -16,6 +18,7 @@ public static class CardDesigns
     {
         Violet => "Glacier",
         Onyx => "Onyx",
+        Peak => "Alto Peak",
         _ => "Summit Gold"
     };
 
@@ -24,6 +27,7 @@ public static class CardDesigns
     {
         Violet => "alto-card--violet",
         Onyx => "alto-card--onyx",
+        Peak => "alto-card--peak",
         _ => ""
     };
 }

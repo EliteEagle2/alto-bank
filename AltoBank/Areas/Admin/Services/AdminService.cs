@@ -59,7 +59,7 @@ public partial class AdminService : IAdminService
         var settings = await _db.GetSettingsAsync();
         var today = BankTime.StartOfTodayUtc;   // bank midnight, in UTC
         var openAccounts = await _db.Accounts.AsNoTracking()
-            .Where(a => a.Status != AccountStatus.Closed)
+            .Where(a => a.Status != AccountStatus.Closed && (a.AccountType == AccountType.Checking || a.AccountType == AccountType.Savings))
             .Select(a => new { a.AccountType, a.Balance }).ToListAsync();
 
         // "Large transactions": last 30 days at or above the threshold (amounts compared in memory).
@@ -455,9 +455,13 @@ public partial class AdminService : IAdminService
             return Ok($"{account.DisplayName} ••{account.Last4} is active again.");
         });
 
+    // Alto Peak cards have their own staff actions (limit, fee waiver, close at $0) with the card rules built in.
+    private const string UseCardsPage = "This is an Alto Peak credit card. Use Credit Cards in the menu to change its limit, waive a fee or close it.";
+
     public Task<AdminResult> ReopenAccountAsync(int accountId, string reason) =>
         ChangeAccountAsync(accountId, reason, "Account.Reopen", account =>
         {
+            if (account.IsCreditCard) return Fail(UseCardsPage);
             if (account.Status != AccountStatus.Closed) return Fail("Only a closed account can be reopened.");
             SetStatus(account, AccountStatus.Active, null);
             account.ClosedAt = null;
@@ -470,6 +474,7 @@ public partial class AdminService : IAdminService
             var account = await _db.Accounts.Include(a => a.Cards).FirstOrDefaultAsync(a => a.Id == accountId);
             if (account == null) return Fail("Account not found.");
             if (account.Status == AccountStatus.Closed) return Fail("This account is already closed.");
+            if (account.IsCreditCard) return Fail(UseCardsPage);   // a card closes only at $0, on the Credit Cards page
             var before = AccountSnapshot(account);
             var moved = 0m;
 
@@ -481,6 +486,7 @@ public partial class AdminService : IAdminService
                 if (target == null || target.UserId != account.UserId || target.Id == account.Id)
                     return Fail("The balance can only be moved to another account owned by the same customer.");
                 if (target.Status == AccountStatus.Closed) return Fail("Can't move money into a closed account.");
+                if (!target.IsDepositAccount) return Fail("Move the balance to a checking or savings account, not a credit card.");
 
                 moved = account.Balance;
                 account.Balance = 0;
@@ -513,6 +519,7 @@ public partial class AdminService : IAdminService
             var account = await _db.Accounts.FirstOrDefaultAsync(a => a.Id == accountId);
             if (account == null) return Fail("Account not found.");
             if (account.Status == AccountStatus.Closed) return Fail("Can't adjust a closed account. Reopen it first.");
+            if (account.IsCreditCard) return Fail(UseCardsPage);
             if (!isCredit && amount > account.Balance) return Fail($"Overdrafts aren't allowed: the balance is only {account.Balance:C}.");
 
             var before = AccountSnapshot(account);
@@ -692,6 +699,12 @@ public partial class AdminService : IAdminService
                                  counterpartyId: keepCounterparty ? leg.CounterpartyAccountId : null);
         rev.ReversalOfTransactionId = leg.Id;
         rev.Category = leg.Category;   // a reversal belongs to the same category as what it undoes
+        if (leg.Type == TransactionType.CardPurchase)
+        {
+            // The cash back that purchase earned goes too (never below $0).
+            var rate = _db.BankSettings.AsNoTracking().Select(s => s.CardCashBackRate).First();
+            account.RewardsBalance = Math.Max(0m, account.RewardsBalance - CardMath.CashBack(amount, rate));
+        }
         return rev;
     }
 
@@ -737,7 +750,8 @@ public partial class AdminService : IAdminService
             // daily limit on the funding account are re-checked now, at approval time.
             var external = app.FundingSource?.StartsWith("External: ") == true ? app.FundingSource["External: ".Length..] : null;
             var (result, account) = await _bank.OpenAccountInCurrentTransactionAsync(app.UserId, new OpenAccountRequest(
-                app.AccountType, app.Nickname, app.CardDesign, null, null, app.OpeningDeposit, app.FundingAccountId, external));
+                app.AccountType, app.Nickname, app.CardDesign, null, null, app.OpeningDeposit, app.FundingAccountId, external,
+                CreditLimit: app.AccountType == AccountType.CreditCard ? app.CreditLimit ?? CreditDecisionRules.MinLimit : null));
             if (!result.Success || account == null) return Fail($"Can't approve: {result.Message}");
 
             app.Status = ApplicationStatus.Approved;
@@ -782,6 +796,11 @@ public partial class AdminService : IAdminService
             MobileDepositPerCheckLimit = s.MobileDepositPerCheckLimit,
             MobileDepositDailyLimit = s.MobileDepositDailyLimit,
             ProvisionalCreditOnDisputes = s.ProvisionalCreditOnDisputes,
+            CardPurchaseAprPercent = s.CardPurchaseAprPercent,
+            CardLateFee = s.CardLateFee,
+            CardCashBackPercent = s.CardCashBackRate * 100m,
+            CardMinimumPaymentFloor = s.CardMinimumPaymentFloor,
+            CardMinimumPaymentPercent = s.CardMinimumPaymentPercent * 100m,
             UpdatedAt = s.UpdatedAt,
             UpdatedBy = s.UpdatedBy
         };
@@ -802,6 +821,11 @@ public partial class AdminService : IAdminService
             s.MobileDepositPerCheckLimit = Math.Round(input.MobileDepositPerCheckLimit, 2);
             s.MobileDepositDailyLimit = Math.Round(input.MobileDepositDailyLimit, 2);
             s.ProvisionalCreditOnDisputes = input.ProvisionalCreditOnDisputes;
+            if (input.CardPurchaseAprPercent is decimal apr) s.CardPurchaseAprPercent = Math.Round(apr, 2);
+            if (input.CardLateFee is decimal fee) s.CardLateFee = Math.Round(fee, 2);
+            if (input.CardCashBackPercent is decimal cb) s.CardCashBackRate = Math.Round(cb / 100m, 4);
+            if (input.CardMinimumPaymentFloor is decimal floor) s.CardMinimumPaymentFloor = Math.Round(floor, 2);
+            if (input.CardMinimumPaymentPercent is decimal pct) s.CardMinimumPaymentPercent = Math.Round(pct / 100m, 4);
             s.UpdatedAt = DateTime.UtcNow;
             s.UpdatedBy = AdminEmail;
             _audit.Add("Settings.Update", "Updated bank settings", "BankSetting", s.Id.ToString(), before, SettingsSnapshot(s), input.Reason);
@@ -1041,7 +1065,8 @@ public partial class AdminService : IAdminService
     private static object SettingsSnapshot(BankSetting s) => new
     {
         s.SavingsApy, s.CheckingApy, s.DefaultDailyTransferLimit, s.LargeTransactionThreshold, s.AutoApproveApplications,
-        s.MobileDepositPerCheckLimit, s.MobileDepositDailyLimit, s.ProvisionalCreditOnDisputes
+        s.MobileDepositPerCheckLimit, s.MobileDepositDailyLimit, s.ProvisionalCreditOnDisputes,
+        s.CardPurchaseAprPercent, s.CardLateFee, s.CardCashBackRate, s.CardMinimumPaymentFloor, s.CardMinimumPaymentPercent
     };
 
     private static object ProfileSnapshot(ApplicationUser u) => new

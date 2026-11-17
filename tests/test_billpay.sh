@@ -129,7 +129,8 @@ C0=$(bal $C $JCHK); V0=$(bal $C $JSAV)
 post $C /scheduled /scheduled/transfer -d "Transfer.FromAccountId=$JCHK" -d "Transfer.ToAccountId=$JSAV" -d "Transfer.Amount=3.00" -d "Transfer.When=weekly" -d "Transfer.Date=$TODAY" -d "Transfer.DayOfWeek=$DOW" --data-urlencode "Transfer.Memo=Weekly test" >/dev/null
 has "weekly transfer scheduled" "$(flash $C $B/scheduled)" "every ${DOW,,}"
 WK=$(last_sched)
-check "first run is today" "$(sql "SELECT NextRunDate FROM ScheduledPayments WHERE Id = $WK")" "$TODAY"
+# Today, or a week out if the 5-second scheduler already ran today's transfer.
+check "first run is today (or already ran)" "$(sql "SELECT NextRunDate IN ('$TODAY', date('$TODAY','+7 days')) FROM ScheduledPayments WHERE Id = $WK")" 1
 runnow
 check "weekly transfer ran" "$(sql "SELECT Status FROM ScheduledRuns WHERE ScheduledPaymentId = $WK")" Succeeded
 check "money moved out of checking" "$(bal $C $JCHK)" "$(add $C0 -3)"

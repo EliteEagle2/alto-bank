@@ -181,7 +181,7 @@ public class ProfileController : Controller
             Prefs = prefs,
             DateOfBirth = user.DateOfBirth,
             MemberSince = user.CreatedAt,
-            AccountOptions = accounts.Select(a => new SelectListItem($"{a.DisplayName} ••{a.Last4}", a.Id.ToString(), a.Id == prefs.DefaultAccountId)).ToList(),
+            AccountOptions = accounts.Where(a => a.IsDepositAccount).Select(a => new SelectListItem($"{a.DisplayName} ••{a.Last4}", a.Id.ToString(), a.Id == prefs.DefaultAccountId)).ToList(),
             States = ApplicationOptions.States.Select(s => new SelectListItem(s.Value, s.Key, s.Key == personal.State)).ToList(),
             RecentSignIns = await _prefs.RecentSignInsAsync(user.Id),
             CompletionPercent = 50 + 50 * checks.Count(c => c.Done) / checks.Length,   // name + email are always there

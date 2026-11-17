@@ -1,0 +1,123 @@
+@model CreditCardDetailViewModel
+@{ ViewData["OwnHeading"] = true; }
+@{
+    var a = Model.Card;
+    var name = $"{a.User?.FirstName} {a.User?.LastName}";
+    string Local(DateTime? t) => t == null ? "—" : BankTime.ToLocal(t.Value).ToString("MMM d, yyyy h:mm tt");
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    var limit = new ConfirmModalViewModel("limitModal", $"Change the credit limit on ••{a.Last4}",
+        $"The new limit applies right away and {name} gets an alert. It can't be lower than what's owed ({a.AmountOwed:C}) or more than {AltoBank.Areas.Admin.Services.AdminService.MaxAdminCreditLimit:C0}.",
+        Url.Action("ChangeLimit", new { id = a.Id })!, "Change limit", "primary",
+        new[] { new ConfirmField("limit", "New credit limit ($)", "number", true, "e.g. 4000", "500", "0.01", (a.CreditLimit ?? 0).ToString("0.00", inv)) });
+    var close = new ConfirmModalViewModel("closeModal", $"Close ••{a.Last4}",
+        $"The card is cancelled and the account closed. Only possible at exactly $0 (owing {a.AmountOwed:C} now)."
+        + (a.RewardsBalance > 0 ? $" {a.RewardsBalance:C} of unredeemed cash back will be forfeited." : ""),
+        Url.Action("Close", new { id = a.Id })!, "Close card", "danger");
+    // Freeze / unfreeze use the shared account actions (they redirect back here).
+    var freeze = new ConfirmModalViewModel("freezeModal", $"Freeze ••{a.Last4}",
+        $"{name} won't be able to make purchases on this card. Payments still go through, and statements, interest and late fees continue.",
+        Url.Action("Freeze", "Accounts", new { id = a.Id })!, "Freeze card account", "warn");
+    var unfreeze = new ConfirmModalViewModel("unfreezeModal", $"Unfreeze ••{a.Last4}",
+        $"{name} can make purchases again, up to the available credit.", Url.Action("Unfreeze", "Accounts", new { id = a.Id })!, "Unfreeze", "primary");
+}
+
+<div class="detail-head">
+    <div>
+        <a asp-action="Index" class="small text-decoration-none"><i class="bi bi-chevron-left"></i> Credit cards</a>
+        <h2 class="mt-1">@name · @a.DisplayName ••@a.Last4 <partial name="_StatusPill" model="a.Status.ToString()" /></h2>
+        <div class="text-muted-alto small">Opened @Local(a.OpenedAt) · <a asp-controller="Customers" asp-action="Details" asp-route-id="@a.UserId">customer profile</a>
+            @if (Model.Application != null) { <span> · <a asp-controller="Applications" asp-action="Details" asp-route-id="@Model.Application.Id">application</a></span> }</div>
+    </div>
+    @if (a.Status != AccountStatus.Closed)
+    {
+        <div class="detail-actions">
+            @if (a.Status == AccountStatus.Active) { <button class="btn btn-admin-warn" data-bs-toggle="modal" data-bs-target="#freezeModal"><i class="bi bi-snow me-1"></i>Freeze</button> }
+            @if (a.Status == AccountStatus.Frozen) { <button class="btn btn-admin-warn" data-bs-toggle="modal" data-bs-target="#unfreezeModal"><i class="bi bi-sun me-1"></i>Unfreeze</button> }
+            <button class="btn btn-admin" data-bs-toggle="modal" data-bs-target="#limitModal"><i class="bi bi-sliders me-1"></i>Change limit</button>
+            <button class="btn btn-admin-danger" data-bs-toggle="modal" data-bs-target="#closeModal"><i class="bi bi-x-circle me-1"></i>Close card</button>
+        </div>
+    }
+</div>
+
+<div class="row g-3 mb-3">
+    @foreach (var (label, value) in new[] { ("Owed now", a.AmountOwed), ("Credit limit", a.CreditLimit ?? 0), ("Available credit", a.AvailableCredit), ("Cash back balance", a.RewardsBalance) })
+    {
+        <div class="col-6 col-xl-3"><div class="admin-card h-100"><div class="small text-muted-alto">@label</div><div class="fs-5 fw-semibold"><money amount="@value" /></div></div></div>
+    }
+</div>
+
+<div class="admin-card mb-3">
+    <dl class="kv mb-0">
+        <dt>Utilization</dt><dd>@a.Utilization%</dd>
+        <dt>Statement closes</dt><dd>Day @a.StatementCloseDay of each month · next @a.NextStatementDate?.ToString("MMM d, yyyy")</dd>
+        <dt>Autopay</dt><dd>@(a.Autopay == CardAutopay.None ? "Off" : $"{(a.Autopay == CardAutopay.Minimum ? "Minimum payment" : "Statement balance")} from {Model.AutopayFrom?.DisplayName} ••{Model.AutopayFrom?.Last4}")</dd>
+        <dt>Card</dt><dd>@foreach (var c in Model.Card.Cards.OrderByDescending(c => c.IssuedAt)) { <span class="me-2">••@c.Last4 <partial name="_StatusPill" model="c.Status.ToString()" /></span> }</dd>
+        @if (Model.Application?.DecisionNote != null) { <dt>Decision</dt><dd>@Model.Application.DecisionNote <span class="demo-note">Demo decision, no credit check</span></dd> }
+    </dl>
+</div>
+
+<div class="admin-card p-0 mb-3">
+    <h2 class="h6 p-3 mb-0">Statements</h2>
+    <div class="table-responsive">
+        <table class="table admin-table mb-0">
+            <thead><tr><th>Closed</th><th class="text-end">Purchases</th><th class="text-end">Payments &amp; credits</th><th class="text-end">Interest</th><th class="text-end">Fees</th><th class="text-end">Balance</th><th class="text-end">Minimum</th><th>Due</th><th>Late fee</th></tr></thead>
+            <tbody>
+                @if (!Model.Statements.Any()) { <tr><td colspan="9" class="text-center text-muted-alto py-3">No statements yet. The first closes on @a.NextStatementDate?.ToString("MMM d").</td></tr> }
+                @foreach (var s in Model.Statements)
+                {
+                    var waive = new ConfirmModalViewModel($"waive{s.Id}", "Waive the late fee",
+                        $"The late fee charged after the {s.DueDate:MMM d} due date is credited back to the card and {name} gets an alert.",
+                        Url.Action("WaiveFee", new { id = a.Id, statementId = s.Id })!, "Waive fee", "primary");
+                    <tr>
+                        <td class="text-nowrap">@s.PeriodEnd.ToString("MMM d, yyyy")</td>
+                        <td class="text-end"><money amount="@s.Purchases" /></td>
+                        <td class="text-end"><money amount="@s.PaymentsAndCredits" /></td>
+                        <td class="text-end"><money amount="@s.InterestCharged" /></td>
+                        <td class="text-end"><money amount="@s.FeesCharged" /></td>
+                        <td class="text-end fw-semibold"><money amount="@s.StatementBalance" /></td>
+                        <td class="text-end"><money amount="@s.MinimumPayment" /></td>
+                        <td class="text-nowrap">@s.DueDate.ToString("MMM d")</td>
+                        <td>
+                            @if (s.LateFeeWaived) { <span class="small text-muted-alto">Waived</span> }
+                            else if (s.LateFeeCharged)
+                            {
+                                <button class="btn btn-admin-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#waive@(s.Id)">Waive</button>
+                                <partial name="_ConfirmModal" model="waive" />
+                            }
+                            else { <span class="small text-muted-alto">@(s.DueDateProcessed ? "Paid on time" : "—")</span> }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="admin-card p-0">
+    <h2 class="h6 p-3 mb-0">Recent activity</h2>
+    <div class="table-responsive">
+        <table class="table admin-table mb-0">
+            <thead><tr><th>Date</th><th>Transaction</th><th>Type</th><th class="text-end">Amount</th><th class="text-end">Owed after</th></tr></thead>
+            <tbody>
+                @foreach (var t in Model.Recent)
+                {
+                    <tr>
+                        <td class="text-nowrap">@BankTime.ToLocal(t.Date).ToString("MMM d, h:mm tt")</td>
+                        <td><a asp-controller="Transactions" asp-action="Details" asp-route-id="@t.Id">#@t.Id</a> @t.Description</td>
+                        <td>@t.TypeLabel</td>
+                        <td class="text-end"><money amount="@(t.IsCredit ? -t.Amount : t.Amount)" /></td>
+                        <td class="text-end"><money amount="@Math.Max(0m, -t.BalanceAfter)" /></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (a.Status != AccountStatus.Closed)
+{
+    <partial name="_ConfirmModal" model="limit" />
+    <partial name="_ConfirmModal" model="close" />
+    <partial name="_ConfirmModal" model="freeze" />
+    <partial name="_ConfirmModal" model="unfreeze" />
+}

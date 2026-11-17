@@ -8,7 +8,9 @@ namespace AltoBank.Dtos;
 
 public record AccountDto(
     int Id, string Type, string Name, string? Nickname,
-    string MaskedNumber, decimal Balance, DateTime OpenedAt, string Status);
+    string MaskedNumber, decimal Balance, DateTime OpenedAt, string Status,
+    // Alto Peak card only (null otherwise). Balance is negative when money is owed; AmountOwed is the positive amount.
+    decimal? CreditLimit = null, decimal? AvailableCredit = null, decimal? AmountOwed = null, decimal? CashBack = null);
 
 /// <summary>Body for POST /api/transfers. Validated automatically because of [ApiController].</summary>
 public class TransferRequestDto

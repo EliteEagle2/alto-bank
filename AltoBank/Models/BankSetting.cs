@@ -27,6 +27,13 @@ public class BankSetting
     [Column(TypeName = "decimal(18,2)")] public decimal MobileDepositPerCheckLimit { get; set; } = 5000m;
     [Column(TypeName = "decimal(18,2)")] public decimal MobileDepositDailyLimit { get; set; } = 10000m;
 
+    // ----- Alto Peak credit card -----
+    [Column(TypeName = "decimal(5,2)")] public decimal CardPurchaseAprPercent { get; set; } = 21.99m;
+    [Column(TypeName = "decimal(18,2)")] public decimal CardLateFee { get; set; } = 29m;
+    [Column(TypeName = "decimal(6,4)")] public decimal CardCashBackRate { get; set; } = 0.015m;   // 1.5% = 0.015
+    [Column(TypeName = "decimal(18,2)")] public decimal CardMinimumPaymentFloor { get; set; } = 25m;
+    [Column(TypeName = "decimal(6,4)")] public decimal CardMinimumPaymentPercent { get; set; } = 0.02m;   // 2%
+
     // Disputes: ON = credit the customer right away when they file a dispute (taken back if it's denied).
     // Captured on each dispute when it's filed, so changing this doesn't affect open disputes.
     public bool ProvisionalCreditOnDisputes { get; set; }
