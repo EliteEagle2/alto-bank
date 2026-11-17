@@ -44,6 +44,9 @@ public interface IBillPayService
 
 public class BillPayService : IBillPayService
 {
+    // A credit card has its own Pay card page and autopay, so schedules use checking or savings only.
+    private const string NotForSchedules = "Scheduled payments and transfers use checking or savings. To pay your Alto Peak card automatically, turn on autopay on the card.";
+
     private readonly ApplicationDbContext _db;
     private readonly IAuditLogger _audit;
 
@@ -149,6 +152,7 @@ public class BillPayService : IBillPayService
         var from = await _db.Accounts.FirstOrDefaultAsync(a => a.Id == d.FromAccountId && a.UserId == userId);
         if (from == null) return (Fail("Account not found."), null);
         if (from.Status == AccountStatus.Closed) return (Fail($"{from.DisplayName} is closed."), null);
+        if (!from.IsDepositAccount) return (Fail(NotForSchedules), null);
 
         Payee? payee = null; Account? to = null;
         if (d.Kind == ScheduleKind.BillPay)
@@ -162,6 +166,7 @@ public class BillPayService : IBillPayService
             if (to == null) return (Fail("Account not found."), null);
             if (to.Id == from.Id) return (Fail("Choose two different accounts."), null);
             if (to.Status == AccountStatus.Closed) return (Fail($"{to.DisplayName} is closed."), null);
+            if (!to.IsDepositAccount) return (Fail(NotForSchedules), null);
         }
 
         var first = Recurrence.First(d.Frequency, d.StartDate, d.DayOfWeek, d.DayOfMonth);
@@ -207,6 +212,7 @@ public class BillPayService : IBillPayService
         if (e.EndDate is DateOnly end && end < e.NextRunDate) return Fail("The end date is before the next payment.");
         var from = await _db.Accounts.FirstOrDefaultAsync(a => a.Id == e.FromAccountId && a.UserId == userId);
         if (from == null || from.Status == AccountStatus.Closed) return Fail("Account not found.");
+        if (!from.IsDepositAccount) return Fail(NotForSchedules);
         if (s.Kind == ScheduleKind.Transfer && from.Id == s.ToAccountId) return Fail("Choose two different accounts.");
 
         var before = new { s.Amount, s.Memo, s.NextRunDate, s.EndDate, from = s.FromAccountId };

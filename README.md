@@ -26,7 +26,13 @@ Built by **Austin Emig** for **Server Sided Web Development**.
   phone), tick the endorsement checklist and review before submitting. The check shows as **pending** (not in the
   available balance) until staff approve it; per-check and daily limits apply, and the same check image can't be
   deposited twice.
-- **Disputes:** dispute a withdrawal, bill payment or payment you sent within 60 days, straight from the transaction:
+- **Alto Peak credit card (simulated credit):** apply in the same application (a housing payment and the Cardmember
+  Agreement instead of an opening deposit). The decision comes from simple demo rules on your answers and your Alto
+  history, with **no credit check**, and every decision says "Demo decision, no credit check". The card page shows what you
+  owe, available credit, the statement balance, the minimum due and a credit-used bar. Monthly statements (printable),
+  interest only when you don't pay the statement in full by the due date, a late fee if the minimum is late, 1.5% cash back
+  you can redeem, Pay card (minimum, statement balance, current balance or another amount) and autopay.
+- **Disputes:** dispute a withdrawal, bill payment, card purchase or payment you sent within 60 days, straight from the transaction:
   choose what went wrong (with the expected amount for "Wrong amount" or the original for "Duplicate charge"), describe it,
   attach a receipt, review and submit. "I didn't authorize it" can freeze the debit card in the same step. A timeline
   shows Submitted → Under review → Refunded / Denied, and the transaction gets a Disputed or Refunded badge.
@@ -41,7 +47,8 @@ Built by **Austin Emig** for **Server Sided Web Development**.
 - A console with a work queue, customer search and a status bar (scheduler health, pending applications, frozen accounts).
 - Customers, accounts, transactions, applications, P2P payments, scheduled payments and a **check deposit review
   queue** (both images with click-to-zoom, duplicate-image warnings, the customer's deposit history) and a **dispute
-  queue** (the charge, the customer's history with that merchant, the attachment), with filters.
+  queue** (the charge, the customer's history with that merchant, the attachment), and **Credit Cards** (statements, limit
+  changes, late fee waivers, refunding a credit balance, closing at $0), with filters.
 - Disputes are approved through the existing reversal system (the whole charge, or only the difference for a wrong
   amount; a payment to another customer is refunded to the sender only). An optional **provisional credit** pays the
   customer right away and is taken back if the dispute is denied, even if that overdraws the account, which is flagged.
@@ -113,9 +120,9 @@ On the login page, click **Demo Customer** or **Demo Admin**, or sign in with:
 
 | Who | Email | Password |
 |---|---|---|
-| Customer (Jordan) | demo@altobank.com | Demo123! |
-| Customer (Maya) | maya@altobank.com | Demo123! |
-| Customer (Sam) | sam@altobank.com | Demo123! |
+| Customer (Jordan, pays the card in full with autopay) | demo@altobank.com | Demo123! |
+| Customer (Maya, carries a card balance with interest) | maya@altobank.com | Demo123! |
+| Customer (Sam, card application waiting for review) | sam@altobank.com | Demo123! |
 | Admin and Owner (Alex) | admin@altobank.com | Admin123! |
 
 These are made-up demo accounts. The admin also has customer accounts of their own.
@@ -135,9 +142,9 @@ dotnet run -- --reset-db   # delete the database and start over with fresh demo 
 
 ## Tests
 
-`tests/` holds 14 end-to-end suites (1,000+ checks) that drive the running app over HTTP: money rules, races, ownership checks
+`tests/` holds 15 end-to-end suites (1,200+ checks) that drive the running app over HTTP: money rules, races, ownership checks
 (another customer's id returns 404), antiforgery, the scheduler, P2P, Bill Pay, staff permissions, profile settings, insights
-budgets, check deposits and disputes. Run them against a **separate test server with its own scratch database**, never your real `altobank.db`:
+budgets, check deposits, disputes and the credit card statement cycle. Run them against a **separate test server with its own scratch database**, never your real `altobank.db`:
 
 ```powershell
 # terminal 1: a test server on a scratch database

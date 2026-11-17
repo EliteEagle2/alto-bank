@@ -13,6 +13,10 @@
         $"The card is cancelled and the account closed. Only possible at exactly $0 (owing {a.AmountOwed:C} now)."
         + (a.RewardsBalance > 0 ? $" {a.RewardsBalance:C} of unredeemed cash back will be forfeited." : ""),
         Url.Action("Close", new { id = a.Id })!, "Close card", "danger");
+    var refund = new ConfirmModalViewModel("refundModal", $"Refund the {a.Balance:C} credit on ••{a.Last4}",
+        $"The card has money on it (more was credited than owed). It goes to one of {name}'s checking or savings accounts, and the card goes back to $0.",
+        Url.Action("RefundCredit", new { id = a.Id })!, "Refund credit", "primary",
+        new[] { new ConfirmField("moveTo", "Refund to", Options: Model.DepositAccounts.Select(o => new KeyValuePair<string, string>(o.Id.ToString(), $"{o.DisplayName} ••{o.Last4}"))) });
     // Freeze / unfreeze use the shared account actions (they redirect back here).
     var freeze = new ConfirmModalViewModel("freezeModal", $"Freeze ••{a.Last4}",
         $"{name} won't be able to make purchases on this card. Payments still go through, and statements, interest and late fees continue.",
@@ -33,6 +37,7 @@
         <div class="detail-actions">
             @if (a.Status == AccountStatus.Active) { <button class="btn btn-admin-warn" data-bs-toggle="modal" data-bs-target="#freezeModal"><i class="bi bi-snow me-1"></i>Freeze</button> }
             @if (a.Status == AccountStatus.Frozen) { <button class="btn btn-admin-warn" data-bs-toggle="modal" data-bs-target="#unfreezeModal"><i class="bi bi-sun me-1"></i>Unfreeze</button> }
+            @if (a.Balance > 0) { <button class="btn btn-admin" data-bs-toggle="modal" data-bs-target="#refundModal"><i class="bi bi-arrow-return-left me-1"></i>Refund credit</button> }
             <button class="btn btn-admin" data-bs-toggle="modal" data-bs-target="#limitModal"><i class="bi bi-sliders me-1"></i>Change limit</button>
             <button class="btn btn-admin-danger" data-bs-toggle="modal" data-bs-target="#closeModal"><i class="bi bi-x-circle me-1"></i>Close card</button>
         </div>
@@ -40,7 +45,7 @@
 </div>
 
 <div class="row g-3 mb-3">
-    @foreach (var (label, value) in new[] { ("Owed now", a.AmountOwed), ("Credit limit", a.CreditLimit ?? 0), ("Available credit", a.AvailableCredit), ("Cash back balance", a.RewardsBalance) })
+    @foreach (var (label, value) in new[] { (a.Balance > 0 ? "Credit balance (on the card)" : "Owed now", a.Balance > 0 ? a.Balance : a.AmountOwed), ("Credit limit", a.CreditLimit ?? 0), ("Available credit", a.AvailableCredit), ("Cash back balance", a.RewardsBalance) })
     {
         <div class="col-6 col-xl-3"><div class="admin-card h-100"><div class="small text-muted-alto">@label</div><div class="fs-5 fw-semibold"><money amount="@value" /></div></div></div>
     }
@@ -119,5 +124,6 @@
     <partial name="_ConfirmModal" model="limit" />
     <partial name="_ConfirmModal" model="close" />
     <partial name="_ConfirmModal" model="freeze" />
+    @if (a.Balance > 0) { <partial name="_ConfirmModal" model="refund" /> }
     <partial name="_ConfirmModal" model="unfreeze" />
 }

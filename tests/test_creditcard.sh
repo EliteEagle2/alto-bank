@@ -38,7 +38,10 @@ check "Maya: interest on statements 2 and 3 (minimum payments only)" "$(sql "SEL
 check "Maya: one late fee (paid after the due date)" "$(sql "SELECT COUNT(*) FROM CreditCardStatements WHERE AccountId = $MCARD AND LateFeeCharged = 1")" 1
 check "Maya: the fee is on the card" "$(sql "SELECT COUNT(*) || ':' || printf('%.2f', MAX(CAST(Amount AS REAL))) FROM Transactions WHERE AccountId = $MCARD AND Type = 'LateFee'")" "1:29.00"
 check "Samuel: a pending card application with a proposed limit" "$(sql "SELECT Status || ':' || (CreditLimit IS NOT NULL) FROM AccountApplications WHERE UserId = '$SID' AND AccountType = 'CreditCard'")" "Pending:1"
-check "seeded card history balances (statement chain)" "$(sql "SELECT COUNT(*) FROM CreditCardStatements s WHERE s.StatementBalance <> (SELECT printf('%.2f', -BalanceAfter) FROM Transactions t WHERE t.Id = s.LastTransactionId) AND CAST(s.StatementBalance AS REAL) > 0 AND -(SELECT CAST(BalanceAfter AS REAL) FROM Transactions t WHERE t.Id = s.LastTransactionId) <> CAST(s.StatementBalance AS REAL)")" 0
+check "every seeded statement adds up (previous - credits + purchases + interest + fees)" "$(sql "SELECT COUNT(*) FROM CreditCardStatements WHERE ABS(CAST(PreviousBalance AS REAL) - CAST(PaymentsAndCredits AS REAL) + CAST(Purchases AS REAL) + CAST(InterestCharged AS REAL) + CAST(FeesCharged AS REAL) - CAST(StatementBalance AS REAL)) > 0.005")" 0
+check "each statement starts where the last one ended" "$(sql "SELECT COUNT(*) FROM CreditCardStatements a JOIN CreditCardStatements b ON b.AccountId = a.AccountId AND b.PeriodStart = date(a.PeriodEnd, '+1 day') WHERE b.PreviousBalance <> a.StatementBalance AND ABS(CAST(b.PreviousBalance AS REAL) - CAST(a.StatementBalance AS REAL)) > 0.005")" 0
+check "interest is dated on its statement's close day" "$(sql "SELECT COUNT(*) FROM Transactions t JOIN CreditCardStatements s ON s.AccountId = t.AccountId WHERE t.Type = 'InterestCharge' AND s.InterestCharged <> '0' AND date(t.Date, '-5 hours') = s.PeriodEnd")" "$(sql "SELECT COUNT(*) FROM CreditCardStatements WHERE CAST(InterestCharged AS REAL) > 0")"
+check "the old monthly statement URL sends a card to its statements" "$(curl -s -o /dev/null -w '%{redirect_url}' -b $J $B/accounts/$JCARD/statements/2026/10)" "$B/accounts/$JCARD#statements"
 check "settings defaults: APR, late fee, cash back, minimum" "$(sql "SELECT CardPurchaseAprPercent || '|' || CardLateFee || '|' || CardCashBackRate || '|' || CardMinimumPaymentFloor || '|' || CardMinimumPaymentPercent FROM BankSettings")" "21.99|29|0.015|25|0.02"
 
 echo "== Card page (customer)"
@@ -214,6 +217,20 @@ post $A /admin/disputes/details/$DID /admin/disputes/approve/$DID --data-urlenco
 check "approved" "$(sql "SELECT Status FROM Disputes WHERE Id = $DID")" "Approved"
 check "refund lowers what's owed" "$(bal $SCARD)" "$(awk -v b="$SB" -v a="$DAMT" 'BEGIN { printf "%.2f", b + a }')"
 check "the purchase's cash back was taken back" "$(rew $SCARD)" "$(awk -v r="$SR" -v a="$DAMT" 'BEGIN { c = int(a * 0.015 * 100 + 0.5) / 100; v = r - c; if (v < 0) v = 0; printf "%.2f", v }')"
+DTX2=$(sql "SELECT Id FROM Transactions WHERE AccountId = $SCARD AND Type = 'CardPurchase' AND Status = 'Posted' ORDER BY Id LIMIT 1")
+DAMT2=$(sql "SELECT printf('%.2f', Amount) FROM Transactions WHERE Id = $DTX2")
+sql "UPDATE BankSettings SET ProvisionalCreditOnDisputes = 1" >/dev/null
+TK=$(tok $S /disputes)
+curl -s -b $S -c $S -o /dev/null -F "Form.TransactionId=$DTX2" -F "Form.Reason=NotReceived" -F "Form.Description=Second order that never came, merchant is gone." -F "__RequestVerificationToken=$TK" $B/disputes
+sql "UPDATE BankSettings SET ProvisionalCreditOnDisputes = 0" >/dev/null
+DID2=$(sql "SELECT Id FROM Disputes WHERE TransactionId = $DTX2")
+check "provisional credit posted on the card" "$(sql "SELECT ProvisionalCreditTransactionId IS NOT NULL FROM Disputes WHERE Id = $DID2")" 1
+SR=$(rew $SCARD)
+post $A /admin/disputes/details/$DID2 /admin/disputes/approve/$DID2 --data-urlencode "reason=Merchant out of business" >/dev/null
+check "approving a provisional credit also takes the cash back" "$(rew $SCARD)" "$(awk -v r="$SR" -v a="$DAMT2" 'BEGIN { c = int(a * 0.015 * 100 + 0.5) / 100; v = r - c; if (v < 0) v = 0; printf "%.2f", v }')"
+check "schedule from a card refused" "$(post $S /scheduled /scheduled/transfer -d "Transfer.FromAccountId=$SCARD" -d "Transfer.ToAccountId=$SCHK" -d "Transfer.Amount=5" -d "Transfer.When=once" -d "Transfer.Date=$(sql "SELECT date('$TODAY','+1 day')")" | cut -c1-3; flash $S $B/scheduled | grep -c 'use checking or savings')" "302
+1"
+check "nothing scheduled with a card" "$(sql "SELECT COUNT(*) FROM ScheduledPayments WHERE FromAccountId = $SCARD OR ToAccountId = $SCARD")" 0
 
 echo "== Statement close, minimum payment math, paying"
 # Riley's card: a clean history 40 days back. Purchases 35 days ago, statement 1 closes 20 days ago.
@@ -256,27 +273,43 @@ echo "== Grace period and interest"
 sql "UPDATE Transactions SET Date = datetime('$TODAY','-15 days','+16 hours') WHERE AccountId = $UCARD AND Type = 'CardPayment'" >/dev/null
 sql "UPDATE CreditCardStatements SET DueDate = date('$TODAY','-5 days') WHERE Id = $S1" >/dev/null
 waitfor "due date processed: paid on time, no late fee" "SELECT DueDateProcessed || ':' || LateFeeCharged FROM CreditCardStatements WHERE Id = $S1" "1:0"
-sql "UPDATE Accounts SET NextStatementDate = date('$TODAY','-1 days') WHERE Id = $UCARD" >/dev/null
+sql "UPDATE Accounts SET NextStatementDate = date('$TODAY','-2 days') WHERE Id = $UCARD" >/dev/null
 waitfor "statement 2 closed" "SELECT COUNT(*) FROM CreditCardStatements WHERE AccountId = $UCARD" 2
 S2=$(latest $UCARD)
-# 19 days (20 days ago+1 .. yesterday): about 4 at $2,000 and 15 at $1,960 x 21.99% / 365 ≈ $22.53 (day edges move it a cent or two).
-range "carried a balance -> daily-balance interest" "$(stmt $S2 "printf('%.2f', InterestCharged)")" 22.40 22.65
+# 18 days (19 days ago .. 2 days ago): 4 at $2,000 and 14 at $1,960 x 21.99% / 365 = $21.35 (a day edge can move it 2-3 cents).
+range "carried a balance -> daily-balance interest" "$(stmt $S2 "printf('%.2f', InterestCharged)")" 21.30 21.40
+check "interest dated the last moment of the close day" "$(sql "SELECT date(Date, '-5 hours') FROM Transactions WHERE AccountId = $UCARD AND Type = 'InterestCharge'")" "$(stmt $S2 PeriodEnd)"
 check "interest posted on the card" "$(sql "SELECT COUNT(*) FROM Transactions WHERE AccountId = $UCARD AND Type = 'InterestCharge'")" 1
 check "statement 2 math: previous - payments + interest = balance" "$(stmt $S2 "printf('%.2f', PreviousBalance - PaymentsAndCredits + Purchases + InterestCharged + FeesCharged) = printf('%.2f', StatementBalance)")" 1
 check "statement 2 minimum = max(\$25, 2%)" "$(stmt $S2 "printf('%.2f', MinimumPayment) = printf('%.2f', MAX(25, ROUND(StatementBalance * 0.02, 2)))")" 1
+MX=$(sql "SELECT MAX(Id) FROM Transactions")
 post $U /accounts/$UCARD /credit-card/$UCARD/redeem -d to=statement >/dev/null
 has "redeem \$30 as a statement credit" "$(flash $U $B/accounts/$UCARD)" "\$30.00 cash back added to your card balance"
 check "a CashBackCredit on the card" "$(sql "SELECT Type || ':' || printf('%.2f', Amount) FROM Transactions WHERE AccountId = $UCARD ORDER BY Id DESC LIMIT 1")" "CashBackCredit:30.00"
 R=$(pay $U $UCARD -d Option=StatementBalance -d FromAccountId=$UCHK)
 check "pay the statement balance (less the credit already applied)" "$(bal $UCARD)" "0.00"
+sql "UPDATE Transactions SET Date = datetime('$TODAY','-1 days','+17 hours') WHERE AccountId = $UCARD AND Id > $MX" >/dev/null   # those happened yesterday
 sql "UPDATE Accounts SET NextStatementDate = '$TODAY' WHERE Id = $UCARD" >/dev/null
+sleep 6; check "a statement doesn't close until its close day is over" "$(nstmt $UCARD)" 2
+sql "UPDATE Accounts SET NextStatementDate = date('$TODAY','-1 days') WHERE Id = $UCARD" >/dev/null
 waitfor "statement 3 closed" "SELECT COUNT(*) FROM CreditCardStatements WHERE AccountId = $UCARD" 3
 S3=$(latest $UCARD)
 check "paid in full by the due date -> no interest (grace period back)" "$(stmt $S3 "printf('%.2f', InterestCharged)")" "0.00"
 check "nothing owed -> no minimum" "$(stmt $S3 "printf('%.2f|%.2f', StatementBalance, MinimumPayment)")" "0.00|0.00"
+sql "UPDATE Accounts SET RewardsBalance = '12.00' WHERE Id = $UCARD" >/dev/null   # test-only: cash back on a paid-off card
+post $U /accounts/$UCARD /credit-card/$UCARD/redeem -d to=statement >/dev/null
+has "a statement credit can't leave money on the card" "$(flash $U $B/accounts/$UCARD)" "Redeem to checking or savings instead"
+check "nothing changed" "$(bal $UCARD):$(rew $UCARD)" "0.00:12.00"
+sql "UPDATE Accounts SET RewardsBalance = '0' WHERE Id = $UCARD" >/dev/null
 pay $U $UCARD -d Option=CurrentBalance -d FromAccountId=$UCHK >/dev/null
 has "paid off: nothing to pay" "$(cat /tmp/post.html)" "nothing to pay"
 has "card page: Pay card disabled when nothing is owed" "$(curl -s -b $U $B/accounts/$UCARD)" 'title="Nothing to pay"'
+
+echo "== Payment due reminder (Maya, no autopay)"
+MS=$(latest $MCARD); NREM=$(sql "SELECT COUNT(*) FROM Alerts WHERE UserId = '$MID' AND Type = 'CardPaymentDue'")   # the seeded history has some
+sql "UPDATE CreditCardStatements SET DueDate = date('$TODAY','+3 days') WHERE Id = $MS" >/dev/null
+waitfor "reminder 5 days before the due date" "SELECT COUNT(*) FROM Alerts WHERE UserId = '$MID' AND Type = 'CardPaymentDue'" $((NREM + 1))
+sleep 6; check "only once per statement" "$(sql "SELECT COUNT(*) FROM Alerts WHERE UserId = '$MID' AND Type = 'CardPaymentDue'")" $((NREM + 1))
 
 echo "== Late fee + admin waive (Maya)"
 MS=$(latest $MCARD); MB=$(bal $MCARD); NFEE=$(sql "SELECT COUNT(*) FROM Alerts WHERE UserId = '$MID' AND Type = 'CardLateFee'")
@@ -300,6 +333,11 @@ check "audited with the reason" "$(sql "SELECT COUNT(*) FROM AuditLogs WHERE Act
 post $A /admin/creditcards/details/$MCARD /admin/creditcards/waivefee/$MCARD -d statementId=$MS --data-urlencode "reason=Again" >/dev/null
 has "can't waive twice" "$(flash $A $B/admin/creditcards/details/$MCARD)" "already waived"
 check "still one waiver" "$(sql "SELECT COUNT(*) FROM Transactions WHERE AccountId = $MCARD AND Type = 'FeeWaiver'")" 1
+check "the waived fee is marked reversed" "$(sql "SELECT Status FROM Transactions WHERE Id = (SELECT LateFeeTransactionId FROM CreditCardStatements WHERE Id = $MS)")" "Reversed"
+OLDFEE=$(sql "SELECT LateFeeTransactionId FROM CreditCardStatements WHERE AccountId = $MCARD AND LateFeeCharged = 1 AND LateFeeWaived = 0 LIMIT 1")
+post $A /admin/transactions/details/$OLDFEE /admin/transactions/reverse/$OLDFEE --data-urlencode "reason=Trying the other way" >/dev/null
+has "a late fee can't be reversed (only waived, so never twice)" "$(flash $A $B/admin/transactions/details/$OLDFEE)" "waived on the Credit Cards page"
+check "no reversal posted" "$(sql "SELECT COUNT(*) FROM Transactions WHERE ReversalOfTransactionId = $OLDFEE")" 0
 
 echo "== Autopay"
 JS=$(latest $JCARD); JCB=$(bal $JCHK); JB=$(bal $JCARD)
@@ -319,6 +357,9 @@ post $S /accounts/$SCARD /credit-card/$SCARD/autopay -d mode=Minimum -d fromAcco
 check "can't autopay from someone else's account" "$(sql "SELECT Autopay FROM Accounts WHERE Id = $SCARD")" "None"
 post $S /accounts/$SCARD /credit-card/$SCARD/autopay -d mode=Minimum -d fromAccountId=$SCHK >/dev/null
 check "autopay saved" "$(sql "SELECT Autopay || ':' || AutopayFromAccountId FROM Accounts WHERE Id = $SCARD")" "Minimum:$SCHK"
+# Samuel's card activity so far happened over the last few days (so it's on the statement that closed yesterday).
+sql "UPDATE Accounts SET OpenedAt = datetime('$TODAY','-5 days','+15 hours') WHERE Id = $SCARD" >/dev/null
+sql "UPDATE Transactions SET Date = datetime('$TODAY','-2 days','+17 hours') WHERE AccountId = $SCARD" >/dev/null
 sql "UPDATE Accounts SET NextStatementDate = date('$TODAY','-1 days') WHERE Id = $SCARD" >/dev/null
 waitfor "Samuel's statement closed" "SELECT COUNT(*) FROM CreditCardStatements WHERE AccountId = $SCARD" 1
 post $A /admin/accounts/details/$SCHK /admin/accounts/freeze/$SCHK --data-urlencode "reason=Test: autopay source frozen" >/dev/null
@@ -331,7 +372,7 @@ check "alert: autopay failed, pay the minimum" "$(sql "SELECT COUNT(*) FROM Aler
 post $A /admin/accounts/details/$SCHK /admin/accounts/unfreeze/$SCHK --data-urlencode "reason=Test done" >/dev/null
 
 echo "== Admin: credit limit and closing"
-post $A /admin/creditcards/details/$SCARD /admin/creditcards/changelimit/$SCARD -d limit=600 --data-urlencode "reason=Lower risk" >/dev/null
+post $A /admin/creditcards/details/$SCARD /admin/creditcards/changelimit/$SCARD -d limit=$(sql "SELECT printf('%.2f', MAX(500, -CAST(Balance AS REAL) - 10)) FROM Accounts WHERE Id = $SCARD") --data-urlencode "reason=Lower risk" >/dev/null
 has "limit can't go below what's owed" "$(flash $A $B/admin/creditcards/details/$SCARD)" "lower than what"
 post $A /admin/creditcards/details/$SCARD /admin/creditcards/changelimit/$SCARD -d limit=3000 --data-urlencode "reason=Good payment history" >/dev/null
 check "limit changed" "$(sql "SELECT printf('%.2f', CreditLimit) FROM Accounts WHERE Id = $SCARD")" "3000.00"
@@ -350,6 +391,25 @@ post $A /admin/creditcards/details/$SCARD /admin/accounts/unfreeze/$SCARD --data
 check "unfrozen" "$(sql "SELECT Status FROM Accounts WHERE Id = $SCARD")" "Active"
 post $A /admin/creditcards/details/$SCARD /admin/creditcards/close/$SCARD --data-urlencode "reason=Customer asked" >/dev/null
 has "can't close while money is owed" "$(flash $A $B/admin/creditcards/details/$SCARD)" "only be closed at \$0"
+echo "== Credits count toward the minimum; refunding a credit balance (Samuel)"
+OWED=$(sql "SELECT printf('%.2f', -CAST(Balance AS REAL)) FROM Accounts WHERE Id = $SCARD")
+post $A /admin/accounts/details/$SCHK /admin/accounts/adjust/$SCHK -d direction=credit -d amount=1000 --data-urlencode "reason=Test: payday" >/dev/null   # Samuel needs money to pay the card
+pay $S $SCARD -d Option=CurrentBalance -d FromAccountId=$SCHK >/dev/null
+check "Samuel paid off the card" "$(bal $SCARD)" "0.00"
+RTX=$(sql "SELECT Id FROM Transactions WHERE AccountId = $SCARD AND Type = 'CardPurchase' AND Status = 'Posted' ORDER BY Id LIMIT 1")
+RAMT=$(sql "SELECT printf('%.2f', Amount) FROM Transactions WHERE Id = $RTX")
+post $A /admin/transactions/details/$RTX /admin/transactions/reverse/$RTX --data-urlencode "reason=Merchant refund" >/dev/null
+check "a refund after paying off leaves a credit on the card" "$(bal $SCARD)" "$RAMT"
+has "card page explains the credit" "$(curl -s -b $S $B/accounts/$SCARD)" "credit on the card"
+has "card page: nothing due" "$(curl -s -b $S $B/accounts/$SCARD)" 'title="Nothing to pay"'
+post $A /admin/creditcards/details/$SCARD /admin/creditcards/close/$SCARD --data-urlencode "reason=Customer asked" >/dev/null
+has "can't close with a credit on it" "$(flash $A $B/admin/creditcards/details/$SCARD)" "Refund it before closing"
+SCB=$(bal $SCHK)
+post $A /admin/creditcards/details/$SCARD /admin/creditcards/refundcredit/$SCARD -d moveTo=$MCHK --data-urlencode "reason=Send the credit back" >/dev/null
+has "only to the same customer's account" "$(flash $A $B/admin/creditcards/details/$SCARD)" "same customer"
+post $A /admin/creditcards/details/$SCARD /admin/creditcards/refundcredit/$SCARD -d moveTo=$SCHK --data-urlencode "reason=Send the credit back" >/dev/null
+check "credit refunded to checking" "$(bal $SCARD):$(bal $SCHK)" "0.00:$(awk -v a="$SCB" -v r="$RAMT" 'BEGIN { printf "%.2f", a + r }')"
+check "audited" "$(sql "SELECT COUNT(*) FROM AuditLogs WHERE Action = 'Card.RefundCredit' AND TargetId = '$SCARD'")" 1
 post $A /admin/creditcards/details/$UCARD /admin/creditcards/close/$UCARD --data-urlencode "reason=Customer asked to close" >/dev/null
 check "closed at \$0" "$(sql "SELECT Status FROM Accounts WHERE Id = $UCARD")" "Closed"
 check "the plastic is cancelled" "$(sql "SELECT COUNT(*) FROM Cards WHERE AccountId = $UCARD AND Status <> 'Cancelled'")" 0

@@ -441,6 +441,12 @@ public partial class AdminService : IAdminService
         {
             if (account.Status != AccountStatus.Active) return Fail($"Only an active account can be frozen (this one is {account.Status}).");
             SetStatus(account, AccountStatus.Frozen, reason);
+            if (account.IsCreditCard)
+            {
+                Notify(account, AlertType.AccountFrozen, "Card account frozen",
+                    $"{account.DisplayName} ••{account.Last4} was frozen: purchases are blocked. Payments still work, and statements continue. Please contact support.");
+                return Ok($"{account.DisplayName} ••{account.Last4} is frozen. Purchases are blocked; payments still work.");
+            }
             Notify(account, AlertType.AccountFrozen, "Account frozen",
                 $"{account.DisplayName} ••{account.Last4} was frozen: withdrawals, transfers and payments out are blocked. Deposits still work. Please contact support.");
             return Ok($"{account.DisplayName} ••{account.Last4} is frozen. Withdrawals and transfers out are blocked; deposits still work.");
@@ -507,6 +513,13 @@ public partial class AdminService : IAdminService
                 card.CancelReason = CardCancelReasons.AccountClosed;
             }
 
+            foreach (var card in await _db.Accounts.Where(c => c.AutopayFromAccountId == account.Id).ToListAsync())
+            {
+                card.Autopay = CardAutopay.None;
+                card.AutopayFromAccountId = null;
+                Notify(card, AlertType.BillFailed, "Card autopay turned off",
+                    $"Autopay on your {card.DisplayName} ••{card.Last4} paid from {account.DisplayName} ••{account.Last4}, which is now closed. Turn autopay on again with another account.");
+            }
             _audit.Add("Account.Close", $"Closed {account.DisplayName} ••{account.Last4}" + (moved > 0 ? $" after moving {moved:C}" : ""),
                        "Account", account.Id.ToString(), before, AccountSnapshot(account), reason);
             return Ok($"{account.DisplayName} ••{account.Last4} is closed." + (moved > 0 ? $" {moved:C} was moved first." : ""));
@@ -652,7 +665,7 @@ public partial class AdminService : IAdminService
             {
                 var account = leg.Account!;
                 var undoCredit = leg.IsCredit;   // undoing a credit takes money back out
-                if (undoCredit && account.Balance < leg.Amount)
+                if (undoCredit && account.IsDepositAccount && account.Balance < leg.Amount)
                     return Fail($"Can't reverse: ••{account.Last4} only has {account.Balance:C}, and overdrafts aren't allowed.");
                 var rev = PostReversalLeg(leg, leg.Amount, CustomerMemo);
                 leg.Status = TransactionStatus.Reversed;
@@ -699,17 +712,24 @@ public partial class AdminService : IAdminService
                                  counterpartyId: keepCounterparty ? leg.CounterpartyAccountId : null);
         rev.ReversalOfTransactionId = leg.Id;
         rev.Category = leg.Category;   // a reversal belongs to the same category as what it undoes
-        if (leg.Type == TransactionType.CardPurchase)
-        {
-            // The cash back that purchase earned goes too (never below $0).
-            var rate = _db.BankSettings.AsNoTracking().Select(s => s.CardCashBackRate).First();
-            account.RewardsBalance = Math.Max(0m, account.RewardsBalance - CardMath.CashBack(amount, rate));
-        }
+        if (leg.Type == TransactionType.CardPurchase) TakeBackCashBack(account, amount);
         return rev;
+    }
+
+    /// <summary>A refunded card purchase loses the cash back it earned (never below $0). Uses the current rate.</summary>
+    private void TakeBackCashBack(Account card, decimal refunded)
+    {
+        var rate = _db.BankSettings.AsNoTracking().Select(s => s.CardCashBackRate).First();
+        card.RewardsBalance = Math.Max(0m, card.RewardsBalance - CardMath.CashBack(refunded, rate));
     }
 
     private static string? WhyNotReversible(Transaction tx, Transaction? linked)
     {
+        // Card fees are waived on the Credit Cards page (so a fee can't be credited back twice); cash back redemptions
+        // aren't reversible (the cash back balance they came from is gone).
+        if (tx.Type == TransactionType.LateFee) return "Late fees are waived on the Credit Cards page (Waive), not reversed here.";
+        if (tx.Type is TransactionType.CashBackCredit or TransactionType.RewardRedemption or TransactionType.FeeWaiver)
+            return "Cash back redemptions and fee waivers can't be reversed.";
         if (tx.IsReversal || tx.ReversalOfTransactionId != null) return "This transaction is itself a reversal and can't be reversed.";
         if (tx.Status == TransactionStatus.Reversed) return "This transaction was already reversed.";
         if (linked != null && linked.Status == TransactionStatus.Reversed) return "The other side of this transfer was already reversed.";

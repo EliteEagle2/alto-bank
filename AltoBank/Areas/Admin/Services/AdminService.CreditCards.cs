@@ -14,6 +14,8 @@ public partial interface IAdminService
     Task<AdminResult> WaiveLateFeeAsync(int statementId, string reason);
     /// <summary>Only when nothing is owed and there's no credit balance (exactly $0). Unredeemed cash back is forfeited.</summary>
     Task<AdminResult> CloseCreditCardAsync(int accountId, string reason);
+    /// <summary>A card with money ON it (a refund after it was paid off): send that credit to the customer's checking or savings.</summary>
+    Task<AdminResult> RefundCreditBalanceAsync(int accountId, int toAccountId, string reason);
 }
 
 public partial class AdminService
@@ -46,6 +48,9 @@ public partial class AdminService
         {
             Card = a,
             Statements = await _db.CreditCardStatements.AsNoTracking().Where(s => s.AccountId == accountId).OrderByDescending(s => s.PeriodEnd).ToListAsync(),
+            DepositAccounts = await _db.Accounts.AsNoTracking()
+                .Where(x => x.UserId == a.UserId && x.Status != AccountStatus.Closed && (x.AccountType == AccountType.Checking || x.AccountType == AccountType.Savings))
+                .ToListAsync(),
             Recent = await _db.Transactions.AsNoTracking().Where(t => t.AccountId == accountId)
                 .OrderByDescending(t => t.Date).ThenByDescending(t => t.Id).Take(25).ToListAsync(),
             Application = await _db.AccountApplications.AsNoTracking().FirstOrDefaultAsync(x => x.AccountId == accountId),
@@ -81,16 +86,47 @@ public partial class AdminService
             if (!s.LateFeeCharged || s.LateFeeTransactionId is not int feeId) return Fail("No late fee was charged on this statement.");
             if (s.LateFeeWaived) return Fail("That late fee was already waived.");
             var fee = await _db.Transactions.FirstAsync(t => t.Id == feeId);
+            if (fee.Status != TransactionStatus.Posted || fee.ReversedByTransactionId != null) return Fail("That late fee was already credited back.");
             var a = await _db.Accounts.FirstAsync(x => x.Id == s.AccountId);
+            if (a.Status == AccountStatus.Closed) return Fail("This card is closed.");
             a.Balance += fee.Amount;
             var w = AddTransaction(a, TransactionType.FeeWaiver, fee.Amount, "Late fee waived", memo: CustomerMemo);
             w.Category = fee.Category;
+            w.ReversalOfTransactionId = fee.Id;   // the waiver undoes the fee: marked like a reversal so it can't happen twice
+            fee.Status = TransactionStatus.Reversed;
             s.LateFeeWaived = true;
+            await _db.SaveChangesAsync();
+            fee.ReversedByTransactionId = w.Id;
             _alerts.Add(a.UserId, AlertType.CardLateFee, "Late fee waived",
                 $"We waived the {fee.Amount:C} late fee on your {a.DisplayName} ••{a.Last4}.", $"/accounts/{a.Id}");
             _audit.Add("Card.WaiveFee", $"Waived the {fee.Amount:C} late fee on ••{a.Last4} (statement {s.PeriodEnd:yyyy-MM-dd})",
                        "Account", a.Id.ToString(), new { waived = false }, new { waived = true, amount = fee.Amount }, reason);
             return Ok($"Waived the {fee.Amount:C} late fee.");
+        });
+
+    public Task<AdminResult> RefundCreditBalanceAsync(int accountId, int toAccountId, string reason) =>
+        ExecuteAsync(reason, true, async () =>
+        {
+            var card = await _db.Accounts.FirstOrDefaultAsync(x => x.Id == accountId && x.AccountType == AccountType.CreditCard);
+            if (card == null) return Fail("Card not found.");
+            if (card.Balance <= 0) return Fail("There's no credit balance on this card to refund.");
+            var to = await _db.Accounts.FirstOrDefaultAsync(x => x.Id == toAccountId);
+            if (to == null || to.UserId != card.UserId || !to.IsDepositAccount)
+                return Fail("Choose one of the same customer's checking or savings accounts.");
+            if (to.Status == AccountStatus.Closed) return Fail("Can't move money into a closed account.");
+            var amount = card.Balance;
+            card.Balance = 0m;
+            to.Balance += amount;
+            var outLeg = AddTransaction(card, TransactionType.TransferOut, amount, $"Credit balance refunded to ••{to.Last4}", CustomerMemo, to.Id);
+            var inLeg = AddTransaction(to, TransactionType.TransferIn, amount, $"Credit balance refund from {card.DisplayName} ••{card.Last4}", CustomerMemo, card.Id);
+            await _db.SaveChangesAsync();
+            outLeg.LinkedTransactionId = inLeg.Id;
+            inLeg.LinkedTransactionId = outLeg.Id;
+            _alerts.Add(card.UserId, AlertType.CardStatement, "Card credit refunded",
+                $"The {amount:C} credit on your {card.DisplayName} ••{card.Last4} was sent to {to.DisplayName} ••{to.Last4}.", $"/accounts/{to.Id}");
+            _audit.Add("Card.RefundCredit", $"Refunded the {amount:C} credit balance on ••{card.Last4} to ••{to.Last4}", "Account", card.Id.ToString(),
+                       new { balance = amount }, new { balance = 0m, to = to.Id }, reason);
+            return Ok($"Refunded {amount:C} to {to.DisplayName} ••{to.Last4}.");
         });
 
     public Task<AdminResult> CloseCreditCardAsync(int accountId, string reason) =>
@@ -112,7 +148,7 @@ public partial class AdminService
             a.AutopayFromAccountId = null;
             a.RewardsBalance = 0m;
             foreach (var c in a.Cards.Where(c => c.Status != CardStatus.Cancelled)) c.Status = CardStatus.Cancelled;
-            _alerts.Add(a.UserId, AlertType.AccountFrozen, "Card closed",
+            _alerts.Add(a.UserId, AlertType.CardStatement, "Card closed",
                 $"Your {a.DisplayName} ••{a.Last4} was closed." + (forfeited > 0 ? $" Unredeemed cash back of {forfeited:C} was forfeited." : ""), $"/accounts/{a.Id}");
             _audit.Add("Card.Close", $"Closed ••{a.Last4}" + (forfeited > 0 ? $" ({forfeited:C} cash back forfeited)" : ""), "Account", a.Id.ToString(),
                        new { status = "Active" }, new { status = "Closed", forfeited }, reason);

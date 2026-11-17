@@ -42,11 +42,11 @@ public class CreditCardService : ICreditCardService
         var s = await _db.CreditCardStatements.AsNoTracking().Include(x => x.Account!).ThenInclude(a => a.User)
             .FirstOrDefaultAsync(x => x.Id == statementId && x.Account!.UserId == userId);   // ownership check
         if (s == null) return null;
-        var prevLast = await _db.CreditCardStatements.AsNoTracking()
-            .Where(x => x.AccountId == s.AccountId && x.PeriodEnd < s.PeriodEnd)
-            .OrderByDescending(x => x.PeriodEnd).Select(x => (int?)x.LastTransactionId).FirstOrDefaultAsync() ?? 0;
+        // The rows dated in the statement period (bank days), the same rule the statement close uses.
+        var from = BankTime.StartOfDayUtc(s.PeriodStart);
+        var to = BankTime.StartOfDayUtc(s.PeriodEnd.AddDays(1));
         var rows = await _db.Transactions.AsNoTracking()
-            .Where(t => t.AccountId == s.AccountId && t.Id > prevLast && t.Id <= s.LastTransactionId)
+            .Where(t => t.AccountId == s.AccountId && t.Date >= from && t.Date < to)
             .OrderBy(t => t.Date).ThenBy(t => t.Id).ToListAsync();
         return new CardStatementView(s.Account!, s.Account!.User!, s, rows, s.Account.RewardsBalance);
     }

@@ -21,7 +21,7 @@
 else if (a.Status == AccountStatus.Closed)
 {
     <div class="status-banner closed" role="alert"><i class="bi bi-slash-circle"></i>
-        <div><strong>This card was closed@(a.ClosedAt == null ? "" : " on " + a.ClosedAt.Value.ToString("MMM d, yyyy")).</strong> You can still see its history and statements.</div></div>
+        <div><strong>This card was closed@(a.ClosedAt == null ? "" : " on " + BankTime.ToLocal(a.ClosedAt.Value).ToString("MMM d, yyyy")).</strong> You can still see its history and statements.</div></div>
 }
 else if (pastDue)
 {
@@ -40,7 +40,7 @@ else if (pastDue)
         <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
             <span class="account-type">Credit card</span>
             <span class="acct-status acct-status--@a.Status.ToString().ToLowerInvariant()">@a.Status</span>
-            <span class="text-muted-alto small">Opened @a.OpenedAt.ToString("MMM d, yyyy")</span>
+            <span class="text-muted-alto small">Opened @BankTime.ToLocal(a.OpenedAt).ToString("MMM d, yyyy")</span>
         </div>
         <h1 class="acct-name" data-account-name>@a.DisplayName</h1>
         <div class="account-digits mb-3">•••• @a.Last4</div>
@@ -49,7 +49,7 @@ else if (pastDue)
             <div>
                 <div class="acct-label">Current balance <span class="text-muted-alto">(you owe)</span></div>
                 <div class="acct-balance"><money amount="@a.AmountOwed" /></div>
-                @if (a.Balance > 0) { <div class="small text-success-alto">Plus a <money amount="@a.Balance" /> credit balance</div> }
+                @if (a.Balance > 0) { <div class="small text-success-alto">You have a <money amount="@a.Balance" /> credit on the card. Contact us to have it sent to checking.</div> }
             </div>
             <div>
                 <div class="acct-label">Available credit</div>

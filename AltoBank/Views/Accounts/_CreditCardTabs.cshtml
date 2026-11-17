@@ -95,6 +95,11 @@
                 <p class="small text-muted-alto">Pays automatically on each due date. If a payment can't go through, we send you an alert right away.</p>
                 @if (a.Status != AccountStatus.Closed)
                 {
+                    @if (a.Autopay != CardAutopay.None && Model.AutopayFrom == null)
+                    {
+                        <div class="notice notice-info small mb-3" role="alert"><i class="bi bi-exclamation-triangle"></i>
+                            <div>The account autopay pays from can't be used right now (it's frozen or closed). Choose another account and save, or autopay will fail.</div></div>
+                    }
                     <form method="post" asp-controller="CreditCard" asp-action="Autopay" asp-route-id="@a.Id">
                         @foreach (var (mode, label) in new[] { (CardAutopay.None, "Off"), (CardAutopay.Minimum, "The minimum payment"), (CardAutopay.StatementBalance, "The full statement balance (no interest)") })
                         {

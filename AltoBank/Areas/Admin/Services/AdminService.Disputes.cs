@@ -90,8 +90,9 @@ public partial class AdminService
 
             if (d.ProvisionalCreditTransactionId is int creditId)
             {
-                // The provisional credit becomes the refund: no second payment.
+                // The provisional credit becomes the refund: no second payment. A card purchase loses its cash back.
                 refundId = creditId;
+                if (original.Type == TransactionType.CardPurchase) TakeBackCashBack(original.Account!, d.RefundAmount);
                 if (full) { original.Status = TransactionStatus.Reversed; original.ReversedByTransactionId = creditId; }
             }
             else

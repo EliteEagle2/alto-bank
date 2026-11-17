@@ -8,12 +8,13 @@
     var owed = c.AmountOwed;
     var today = BankTime.Today;
     var pastDue = s != null && Model.MinimumLeft > 0 && s.DueDate < today;
+    var dueGone = s != null && s.DueDate < today;   // after the due date the "pay by" promises no longer apply
     var options = new List<(CardPaymentOption Option, string Label, decimal? Amount, string Help)>
     {
         (CardPaymentOption.Minimum, "Minimum payment", Model.MinimumLeft,
-            s == null ? "No statement yet." : Model.MinimumLeft == 0 ? "Already paid for this statement." : (pastDue ? "Past due. " : "") + $"Pay at least this by {s.DueDate:MMM d} to avoid a late fee. Interest may apply."),
+            s == null ? "No statement yet." : Model.MinimumLeft == 0 ? "Already paid for this statement." : pastDue ? $"Past due since {s.DueDate:MMM d}. Pay it now." : $"Pay at least this by {s.DueDate:MMM d} to avoid a late fee. Interest may apply."),
         (CardPaymentOption.StatementBalance, "Statement balance", Model.StatementLeft,
-            s == null ? "No statement yet." : Model.StatementLeft == 0 ? "Paid in full. Nice!" : $"Pay this by {s.DueDate:MMM d} and you won't pay interest."),
+            s == null ? "No statement yet." : Model.StatementLeft == 0 ? "Paid in full. Nice!" : dueGone ? "Your last statement's balance. Paying it in full gets you back to no interest." : $"Pay this by {s.DueDate:MMM d} and you won't pay interest."),
         (CardPaymentOption.CurrentBalance, "Current balance", owed, "Everything you owe right now, including purchases since your last statement."),
         (CardPaymentOption.Custom, "Other amount", null, $"Any amount up to {owed:C}.")
     };

@@ -44,6 +44,13 @@ public class CreditCardsController : AdminControllerBase
     }
 
     [HttpPost]
+    public async Task<IActionResult> RefundCredit(int id, int? moveTo, string reason)
+    {
+        Flash(moveTo is int to ? await _admin.RefundCreditBalanceAsync(id, to, reason) : new AdminResult(false, "Choose the account to refund to."));
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
+    [HttpPost]
     public async Task<IActionResult> Close(int id, string reason)
     {
         Flash(await _admin.CloseCreditCardAsync(id, reason));

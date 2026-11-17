@@ -26,4 +26,5 @@ public class CreditCardDetailViewModel
     public List<Transaction> Recent { get; set; } = new();
     public AccountApplication? Application { get; set; }
     public Account? AutopayFrom { get; set; }
+    public List<Account> DepositAccounts { get; set; } = new();   // where a credit balance can be refunded
 }

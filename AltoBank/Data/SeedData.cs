@@ -213,6 +213,15 @@ public static class SeedData
             var lastId = await db.Transactions.Where(t => t.AccountId == card.Id).Select(t => (int?)t.Id).MaxAsync() ?? 0;
             for (var day = opened; day < today; day = day.AddDays(1))
             {
+                // Start of the bank day: the scheduler's run (yesterday's statement close + interest, autopay, late fee).
+                // Interest keeps its own date (the end of the close day); anything else it posted is dated early this morning.
+                await bank.RunCardCycleAsync(card.Id, day);
+                foreach (var t in await db.Transactions.Where(t => t.AccountId == card.Id && t.Id > lastId && t.Type != TransactionType.InterestCharge).ToListAsync())
+                    t.Date = At(day, 1);
+                foreach (var st in await db.CreditCardStatements.Where(x => x.AccountId == card.Id && x.PeriodEnd == day.AddDays(-1)).ToListAsync())
+                    st.ClosedAt = At(day, 0, 30);
+                await db.SaveChangesAsync();
+                lastId = await db.Transactions.Where(t => t.AccountId == card.Id).Select(t => (int?)t.Id).MaxAsync() ?? lastId;
                 var hour = 9;
                 foreach (var p in purchases.Where(p => p.Day == day))
                 {
@@ -237,13 +246,8 @@ public static class SeedData
                     await db.SaveChangesAsync();
                     lastId = await db.Transactions.Where(t => t.AccountId == card.Id).MaxAsync(t => t.Id);
                 }
-                // End of the bank day: statement close (+ interest), late fee. New rows are dated late that evening.
-                await bank.RunCardCycleAsync(card.Id, day);
-                lastId = await Backdate(card.Id, lastId, At(day, 23, 30));
-                foreach (var s in await db.CreditCardStatements.Where(s => s.AccountId == card.Id && s.PeriodEnd == day).ToListAsync())
-                    s.ClosedAt = At(day, 23, 30);
-                await db.SaveChangesAsync();
             }
+            // Today's run (closes the statement that ended yesterday, if any) is left to the real scheduler.
         }
 
         // Current month: uncategorized merchants only (the seeded budgets are sized on this month's spending).

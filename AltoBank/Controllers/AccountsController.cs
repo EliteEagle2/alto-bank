@@ -119,7 +119,10 @@ public class AccountsController : Controller
     public async Task<IActionResult> Statement(int id, int year, int month)
     {
         var data = await _bank.GetStatementAsync(UserId, id, year, month);   // explicit loading inside
-        return data == null ? NotFound() : View(data);
+        if (data == null) return NotFound();
+        // An Alto Peak card has real statements (close date, minimum, due date), not calendar months.
+        if (data.Account.IsCreditCard) return Redirect(Url.Action(nameof(Details), new { id })! + "#statements");
+        return View(data);
     }
 
     // GET /accounts/5/activity.csv?search=&kind=&from=&to= — the Activity tab's current filters as CSV. Owner-only.

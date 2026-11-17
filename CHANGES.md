@@ -24,9 +24,47 @@ Every suite runs against a separate test server on a freshly reset scratch datab
 | insights | categories, Insights page + API, budgets, budget alerts | 127 |
 | checkdeposit | uploads, limits, duplicates, races, pending balance, review queue | 121 |
 | disputes | eligibility, form rules, provisional credit, partial / P2P refunds, clawback overdraft, races | 134 |
-| **Total** | | **1,077** |
+| creditcard | simulated decisions, limit + simultaneous purchases, statement cycle, grace period, interest, late fee + waive, autopay, cash back, card disputes, admin actions | 210 |
+| **Total** | | **1,287** |
 
 ## Phase 2
+
+### Feature 6: Alto Peak credit card (simulated credit)
+
+- **Applying**: Alto Peak is a third choice in the 7-step application. For a card, step 6 asks for the monthly housing
+  payment and the Cardmember Agreement instead of an opening deposit. The decision is **simulated** (`CreditDecisionRules`):
+  income range, housing payment and Alto history, with no credit check and no SSN. Approved, sent for review or denied,
+  with a limit of $500-$5,000. "Demo decision, no credit check" appears on every page that shows a decision (product page,
+  application, decision and status pages, Profile, admin application and card pages). One card per customer.
+- **The card** (`/accounts/{id}`): what you owe, available credit, the statement balance, the minimum due and its date, a
+  credit-used bar, a past-due banner, and a demo "Make a purchase" (there's no real store). Tabs: Activity (rows show
+  "Owed"), Statements (printable), Rewards & autopay, Card (the same card controls as the debit card).
+- **Statements** close monthly once the close day is over and cover the activity dated in that period. The minimum is
+  the larger of $25 or 2% (or the whole balance if smaller), due 25 days later. **No interest** when the last statement
+  was paid in full by its due date; otherwise daily-balance interest at the purchase APR. A late fee if the minimum isn't
+  paid by the due date (refunds and credits count toward it). A reminder 5 days before the due date.
+- **Pay card** (`/credit-card/{id}/pay`): minimum, statement balance, current balance or another amount, from checking or
+  savings; each option says what it means (avoid a late fee, avoid interest). Paying more than you owe is refused.
+- **Autopay** (minimum or statement balance) on the due date, with an alert if it can't pay. It turns off, with an alert,
+  if the account it pays from is closed.
+- **Cash back**: 1.5% on purchases, redeemed (at $10 or more) to checking/savings or as a statement credit. A refunded
+  purchase loses its cash back.
+- **Disputes** work on card purchases; the refund goes back on the card.
+- **Admin Credit Cards** (Money section): every card, a detail page with statements, Change limit, Waive late fee, Refund a
+  credit balance, Freeze, and Close (only at $0). Card terms (APR, late fee, cash back, minimum) are on Settings. The
+  generic account actions (adjust, close, reopen) send staff to the card page instead.
+- **Kept out of deposit flows**: a card can't be used for transfers, deposits, withdrawals, P2P, bill pay, scheduled
+  payments, check deposits or as the default account. The dashboard's total counts checking and savings only (net worth
+  with cards and loans comes with Feature 7).
+- **Seed**: three months of history replayed through the real code. Jordan pays in full with autopay (no interest),
+  Maya pays minimums (interest and one late fee), Samuel has an application waiting for review.
+- **Review fixes**: statements now assign activity by bank date (correct catch-up after downtime); refunds, waivers and
+  statement credits count toward the minimum and the amount due is capped at what's owed; a late fee can't be credited
+  twice (waive marks it reversed, Reverse refuses fees); autopay pays every due statement, oldest first; cash back is
+  taken back when a provisional credit becomes final; a statement credit can't leave money on the card; cards refused
+  for scheduled payments; the idle scheduler no longer takes the database write lock.
+- **Docs**: `docs/REQUIREMENTS.md` had an older copy of itself spliced in since Feature 4 (a dollar sign followed by a
+  backtick in a text replacement); repaired.
 
 ### Feature 5: Dispute a transaction
 

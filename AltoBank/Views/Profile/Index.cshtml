@@ -241,6 +241,7 @@
                                                 @if (app.Status == ApplicationStatus.Denied && !string.IsNullOrWhiteSpace(app.DenialReason))
                                                 {
                                                     <div class="small text-muted-alto mt-1">Reason: @app.DenialReason</div>
+                                                    @if (app.AccountType == AccountType.CreditCard) { <span class="demo-note mt-1">Demo decision, no credit check</span> }
                                                 }
                                             </td>
                                         </tr>
