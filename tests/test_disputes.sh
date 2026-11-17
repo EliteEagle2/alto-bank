@@ -265,7 +265,7 @@ check "still submitted" "$(sql "SELECT Status FROM Disputes WHERE Id = $D8")" "S
 
 echo "== Simultaneous submissions on the same transaction create only one dispute"
 SIM=$(pick $JCHK 0)
-for n in 1 2 3 4; do ( dsub $C $SIM NotReceived "$DESC" > "$T/sim$n.txt" ) & done; wait
+for n in 1 2 3 4; do ( CJ=$(mktemp); cp $C $CJ; dsub $CJ $SIM NotReceived "$DESC" > "$T/sim$n.txt" ) & done; wait   # own cookie jar each (parallel -c writes corrupt a shared one)
 check "exactly one dispute" "$(sql "SELECT COUNT(*) FROM Disputes WHERE TransactionId = $SIM")" 1
 check "every request ends on that one dispute (the losers are shown it, not an error)" "$(for f in $T/sim*.txt; do cat "$f"; echo; done | sort -u | wc -l | tr -d ' ') $(for f in $T/sim*.txt; do cat "$f"; echo; done | sort -u)" "1 302 $B/disputes/$(sql "SELECT Id FROM Disputes WHERE TransactionId = $SIM")"
 

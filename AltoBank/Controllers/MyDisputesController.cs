@@ -71,6 +71,13 @@ public class MyDisputesController : Controller
                 TempData["Success"] = result.Message;
                 return RedirectToAction(nameof(Details), new { id = dispute!.Id });
             }
+            // Lost a race with another submit of the same dispute (a double click, two tabs): the unique index let only
+            // one through. Show the dispute that won instead of the form again.
+            if ((await _disputes.ListAsync(UserId)).FirstOrDefault(d => d.TransactionId == t.Id) is { } existing)
+            {
+                TempData["Error"] = result.Message;
+                return RedirectToAction(nameof(Details), new { id = existing.Id });
+            }
             ModelState.AddModelError(string.Empty, result.Message);
         }
         ViewData["AttachmentCleared"] = form.Attachment != null;

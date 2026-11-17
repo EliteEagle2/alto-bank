@@ -232,7 +232,7 @@ pairtotal() { sql "SELECT printf('%.2f', SUM(CAST(Balance AS REAL))) FROM Accoun
 T0=$(pairtotal)
 rm -f /tmp/conc_*.txt
 for i in $(seq 1 16); do (echo "$(code -b $C -H "$J" -d "{\"fromAccountId\":$JCHK,\"toAccountId\":$JSAV,\"amount\":0.01}" $B/api/transfers)" > /tmp/conc_t$i.txt) & done
-for i in 1 2 3; do (post $A /admin/scheduled /admin/scheduled/runnow --data-urlencode "reason=Concurrency test $i" | cut -d' ' -f1 > /tmp/conc_r$i.txt) & done
+for i in 1 2 3; do (AJ=$(mktemp); cp $A $AJ; post $AJ /admin/scheduled /admin/scheduled/runnow --data-urlencode "reason=Concurrency test $i" | cut -d' ' -f1 > /tmp/conc_r$i.txt) & done
 wait
 check "no server errors under load" "$(cat /tmp/conc_*.txt | grep -c '^5')" 0
 check "every transfer answered 200 (busy timeout waits instead of 'database is locked')" "$(cat /tmp/conc_t*.txt | grep -c '^200$')" 16
