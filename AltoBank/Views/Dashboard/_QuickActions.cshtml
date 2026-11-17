@@ -1,15 +1,8 @@
-@* Row of shortcut buttons at the top of the dashboard. *@
-<div class="row g-3 mb-4">
-    <div class="col-6 col-md-3">
-        <a class="glass glass-hover quick-action" asp-controller="Transactions" asp-action="Deposit"><i class="bi bi-arrow-down-circle"></i>Deposit</a>
-    </div>
-    <div class="col-6 col-md-3">
-        <a class="glass glass-hover quick-action" asp-controller="Transactions" asp-action="Withdraw"><i class="bi bi-arrow-up-circle"></i>Withdraw</a>
-    </div>
-    <div class="col-6 col-md-3">
-        <a class="glass glass-hover quick-action" asp-controller="Transactions" asp-action="Transfer"><i class="bi bi-arrow-left-right"></i>Transfer</a>
-    </div>
-    <div class="col-6 col-md-3">
-        <a class="glass glass-hover quick-action" asp-controller="Accounts" asp-action="Apply"><i class="bi bi-plus-lg"></i>Open Account</a>
-    </div>
-</div>
+@* Shortcuts at the top of the dashboard: a slim row, so the balance above stays the one thing that stands out.
+   Transfer first (the most used). *@
+<nav class="quick-row" aria-label="Quick actions">
+    <a class="quick-pill" asp-controller="Transactions" asp-action="Transfer"><i class="bi bi-arrow-left-right" aria-hidden="true"></i>Transfer</a>
+    <a class="quick-pill" asp-controller="Transactions" asp-action="Deposit"><i class="bi bi-arrow-down-circle" aria-hidden="true"></i>Deposit</a>
+    <a class="quick-pill" asp-controller="Transactions" asp-action="Withdraw"><i class="bi bi-arrow-up-circle" aria-hidden="true"></i>Withdraw</a>
+    <a class="quick-pill" asp-controller="Accounts" asp-action="Apply"><i class="bi bi-plus-lg" aria-hidden="true"></i>Open an account</a>
+</nav>

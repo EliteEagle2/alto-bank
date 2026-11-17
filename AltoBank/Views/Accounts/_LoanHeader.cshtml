@@ -22,13 +22,13 @@
 }
 else if (v.Overdue)
 {
-    <div class="status-banner frozen" role="alert"><i class="bi bi-exclamation-triangle"></i>
+    <div class="status-banner due" role="alert"><i class="bi bi-exclamation-triangle"></i>
         <div><strong>Your @l.NextDueDate!.Value.ToString("MMM d") payment is overdue.</strong>
             @(q.PaymentsPastDue > 1 ? $"{q.PaymentsPastDue} payments are past due. " : "")@(l.FeesOwed > 0 ? $"Late fees of {l.FeesOwed:C} were added. " : "")Please <a asp-controller="Loan" asp-action="Pay" asp-route-id="@a.Id">make a payment</a> now.</div></div>
 }
 else if (v.PastDue)
 {
-    <div class="status-banner frozen" role="alert"><i class="bi bi-clock-history"></i>
+    <div class="status-banner due" role="alert"><i class="bi bi-clock-history"></i>
         <div><strong>Your <money amount="@q.ScheduledAmount" /> payment was due @l.NextDueDate!.Value.ToString("MMM d").</strong>
             Pay by @graceEnds!.Value.ToString("MMM d") to avoid a <money amount="@v.LateFee" /> late fee.</div></div>
 }
@@ -46,7 +46,7 @@ else if (v.PastDue)
     <div class="acct-summary">
         <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
             <span class="account-type">Loan</span>
-            <span class="acct-status acct-status--@(active ? (v.Overdue ? "frozen" : "active") : "closed")">@(active ? (v.Overdue ? "Overdue" : "Active") : "Paid off")</span>
+            <span class="acct-status acct-status--@(active ? (v.Overdue ? "overdue" : "active") : "closed")">@(active ? (v.Overdue ? "Overdue" : "Active") : "Paid off")</span>
             <span class="text-muted-alto small">Funded @BankTime.ToLocal(l.DisbursedAt).ToString("MMM d, yyyy")</span>
         </div>
         <h1 class="acct-name" data-account-name>@a.DisplayName</h1>

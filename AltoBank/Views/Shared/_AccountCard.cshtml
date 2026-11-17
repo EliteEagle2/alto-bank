@@ -1,7 +1,8 @@
 @model Account
 @* Reusable account summary card (used on the Dashboard and Accounts pages).
    Shows the nickname when set, and a progress bar for savings accounts with a goal.
-   Loans: the page puts ViewData["LoanViews"] (account id → LoanView) so the card can show the next payment. *@
+   Loans: the page puts ViewData["LoanViews"] (account id → LoanView) so the card can show the next payment.
+   The whole card opens the account (the name is a stretched link); it has at most ONE action, the one people use most. *@
 @{
     var loanView = Model.IsLoan && ViewData["LoanViews"] is Dictionary<int, LoanView> lv ? lv.GetValueOrDefault(Model.Id) : null;
 }
@@ -11,7 +12,7 @@
         <span class="account-digits">•••• @Model.Last4</span>
     </div>
     @* The account name links to the Account Details page at /accounts/{id}. *@
-    <a class="account-name account-link" asp-controller="Accounts" asp-action="Details" asp-route-id="@Model.Id">@Model.DisplayName <i class="bi bi-chevron-right small"></i></a>
+    <a class="account-name account-link stretched-link" asp-controller="Accounts" asp-action="Details" asp-route-id="@Model.Id">@Model.DisplayName <i class="bi bi-chevron-right small"></i></a>
     @if (Model.IsCreditCard)
     {
         @* A card balance is money OWED (stored negative): show it as a positive "you owe" amount. *@
@@ -57,7 +58,6 @@
     }
 
     <div class="card-actions d-flex flex-wrap gap-2">
-        <a class="btn btn-alto-outline btn-sm" asp-controller="Accounts" asp-action="Details" asp-route-id="@Model.Id">Details</a>
         @if (Model.IsCreditCard)
         {
             @if (Model.Status != AccountStatus.Closed && Model.AmountOwed > 0)
@@ -74,9 +74,10 @@
         }
         else
         {
-            <a class="btn btn-alto-ghost btn-sm" asp-controller="Transactions" asp-action="Deposit" asp-route-accountId="@Model.Id">Deposit</a>
-            <a class="btn btn-alto-ghost btn-sm" asp-controller="Transactions" asp-action="Withdraw" asp-route-accountId="@Model.Id">Withdraw</a>
-            <a class="btn btn-alto-ghost btn-sm" asp-controller="Transactions" asp-action="Transfer" asp-route-fromAccountId="@Model.Id">Transfer</a>
+            @if (Model.Status == AccountStatus.Active)
+            {
+                <a class="btn btn-alto-ghost btn-sm" asp-controller="Transactions" asp-action="Transfer" asp-route-fromAccountId="@Model.Id">Transfer</a>
+            }
         }
     </div>
 </div>

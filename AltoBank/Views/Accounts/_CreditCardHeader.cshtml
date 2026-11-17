@@ -25,7 +25,7 @@ else if (a.Status == AccountStatus.Closed)
 }
 else if (pastDue)
 {
-    <div class="status-banner frozen" role="alert"><i class="bi bi-exclamation-triangle"></i>
+    <div class="status-banner due" role="alert"><i class="bi bi-exclamation-triangle"></i>
         <div><strong>Your minimum payment of <money amount="@Model.MinimumLeft" /> was due @s!.DueDate.ToString("MMM d").</strong> Pay it now to bring the card up to date.</div></div>
 }
 
