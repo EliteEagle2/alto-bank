@@ -73,7 +73,7 @@ public class AccountsController : Controller
             months.Add(m);
 
         ViewData["Title"] = account.DisplayName;
-        var (disputable, disputeStatuses) = await _disputes.GetRowInfoAsync(UserId, activity.Items);
+        var (disputable, disputeStatuses, partlyRefunded) = await _disputes.GetRowInfoAsync(UserId, activity.Items);
         return View(new AccountDetailsViewModel
         {
             Account = account,
@@ -94,7 +94,8 @@ public class AccountsController : Controller
             BankAddress = BankService.BankAddress,
             PendingChecks = await _checks.GetPendingAsync(UserId, id),
             Disputable = disputable,
-            DisputeStatuses = disputeStatuses
+            DisputeStatuses = disputeStatuses,
+            PartlyRefunded = partlyRefunded
         });
     }
 

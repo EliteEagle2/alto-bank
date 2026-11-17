@@ -31,7 +31,7 @@
                 <span class="cat-chip" data-cat-chip>@Categories.Label(t.Category)</span>
                 @if (Model.Dispute is DisputeStatus ds)
                 {
-                    <span class="badge-dispute @(ds == DisputeStatus.Approved ? "is-refunded" : ds == DisputeStatus.Denied ? "is-denied" : "")">@(ds == DisputeStatus.Approved ? "Refunded" : ds == DisputeStatus.Denied ? "Dispute denied" : "Disputed")</span>
+                    <span class="badge-dispute @(ds == DisputeStatus.Approved ? "is-refunded" : ds == DisputeStatus.Denied ? "is-denied" : "")">@(ds == DisputeStatus.Approved ? (Model.PartlyRefunded ? "Partly refunded" : "Refunded") : ds == DisputeStatus.Denied ? "Dispute denied" : "Disputed")</span>
                 }
                 else if (reversed) { <span class="badge-reversed">Reversed</span> }
             </span>

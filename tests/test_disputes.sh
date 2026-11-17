@@ -72,6 +72,9 @@ check "New page for an old one sends you back with the reason" "$(code -b $C "$B
 UR=$(sql "SELECT TransactionId FROM Disputes WHERE UserId = '$JID' AND Status = 'UnderReview'")
 dsub $C $UR Other "$DESC" >/dev/null
 has "already disputed refused" "$(flash $C $B/accounts)" "already has a dispute"
+URD=$(sql "SELECT Id FROM Disputes WHERE TransactionId = $UR")
+check "a stale form goes to the existing dispute, never back to the form (no redirect loop)" "$(dsub $C $UR Other "$DESC")" "302 $B/disputes/$URD"
+check "the form URL for it does the same" "$(curl -s -b $C -o /dev/null -w "%{redirect_url}" "$B/disputes/new?transactionId=$UR")" "$B/disputes/$URD"
 REV=$(pick $JCHK 6)
 post $A /admin/transactions/details/$REV /admin/transactions/reverse/$REV --data-urlencode "reason=Duplicate posting by the bank" >/dev/null
 dsub $C $REV Other "$DESC" >/dev/null
@@ -153,6 +156,8 @@ adm approve $D2 "The itemized receipt shows the lower amount" >/dev/null
 check "balance up by 12.50 only" "$(awk -v a=$BAL1 -v b=$(bal $JCHK) 'BEGIN{printf "%.2f", b-a}')" "12.50"
 check "partial reversal for 12.50, linked to the charge" "$(sql "SELECT r.Type || ':' || printf('%.2f', r.Amount) || ':' || r.ReversalOfTransactionId FROM Disputes d JOIN Transactions r ON r.Id = d.RefundTransactionId WHERE d.Id = $D2")" "ReversalCredit:12.50:$WA"
 check "the charge itself stays Posted" "$(sql "SELECT Status FROM Transactions WHERE Id = $WA")" "Posted"
+has "activity badge: Partly refunded" "$(txrow $C $WA $JCHK)" "\"disputeStatus\":\"Approved\",\"partlyRefunded\":true"
+has "customer timeline links the refund transaction" "$(curl -s -b $C $B/disputes/$D2)" "Refund: <strong>Dispute refund:"
 SPENT1=$(curl -s -b $C $B/api/insights/summary | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const c=JSON.parse(s).categories.find(x=>x.key==='$CAT');console.log((c?c.amount:0).toFixed(2))})")
 WMONTH=$(sql "SELECT strftime('%Y-%m', Date) = strftime('%Y-%m','now') FROM Transactions WHERE Id = $WA")
 if [ "$WMONTH" = 1 ]; then check "Insights: the partial refund comes off that category's spending" "$(awk -v a=$SPENT0 -v b=$SPENT1 'BEGIN{printf "%.2f", a-b}')" "12.50"; else ok "Insights check skipped (charge from an earlier month)"; fi
@@ -221,6 +226,11 @@ has "admin work queue flags it" "$(curl -s -b $A $B/admin)" "is overdrawn by \$[
 has "detail page flags it" "$(curl -s -b $A $B/admin/disputes/details/$D6)" "Clawback overdrew the account"
 post $S /transactions/deposit /transactions/deposit -d "AccountId=$SCHK&Amount=$SPAMT" --data-urlencode "Description=Paycheck" >/dev/null
 
+echo "== Admin Reverse after a denied dispute whose provisional credit was taken back"
+MD=$(sql "SELECT TransactionId FROM Disputes WHERE UserId = '$MID' AND Status = 'Denied'")
+post $A /admin/transactions/details/$MD /admin/transactions/reverse/$MD --data-urlencode "reason=Merchant refunded through us later" >/dev/null
+has "allowed (the credit and clawback net to zero)" "$(flash $A $B/admin/transactions/details/$MD)" "Reversed transaction #$MD"
+
 echo "== P2P: the sender is refunded, the recipient keeps the payment"
 SENT=$(sql "SELECT t.Id FROM Transactions t WHERE t.AccountId = $JCHK AND t.Type = 'PaymentSent' AND t.Status = 'Posted' AND NOT EXISTS (SELECT 1 FROM Disputes d WHERE d.TransactionId = t.Id) ORDER BY t.Date DESC LIMIT 1")
 RECV=$(sql "SELECT LinkedTransactionId FROM Transactions WHERE Id = $SENT")
@@ -234,6 +244,7 @@ check "recipient's balance unchanged" "$(bal $RACC)" "$RBAL"
 check "recipient's leg untouched" "$(sql "SELECT Status || ':' || IFNULL(ReversedByTransactionId,'none') FROM Transactions WHERE Id = $RECV")" "Posted:none"
 check "no reversal on the recipient's side" "$(sql "SELECT COUNT(*) FROM Transactions WHERE ReversalOfTransactionId = $RECV")" 0
 check "the payment record is unchanged" "$(sql "SELECT Status FROM Payments WHERE SentTransactionId = $SENT")" "$PSTAT"
+check "the refund is from Alto (described as a dispute refund, no counterparty)" "$(sql "SELECT (Description LIKE 'Dispute refund:%') || ':' || IFNULL(CounterpartyAccountId,'none') FROM Transactions WHERE Id = (SELECT RefundTransactionId FROM Disputes WHERE Id = $D7)")" "1:none"
 
 echo "== I didn't authorize it: freeze the card in one click"
 CARD=$(sql "SELECT Id FROM Cards WHERE AccountId = $JCHK AND Status = 'Active' LIMIT 1")
@@ -256,7 +267,7 @@ echo "== Simultaneous submissions on the same transaction create only one disput
 SIM=$(pick $JCHK 0)
 for n in 1 2 3 4; do ( dsub $C $SIM NotReceived "$DESC" > "$T/sim$n.txt" ) & done; wait
 check "exactly one dispute" "$(sql "SELECT COUNT(*) FROM Disputes WHERE TransactionId = $SIM")" 1
-check "exactly one request created a dispute" "$(for f in $T/sim*.txt; do cat "$f"; echo; done | grep -cE '^302 [^ ]*/disputes/[0-9]+$')" 1
+check "every request ends on that one dispute (the losers are shown it, not an error)" "$(for f in $T/sim*.txt; do cat "$f"; echo; done | sort -u | wc -l | tr -d ' ') $(for f in $T/sim*.txt; do cat "$f"; echo; done | sort -u)" "1 302 $B/disputes/$(sql "SELECT Id FROM Disputes WHERE TransactionId = $SIM")"
 
 echo "== API"
 L=$(curl -s -b $C $B/api/disputes)

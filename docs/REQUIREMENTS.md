@@ -20,7 +20,7 @@ Customers who open `/admin` (or admins who open customer pages) get a styled **A
 | **Views / Controllers / Actions** | `Views/**`, `Areas/Admin/Views/**`; `Controllers/*.cs`, `Areas/Admin/Controllers/*.cs` (e.g. `TransactionsController.Deposit` GET + POST) |
 | **Conventional + area routing** | `Program.cs`: `MapControllerRoute("areas", "{area:exists}/{controller=Dashboard}/...")` and `"default"` |
 | **Attribute routes** | `AccountsController.Details` → `accounts/{id:int}`, `.Statement` → `accounts/{id}/statements/{year}/{month}`, `.ActivityCsv`; `CardsController` (`accounts/{id}/cards/{cardId}/freeze` …); `TransactionsController.History` → `accounts/{id}/history`; all API controllers |
-| **Migrations** (history kept) | `Migrations/`: `InitialCreate` → `AccountOpeningDetails` → `AccountApplication` → `AccountBalanceConcurrency` → `AdminPortal` (converts old "Declined" applications to "Denied") → `SendAndRequest` → `BillPayAndScheduling` → `ProfileSettings` → `SpendingInsights` → `MobileCheckDeposit` (new limit columns default to $5,000 / $10,000 for the existing settings row) |
+| **Migrations** (history kept) | `Migrations/`: `InitialCreate` → `AccountOpeningDetails` → `AccountApplication` → `AccountBalanceConcurrency` → `AdminPortal` (converts old "Declined" applications to "Denied") → `SendAndRequest` → `BillPayAndScheduling` → `ProfileSettings` → `SpendingInsights` → `MobileCheckDeposit` (new limit columns default to $5,000 / $10,000 for the existing settings row) → `Disputes` |
 | **Seeder** (3 customers + admin, accounts opened across the last 11 weeks with daily activity) | `Data/SeedData.cs` (`InitializeAsync`, `GenerateHistory`); command: `dotnet run -- --seed` / `--reset-db` (`Program.cs`) |
 | **Master layout + partials** | `_Layout`, `_BankingLayout`, `_ApplyLayout`, `Areas/Admin/Views/Shared/_AdminLayout`; partials: `_AccountCard` (dashboard, accounts, admin view-as), `_TransactionTable`, `_StatusAlert` (all layouts), `_ApplicationStepNav` (apply + decision), `_AccountHeader`, `_TransactionRow`, `_TransactionFilters`, `_CopyField` (account info + direct deposit), `_CardArt` (home, products, apply, account header, card tab), `_ConfirmModal`, `_KpiTile`, `_AdminSidebar`, `_Pager`, `_StatusPill` |
 | **Razor C# in views** | loops/grouping in `Views/Accounts/Details.cshtml` (groups activity by day), `Areas/Admin/Views/Accounts/Details.cshtml` (builds confirm modals), formatting helpers (`ToString("C")`, dates) |
@@ -45,7 +45,7 @@ Customers who open `/admin` (or admins who open customer pages) get a styled **A
 ## Phase 2: where each term is used in the new code
 
 Phase 2 added Send & Request, Bill Pay with a background scheduler, an Alerts center, Profile & settings, staff access,
-Spending Insights & Budgets, and Mobile Check Deposit (simulated). The money side of every new feature still goes through `IBankService` (`Services/BankService.Payments.cs`,
+Spending Insights & Budgets, Mobile Check Deposit (simulated) and Disputes. The money side of every new feature still goes through `IBankService` (`Services/BankService.Payments.cs`,
 `Services/BankService.BillPay.cs`), so frozen/closed accounts, the daily limit and the balance concurrency check apply to all of it.
 
 | Requirement | Where it's used in Phase 2 |
@@ -143,7 +143,11 @@ Spending Insights & Budgets. The money side of every new feature still goes thro
 | **Serving files securely** | `ChecksController.Image` (owner only, filtered by user id) and the admin `CheckDepositsController.Image` (`[Authorize(Roles = Admin)]`) return `File(stream, contentType)` with `Cache-Control: no-store` and `X-Content-Type-Options: nosniff`; the folder is outside `wwwroot` so there's no static URL |
 | **Duplicate guard + concurrency** | `CheckDepositService.SubmitAsync` refuses a front image whose SHA-256 matches a deposit that wasn't rejected (index on `FrontHash`); `[ConcurrencyCheck]` on `CheckDeposit.Status` stops two admins deciding the same check |
 | **Money through IBankService** | Approval (`AdminService.ApproveCheckDepositAsync`, inside `ExecuteAsync`'s transaction with an audit row and a required reason) calls `IBankService.PostCheckDepositInCurrentTransactionAsync` (`Services/BankService.CheckDeposits.cs`), which refuses frozen/closed accounts and uses the balance concurrency token |
-| **Seeder** | `SeedData`: demo P2P payments and requests, payees and schedules, preferences, then `CategorizeTransactionsAsync` (backfill), `EnsureInsightsDemoDataAsync` (budgets set from each customer's real month-to-date spending so every seed shows under / near / over) and `EnsureCheckDepositDemoDataAsync` (placeholder check images drawn in code by `Data/SampleCheckImage.cs`, a tiny PNG encoder, marked "SAMPLE - NOT A REAL CHECK") |
+| **Unique index as a concurrency guard** | `Dispute.TransactionId` is unique (`ApplicationDbContext`), so two simultaneous dispute submits on one transaction create only one; `DisputeService.SubmitAsync` also runs its checks and the insert in one transaction and turns the constraint error into "This transaction already has a dispute" |
+| **Reusing the reversal system** | `AdminService.PostReversalLeg` (extracted from `ReverseTransactionAsync`) posts the offsetting transaction for one leg and a given amount; dispute approval (`AdminService.ApproveDisputeAsync`) uses it for a full or partial refund, on the sender's leg only for a P2P payment. `ReverseTransactionAsync` now refuses a charge with an open dispute or an earlier partial refund |
+| **Settings captured on the record** | `Dispute.ProvisionalCreditEnabled` copies `BankSetting.ProvisionalCreditOnDisputes` when the dispute is filed, so changing the setting later doesn't change open disputes |
+| **Conditional form + business validation** | `ViewModels/DisputeViewModels.cs` (`DisputeForm`: `[Required]`, `[StringLength(1000, MinimumLength = 20)]`, `[Range]`, `IFormFile? Attachment`); rules that depend on the chosen reason (expected amount below the charge, the duplicate's original must be one of the similar charges) are checked in `DisputeService`; `DisputeRules.WhyNot` is the single eligibility rule used by the rows, the form and the API |
+| **Seeder** | `SeedData`: demo P2P payments and requests, payees and schedules, preferences, then `CategorizeTransactionsAsync` (backfill), `EnsureInsightsDemoDataAsync` (budgets set from each customer's real month-to-date spending so every seed shows under / near / over) `EnsureCheckDepositDemoDataAsync` and `EnsureDisputeDemoDataAsync` (disputes filed and decided through the real services) (placeholder check images drawn in code by `Data/SampleCheckImage.cs`, a tiny PNG encoder, marked "SAMPLE - NOT A REAL CHECK") |
 
 ## Admin portal features (`/admin`)
 
@@ -159,6 +163,7 @@ Every action that changes data goes through **`IAdminService`**: one database tr
 - **P2P Payments** (`/admin/payments`): every payment and request, with filters
 - **Scheduled Payments** (`/admin/scheduled`): all items, a failures filter, the last scheduler run, and an audited **Run scheduler now**
 - **Check Deposits** (`/admin/checkdeposits`): Pending / Approved / Rejected (opens on Pending, oldest first), detail page with both images and click-to-zoom, duplicate-image warning, the customer's deposit history; Approve (posts the money) or Reject (reason shown to the customer), each with a confirmation modal and a required reason; refused for frozen/closed accounts and for an admin's own check. Limits are on Settings
+- **Disputes** (`/admin/disputes`): Submitted / Under review / Approved / Denied (opens on Submitted, oldest first; a "Disputes" chip in the overview work queue, which also flags accounts a clawback overdrew); detail page with the charge, the money (provisional credit, refund, clawback), the attachment, the customer's activity with that merchant and their other disputes; Start review, Approve (refund through the reversal system) and Deny (reason shown to the customer). The "Provisional credit on new disputes" switch is on Settings
 - **Staff** (`/admin/staff`, Owner only): promote a user to admin, create a staff login, remove admin access; admins can't use admin tools on their own records
 
 ## Customer Account Details (`/accounts/{id}`)
@@ -190,6 +195,8 @@ Log in on the website first, then try them at **/swagger** (same cookie). No log
 | GET | `/api/insights/budgets` | This month's budget progress |
 | POST | `/api/checkdeposits` | `multipart/form-data`: `accountId`, `amount`, `front`, `back` (JPG/PNG, 5 MB each) plus the anti-forgery token (header `RequestVerificationToken`); 201 with the pending deposit |
 | GET | `/api/checkdeposits` · `/api/checkdeposits/{id}` | Your check deposits / one of them (another customer's id → 404) |
+| POST | `/api/disputes` | `multipart/form-data`: `transactionId`, `reason` (NotAuthorized, WrongAmount, NotReceived, Duplicate, Other), `description` (20-1000 chars), `expectedAmount`, `duplicateOfTransactionId`, `freezeCard`, optional `attachment` (JPG/PNG), plus the anti-forgery token; 201 with the dispute |
+| GET | `/api/disputes` · `/api/disputes/{id}` | Your disputes / one of them (another customer's id → 404) |
 | POST | `/api/insights/transactions/{id}/category` | `{ "category": "Groceries" }` or `"auto"` to go back to the automatic category |
 | GET | `/api/admin/stats?days=30` | Admin KPIs + chart series |
 | GET | `/api/admin/customers?search=` | Customers matching a name/email |

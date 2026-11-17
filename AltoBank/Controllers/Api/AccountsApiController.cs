@@ -96,12 +96,13 @@ public class AccountsApiController : ControllerBase
 
         var result = await _bank.GetActivityAsync(UserId, id, new ActivityFilter(search, kind, from, to), page, pageSize);
         var labels = await _bank.GetAccountLabelsAsync(UserId);
-        var (disputable, statuses) = await _disputes.GetRowInfoAsync(UserId, result.Items);
+        var (disputable, statuses, partly) = await _disputes.GetRowInfoAsync(UserId, result.Items);
         return new ActivityPageDto(
             result.Items.Select(t => ToDto(t, labels) with
             {
                 CanDispute = disputable.Contains(t.Id),
-                DisputeStatus = statuses.TryGetValue(t.Id, out var st) ? st.ToString() : null
+                DisputeStatus = statuses.TryGetValue(t.Id, out var st) ? st.ToString() : null,
+                PartlyRefunded = partly.Contains(t.Id)
             }).ToList(), page, pageSize, result.TotalCount,
             HasMore: page * pageSize < result.TotalCount,
             result.MoneyIn, result.MoneyOut, result.MoneyIn - result.MoneyOut);

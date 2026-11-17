@@ -32,7 +32,8 @@ public record ActivityItemDto(
     string? Memo, string? Counterparty, int? ReversalOfTransactionId, int? ReversedByTransactionId,
     DateOnly BankDate,    // the day this falls on in the bank's time zone (for "Today" / "Yesterday" grouping)
     string Category, string CategoryLabel, bool CategoryOverridden,    // Spending Insights
-    bool CanDispute = false, string? DisputeStatus = null);           // Disputes: eligible now / status of an existing dispute
+    bool CanDispute = false, string? DisputeStatus = null,            // Disputes: eligible now / status of an existing dispute
+    bool PartlyRefunded = false);                                     // approved for less than the charge ("Wrong amount")
 
 /// <summary>A page of activity plus the money in/out totals for the WHOLE filtered range.</summary>
 public record ActivityPageDto(

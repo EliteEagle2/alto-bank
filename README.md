@@ -26,6 +26,10 @@ Built by **Austin Emig** for **Server Sided Web Development**.
   phone), tick the endorsement checklist and review before submitting. The check shows as **pending** (not in the
   available balance) until staff approve it; per-check and daily limits apply, and the same check image can't be
   deposited twice.
+- **Disputes:** dispute a withdrawal, bill payment or payment you sent within 60 days, straight from the transaction:
+  choose what went wrong (with the expected amount for "Wrong amount" or the original for "Duplicate charge"), describe it,
+  attach a receipt, review and submit. "I didn't authorize it" can freeze the debit card in the same step. A timeline
+  shows Submitted → Under review → Refunded / Denied, and the transaction gets a Disputed or Refunded badge.
 - **Insights and Budgets:** every transaction is categorized automatically (and you can change it). A monthly view shows spending
   by category, month over month, top merchants and plain-language callouts. Monthly budgets turn amber at 75% and red at 100%,
   with an alert at each.
@@ -36,7 +40,11 @@ Built by **Austin Emig** for **Server Sided Web Development**.
 
 - A console with a work queue, customer search and a status bar (scheduler health, pending applications, frozen accounts).
 - Customers, accounts, transactions, applications, P2P payments, scheduled payments and a **check deposit review
-  queue** (both images with click-to-zoom, duplicate-image warnings, the customer's deposit history), with filters.
+  queue** (both images with click-to-zoom, duplicate-image warnings, the customer's deposit history) and a **dispute
+  queue** (the charge, the customer's history with that merchant, the attachment), with filters.
+- Disputes are approved through the existing reversal system (the whole charge, or only the difference for a wrong
+  amount; a payment to another customer is refunded to the sender only). An optional **provisional credit** pays the
+  customer right away and is taken back if the dispute is denied, even if that overdraws the account, which is flagged.
 - Actions such as freezing an account, adjustments and reversals need a written reason and run in a database transaction that
   writes an audit log entry. Staff can't use admin tools on their own accounts.
 - An **Owner** role (set in configuration, never from the website) adds and removes admins.
@@ -72,7 +80,7 @@ On a phone:
 | Uploads | Check images are stored outside `wwwroot` (`App_Data/uploads`, git-ignored) under random names; only JPG/PNG, checked by the file's signature (not its name), 5 MB max; served only to the owner or staff, never cached |
 | Background work | A `BackgroundService` scheduler pays bills and scheduled transfers and expires old requests. A unique index on (item, date) means a payment can never run twice for the same date, even after a restart |
 | Time | Times are stored in UTC; "today", months and the daily limit follow the bank's time zone (America/New_York) |
-| API | A JSON API (`/api/accounts`, `/api/payments`, `/api/insights`, `/api/checkdeposits`) that returns DTOs, never entities. The charts read from it. Swagger docs at `/swagger` in Development |
+| API | A JSON API (`/api/accounts`, `/api/payments`, `/api/insights`, `/api/checkdeposits`, `/api/disputes`) that returns DTOs, never entities. The charts read from it. Swagger docs at `/swagger` in Development |
 | Front end | Bootstrap 5, Chart.js and small vanilla JavaScript modules; responsive down to phone width |
 
 ```
@@ -127,9 +135,9 @@ dotnet run -- --reset-db   # delete the database and start over with fresh demo 
 
 ## Tests
 
-`tests/` holds 13 end-to-end suites (900+ checks) that drive the running app over HTTP: money rules, races, ownership checks
+`tests/` holds 14 end-to-end suites (1,000+ checks) that drive the running app over HTTP: money rules, races, ownership checks
 (another customer's id returns 404), antiforgery, the scheduler, P2P, Bill Pay, staff permissions, profile settings, insights
-budgets and check deposits. Run them against a **separate test server with its own scratch database**, never your real `altobank.db`:
+budgets, check deposits and disputes. Run them against a **separate test server with its own scratch database**, never your real `altobank.db`:
 
 ```powershell
 # terminal 1: a test server on a scratch database
@@ -153,9 +161,6 @@ Each suite's log is saved to `test-logs/`.
 [docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) maps each course requirement (EF Core loading strategies, model binding,
 validation, tag helpers, areas, the API and more) to the code that uses it.
 
-## Roadmap
-
-Transaction disputes (with provisional credit) are planned next.
 
 ## License
 

@@ -23,9 +23,41 @@ Every suite runs against a separate test server on a freshly reset scratch datab
 | profile | personal info, security, alert settings, preferences | 59 |
 | insights | categories, Insights page + API, budgets, budget alerts | 127 |
 | checkdeposit | uploads, limits, duplicates, races, pending balance, review queue | 121 |
-| **Total** | | **943** |
+| disputes | eligibility, form rules, provisional credit, partial / P2P refunds, clawback overdraft, races | 134 |
+| **Total** | | **1,077** |
 
 ## Phase 2
+
+### Feature 5: Dispute a transaction
+
+- **Dispute this transaction** in the expanded activity row, shown only when it's eligible (decision 6): a withdrawal,
+  bill payment or P2P send from the last 60 days (bank time), posted, not reversed or refunded, and not already
+  disputed. Transfers between your own accounts can't be disputed. The server re-checks everything.
+- **The form**: what went wrong (with the expected amount for "Wrong amount", which must be less than the charge, or the
+  original charge for "Duplicate"), a 20-1,000 character description, an optional JPG/PNG receipt (the shared upload
+  store), a review step, and for "I didn't authorize it" a one-click debit card freeze.
+- **Disputes page** (an Accounts tab) and a **timeline** per dispute: Submitted → Under review → Refunded / Denied, with
+  dates, the decision note and a link to the refund. Activity shows Disputed / Refunded / Dispute denied badges.
+- **Provisional credit** (Settings, off by default, captured on each dispute when it's filed): the money is credited
+  right away; approval makes it final (no second refund); denial takes it back, even into an overdraft (decision 5),
+  which is audited, flagged in the admin work queue and sent to the customer.
+- **Admin Disputes queue** (Money; opens on Submitted, oldest first; "Disputes" chip in the work queue): the charge, the
+  money, the attachment, the customer's activity with that merchant and their other disputes. Start review, Approve and
+  Deny run through `IAdminService` with a confirmation, an audit row and (for Deny) a reason the customer sees.
+- **Refunds use the reversal system**: the whole charge, or only the difference for "Wrong amount"; a P2P payment is
+  refunded to the sender only and the recipient keeps it. A dispute can be decided once, never by the person it's about,
+  and the admin Reverse refuses a charge that's disputed or partly refunded, so nothing is refunded twice.
+- **One dispute per transaction**, enforced by a unique index (simultaneous submits create only one).
+- **Insights** nets partial refunds and provisional credits against the original charge's category.
+- **API**: `POST /api/disputes` (multipart, needs the anti-forgery token), `GET /api/disputes`, `GET /api/disputes/{id}`.
+- **Demo data**: Jordan has one refunded dispute and one under review; Maya has one denied with a provisional credit and
+  its clawback.
+- Migration `Disputes`.
+- Review fixes: a stale dispute form (second tab, charge reversed meanwhile) goes to the existing dispute or the account
+  instead of looping; closed accounts never offer "Dispute this transaction"; a dispute refund reads "Dispute refund: …"
+  with no counterparty (it comes from Alto, not the person paid); "Partly refunded" badge for wrong-amount refunds; the
+  timeline names the refund transaction; a denied dispute whose provisional credit was taken back no longer blocks an
+  admin Reverse; the attachment is saved only after the dispute row exists; a failed card freeze can't fail the request.
 
 ### Feature 4: Mobile Check Deposit (simulated)
 

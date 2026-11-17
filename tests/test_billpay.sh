@@ -226,7 +226,9 @@ echo "== Scheduler + transfers at the same time (SQLite WAL + busy timeout)"
 check "journal mode is WAL" "$(sql "PRAGMA journal_mode")" wal
 for i in 1 2 3 4 5; do post $C /scheduled /scheduled/transfer -d "Transfer.FromAccountId=$JCHK" -d "Transfer.ToAccountId=$JSAV" -d "Transfer.Amount=0.$i$i" -d "Transfer.When=once" -d "Transfer.Date=$TODAY" --data-urlencode "Transfer.Memo=conc $i" >/dev/null; done
 CONC=$(sql "SELECT GROUP_CONCAT(Id) FROM ScheduledPayments WHERE Memo LIKE 'conc %'")
-T0=$(add $(bal $C $JCHK) $(bal $C $JSAV))
+# Both balances in ONE read: the 5-second scheduler can move money between two separate reads.
+pairtotal() { sql "SELECT printf('%.2f', SUM(CAST(Balance AS REAL))) FROM Accounts WHERE Id IN ($JCHK, $JSAV)"; }
+T0=$(pairtotal)
 rm -f /tmp/conc_*.txt
 for i in $(seq 1 16); do (echo "$(code -b $C -H "$J" -d "{\"fromAccountId\":$JCHK,\"toAccountId\":$JSAV,\"amount\":0.01}" $B/api/transfers)" > /tmp/conc_t$i.txt) & done
 for i in 1 2 3; do (post $A /admin/scheduled /admin/scheduled/runnow --data-urlencode "reason=Concurrency test $i" | cut -d' ' -f1 > /tmp/conc_r$i.txt) & done
@@ -235,6 +237,6 @@ check "no server errors under load" "$(cat /tmp/conc_*.txt | grep -c '^5')" 0
 check "every transfer answered 200 (busy timeout waits instead of 'database is locked')" "$(cat /tmp/conc_t*.txt | grep -c '^200$')" 16
 for i in $(seq 1 20); do [ "$(sql "SELECT COUNT(*) FROM ScheduledRuns WHERE ScheduledPaymentId IN ($CONC)")" = 5 ] && break; sleep 1; done
 check "each due item ran exactly once despite 3 parallel runs + the timer" "$(sql "SELECT COUNT(*) FROM ScheduledRuns WHERE ScheduledPaymentId IN ($CONC)")" 5
-check "money only moved between Jordan's accounts (total unchanged)" "$(add $(bal $C $JCHK) $(bal $C $JSAV))" "$T0"
+check "money only moved between Jordan's accounts (total unchanged)" "$(pairtotal)" "$T0"
 
 summary

@@ -52,7 +52,15 @@
                                     {
                                         <span><money amount="@d.RefundAmount" /> was refunded@(d.Reason == DisputeReason.WrongAmount ? " (the difference)" : "").</span>
                                     }
-                                    <a href="@activityUrl">See it in your activity</a>
+                                    @if (ViewBag.Refund is Transaction refund)
+                                    {
+                                        <div class="mt-1">Refund: <strong>@refund.Description</strong>, <money amount="@refund.Amount" />, @refund.LocalDate.ToString("MMM d, yyyy h:mm tt") (transaction #@refund.Id).
+                                            <a href="@activityUrl">See it in your activity</a></div>
+                                    }
+                                    else
+                                    {
+                                        <a href="@activityUrl">See it in your activity</a>
+                                    }
                                 </div>
                             </div>
                         </li>

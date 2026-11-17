@@ -86,7 +86,7 @@
                         @foreach (var t in g)
                         {
                             <partial name="_TransactionRow" model="new TransactionRowViewModel(t, t.CounterpartyName ?? (t.CounterpartyAccountId is int c ? Model.AccountLabels.GetValueOrDefault(c) : null),
-                                     Model.Disputable.Contains(t.Id), Model.DisputeStatuses.TryGetValue(t.Id, out var ds) ? ds : null)" />
+                                     Model.Disputable.Contains(t.Id), Model.DisputeStatuses.TryGetValue(t.Id, out var ds) ? ds : null, Model.PartlyRefunded.Contains(t.Id))" />
                         }
                     </div>
                 }

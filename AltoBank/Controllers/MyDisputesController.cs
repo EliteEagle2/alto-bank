@@ -48,11 +48,7 @@ public class MyDisputesController : Controller
     {
         var (t, why) = await _disputes.GetDisputableAsync(UserId, transactionId);
         if (t == null && why == null) return NotFound();   // not this customer's transaction
-        if (t == null)
-        {
-            TempData["Error"] = why;
-            return Back();
-        }
+        if (t == null) return await NotEligibleAsync(transactionId, why);
         return View(await BuildAsync(t, new DisputeForm { TransactionId = t.Id }));
     }
 
@@ -63,7 +59,7 @@ public class MyDisputesController : Controller
     {
         var (t, why) = await _disputes.GetDisputableAsync(UserId, form.TransactionId);
         if (t == null && why == null) return NotFound();
-        if (t == null) { TempData["Error"] = why; return Back(); }
+        if (t == null) return await NotEligibleAsync(form.TransactionId, why);
 
         if (ModelState.IsValid)
         {
@@ -87,6 +83,7 @@ public class MyDisputesController : Controller
         var d = await _disputes.GetAsync(UserId, id);
         if (d == null) return NotFound();
         ViewData["Title"] = $"Dispute {d.Reference}";
+        ViewBag.Refund = d.RefundTransactionId is int rid ? await _disputes.GetOwnTransactionAsync(UserId, rid) : null;
         return View(d);
     }
 
@@ -122,12 +119,16 @@ public class MyDisputesController : Controller
         };
     }
 
-    // Where to send someone whose transaction can't be disputed: back where they came from (if it's our own page).
-    private IActionResult Back()
+    /// <summary>
+    /// The transaction (theirs) can't be disputed: show why, on the dispute it already has, or on its account's activity.
+    /// Never back to the form, so a stale form (a second tab, a charge reversed meanwhile) can't loop.
+    /// </summary>
+    private async Task<IActionResult> NotEligibleAsync(int transactionId, string? why)
     {
-        if (Uri.TryCreate(Request.Headers.Referer.ToString(), UriKind.Absolute, out var from) && from.Host == Request.Host.Host
-            && Url.IsLocalUrl(from.PathAndQuery))
-            return LocalRedirect(from.PathAndQuery);
-        return RedirectToAction("Index", "Accounts");
+        TempData["Error"] = why;
+        if ((await _disputes.ListAsync(UserId)).FirstOrDefault(d => d.TransactionId == transactionId) is { } existing)
+            return RedirectToAction(nameof(Details), new { id = existing.Id });
+        var accountId = await _disputes.GetAccountIdAsync(UserId, transactionId);
+        return accountId is int a ? LocalRedirect(Url.Action("Details", "Accounts", new { id = a })! + "#activity") : RedirectToAction("Index", "Accounts");
     }
 }

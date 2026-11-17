@@ -101,7 +101,9 @@ public partial class AdminService
                 if (original.Account!.Status == AccountStatus.Closed)
                     return Fail($"{original.Account.DisplayName} ••{original.Account.Last4} is closed. Reopen it before refunding.");
                 // THE REVERSAL SYSTEM, for this leg only: a P2P send refunds the sender; the recipient's leg is never touched.
-                var rev = PostReversalLeg(original, d.RefundAmount, $"Dispute {d.Reference} refund");
+                // Described as a refund FROM ALTO, with no counterparty, so a P2P refund doesn't look like money from the recipient.
+                var rev = PostReversalLeg(original, d.RefundAmount, $"Dispute {d.Reference}",
+                                          description: $"Dispute refund: {original.Description}", keepCounterparty: false);
                 if (full) original.Status = TransactionStatus.Reversed;
                 await _db.SaveChangesAsync();
                 if (full) original.ReversedByTransactionId = rev.Id;

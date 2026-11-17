@@ -630,7 +630,13 @@ public partial class AdminService : IAdminService
             var legIdsToCheck = linked == null ? new[] { tx.Id } : new[] { tx.Id, linked.Id };
             if (await _db.Disputes.AnyAsync(d => legIdsToCheck.Contains(d.TransactionId) && (d.Status == DisputeStatus.Submitted || d.Status == DisputeStatus.UnderReview)))
                 return Fail("This transaction has an open dispute. Approve or deny it on the Disputes page instead.");
-            if (await _db.Transactions.AnyAsync(r => r.ReversalOfTransactionId != null && legIdsToCheck.Contains(r.ReversalOfTransactionId.Value)))
+            var refundRows = await _db.Transactions.AsNoTracking()
+                .Where(r => r.ReversalOfTransactionId != null && legIdsToCheck.Contains(r.ReversalOfTransactionId.Value))
+                .Select(r => r.Type).ToListAsync();
+            // A provisional credit that was taken back again (a denied dispute) nets to zero, so it doesn't count.
+            var stillRefunded = refundRows.Any(t => t is TransactionType.ReversalCredit or TransactionType.ReversalDebit)
+                || refundRows.Count(t => t == TransactionType.ProvisionalCredit) > refundRows.Count(t => t == TransactionType.ProvisionalClawback);
+            if (stillRefunded)
                 return Fail("Part of this transaction was already refunded (a dispute or provisional credit), so it can't be reversed in full.");
 
             var legs = linked == null ? new[] { tx } : new[] { tx, linked };
@@ -676,13 +682,14 @@ public partial class AdminService : IAdminService
     /// or part of it for a dispute refund), linked back to the original, in the original's category. The caller decides
     /// whether the original becomes Reversed (only when the whole amount is undone) and saves.
     /// </summary>
-    private Transaction PostReversalLeg(Transaction leg, decimal amount, string memo)
+    private Transaction PostReversalLeg(Transaction leg, decimal amount, string memo, string? description = null, bool keepCounterparty = true)
     {
         var account = leg.Account!;
         var undoCredit = leg.IsCredit;   // undoing a credit takes money back out
         account.Balance += undoCredit ? -amount : amount;
         var rev = AddTransaction(account, undoCredit ? TransactionType.ReversalDebit : TransactionType.ReversalCredit,
-                                 amount, $"Reversal: {leg.Description}", memo: memo, counterpartyId: leg.CounterpartyAccountId);
+                                 amount, description ?? $"Reversal: {leg.Description}", memo: memo,
+                                 counterpartyId: keepCounterparty ? leg.CounterpartyAccountId : null);
         rev.ReversalOfTransactionId = leg.Id;
         rev.Category = leg.Category;   // a reversal belongs to the same category as what it undoes
         return rev;

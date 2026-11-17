@@ -190,13 +190,21 @@ public static class SeedData
         // Maya: filed while provisional credit was ON (credited right away), then denied (credit taken back).
         var settings = await db.BankSettings.FirstAsync();
         var was = settings.ProvisionalCreditOnDisputes;
+        Dispute? denied;
         settings.ProvisionalCreditOnDisputes = true;
         await db.SaveChangesAsync();
-        var charge = mp.First();
-        var denied = await File(maya.Id, charge, DisputeReason.NotAuthorized,
-            "I don't recognize this purchase. I wasn't in the store that day and still have my card.");
-        settings.ProvisionalCreditOnDisputes = was;
-        await db.SaveChangesAsync();
+        try
+        {
+            denied = await File(maya.Id, mp.First(), DisputeReason.NotAuthorized,
+                "I don't recognize this purchase. I wasn't in the store that day and still have my card.");
+        }
+        finally
+        {
+            // Always back to what it was (off by default), even if filing failed.
+            settings = await db.BankSettings.FirstAsync();
+            settings.ProvisionalCreditOnDisputes = was;
+            await db.SaveChangesAsync();
+        }
         if (denied != null)
         {
             await admin.StartDisputeReviewAsync(denied.Id, "Requested the store's receipt");

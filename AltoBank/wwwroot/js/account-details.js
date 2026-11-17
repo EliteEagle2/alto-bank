@@ -105,7 +105,7 @@
         if (t.disputeStatus) {
             const refunded = t.disputeStatus === 'Approved', denied = t.disputeStatus === 'Denied';
             sub.appendChild(el('span', 'badge-dispute' + (refunded ? ' is-refunded' : denied ? ' is-denied' : ''),
-                refunded ? 'Refunded' : denied ? 'Dispute denied' : 'Disputed'));
+                refunded ? (t.partlyRefunded ? 'Partly refunded' : 'Refunded') : denied ? 'Dispute denied' : 'Disputed'));
         } else if (reversed) sub.appendChild(el('span', 'badge-reversed', 'Reversed'));
         desc.appendChild(sub);
         const amounts = el('span', 'tx-amounts');
