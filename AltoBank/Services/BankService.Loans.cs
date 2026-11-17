@@ -34,13 +34,19 @@ public partial class BankService
         if (decimal.Round(amount, 0) != amount) return "Enter the loan amount in whole dollars.";
         if (app.LoanTermMonths is not int term || !LoanMath.Terms(kind).Contains(term))
             return $"Choose a term between {minTerm} and {maxTerm} months.";
-        if (kind == LoanKind.Auto && (app.VehicleYear is null || string.IsNullOrWhiteSpace(app.VehicleMake) || string.IsNullOrWhiteSpace(app.VehicleModel)))
-            return "Enter the vehicle's year, make and model.";
+        if (app.LoanPurpose == null || !ApplicationOptions.LoanPurposes(kind).Contains(app.LoanPurpose)) return "Choose what the loan is for.";
+        var thisYear = BankTime.Today.Year;
+        if (kind == LoanKind.Auto && (app.VehicleYear is not int y || y < thisYear - 25 || y > thisYear + 1
+                                      || string.IsNullOrWhiteSpace(app.VehicleMake) || app.VehicleMake.Length > 30
+                                      || string.IsNullOrWhiteSpace(app.VehicleModel) || app.VehicleModel.Length > 40))
+            return $"Enter the vehicle's year ({thisYear - 25} to {thisYear + 1}), make and model.";
         if (app.DisburseToAccountId is not int toId
             || await _db.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == toId && a.UserId == userId) is not { AccountType: AccountType.Checking, Status: not AccountStatus.Closed })
             return "Choose the Alto checking account the money should go to.";
-        if (await _db.AccountApplications.AnyAsync(a => a.UserId == userId && a.AccountType == AccountType.Loan
-                                                       && (a.Status == ApplicationStatus.Pending || a.Status == ApplicationStatus.Offered)))
+        var open = await _db.AccountApplications.AsNoTracking()
+            .Where(a => a.UserId == userId && a.AccountType == AccountType.Loan && (a.Status == ApplicationStatus.Pending || a.Status == ApplicationStatus.Offered))
+            .ToListAsync();
+        if (open.Any(a => LoanInProgress(a, BankTime.Today)))
             return "You already have a loan application in progress. Finish it (or decline the offer) first.";
         return null;
     }
@@ -86,6 +92,11 @@ public partial class BankService
     }
 
     // ---------------------------------------------------------------- the offer
+
+    /// <summary>Pending, or an offer that hasn't expired: only one loan application at a time. (An expired offer frees the customer to apply again.)</summary>
+    public static bool LoanInProgress(AccountApplication a, DateOnly today) =>
+        a.AccountType == AccountType.Loan
+        && (a.Status == ApplicationStatus.Pending || a.Status == ApplicationStatus.Offered && today <= OfferExpiresOn(a));
 
     public static DateOnly OfferExpiresOn(AccountApplication app) =>
         BankTime.DateOf(DateTime.SpecifyKind(app.OfferedAt ?? app.SubmittedAt, DateTimeKind.Utc)).AddDays(LoanOfferValidDays);
@@ -174,10 +185,11 @@ public partial class BankService
 
     // ---------------------------------------------------------------- payments
 
-    public Task<BankResult> PayLoanAsync(string userId, int loanAccountId, int fromAccountId, LoanPaymentKind kind, decimal? extraAmount) =>
-        InTransactionAsync(async () => await PayLoanCoreAsync(userId, loanAccountId, fromAccountId, kind, extraAmount, autopay: false, BankTime.Today));
+    public Task<BankResult> PayLoanAsync(string userId, int loanAccountId, int fromAccountId, LoanPaymentKind kind, decimal? extraAmount, DateOnly? forDueDate = null) =>
+        InTransactionAsync(async () => await PayLoanCoreAsync(userId, loanAccountId, fromAccountId, kind, extraAmount, autopay: false, BankTime.Today, forDueDate));
 
-    private async Task<BankResult> PayLoanCoreAsync(string userId, int loanAccountId, int fromAccountId, LoanPaymentKind kind, decimal? extraAmount, bool autopay, DateOnly today)
+    private async Task<BankResult> PayLoanCoreAsync(string userId, int loanAccountId, int fromAccountId, LoanPaymentKind kind, decimal? extraAmount, bool autopay, DateOnly today,
+                                                    DateOnly? forDueDate = null)
     {
         var account = await GetAccountAsync(loanAccountId, userId);   // ownership check
         if (account is not { IsLoan: true }) return new(false, "Loan not found.");
@@ -193,8 +205,9 @@ public partial class BankService
         switch (kind)
         {
             case LoanPaymentKind.Scheduled:
-                if (!q.CanPayScheduled)
-                    return new(false, $"Your {loan.NextDueDate!.Value.AddMonths(-1):MMM d} payment is already made. The next one can be paid from {q.OpensOn:MMM d}, or pay extra toward principal now.");
+                if (forDueDate is DateOnly asked && asked != loan.NextDueDate)
+                    return new(false, $"Your {asked:MMM d} payment was already made, so nothing was paid again. Your next payment is due {loan.NextDueDate:MMM d}.");
+                if (!q.CanPayScheduled) return new(false, ScheduledNotOpenYet(loan, q));
                 (amount, interest, principal, fees) = (q.ScheduledAmount, q.InstallmentInterest, q.InstallmentPrincipal, loan.FeesOwed);
                 break;
             case LoanPaymentKind.ExtraPrincipal:
@@ -252,7 +265,7 @@ public partial class BankService
             PrincipalAfter = loan.PrincipalRemaining, FromAccountId = from.Id, TransactionId = inLeg.Id
         });
         var paidOff = loan.PrincipalRemaining == 0m && loan.FeesOwed == 0m;
-        if (paidOff) MarkPaidOff(loan, account);
+        if (paidOff) MarkPaidOff(loan, account, _alerts);
         // The loan's balance and its principal + fees must always agree; if not, roll everything back.
         if (-account.Balance != loan.PrincipalRemaining + loan.FeesOwed)
             throw new InvalidOperationException($"Loan {loan.Id}: balance {account.Balance} doesn't match principal {loan.PrincipalRemaining} + fees {loan.FeesOwed}.");
@@ -268,17 +281,23 @@ public partial class BankService
                 : $"Paid {amount:C}. Next payment {LoanQuote.For(loan, today).ScheduledAmount:C} due {loan.NextDueDate:MMM d}.");
     }
 
+    /// <summary>Why the monthly payment can't be made yet (shown on Make a payment and when it's refused).</summary>
+    public static string ScheduledNotOpenYet(Loan loan, LoanQuote q) => loan.PaymentsMade == 0
+        ? $"Your first payment is due {loan.NextDueDate:MMM d}. You can make it from {q.OpensOn:MMM d}, or pay extra toward principal now."
+        : $"Your {loan.NextDueDate!.Value.AddMonths(-1):MMM d} payment is made. The next one ({loan.NextDueDate:MMM d}) can be made from {q.OpensOn:MMM d}, or pay extra toward principal now.";
+
     /// <summary>Last dollar repaid: the loan is PaidOff and its account Closed (history and the paid-in-full letter stay).</summary>
-    private void MarkPaidOff(Loan loan, Account account)
+    public static void MarkPaidOff(Loan loan, Account account, IAlertService alerts)
     {
         loan.Status = LoanStatus.PaidOff;
         loan.PaidOffAt = DateTime.UtcNow;
         loan.NextDueDate = null;
         loan.AutopayEnabled = false;
+        loan.AutopayFromAccountId = null;
         account.Status = AccountStatus.Closed;
         account.StatusReason = "Paid in full";
         account.StatusChangedAt = account.ClosedAt = DateTime.UtcNow;
-        _alerts.Add(loan.UserId, AlertType.LoanUpdate, "Loan paid in full",
+        alerts.Add(loan.UserId, AlertType.LoanUpdate, "Loan paid in full",
             $"Your {account.DisplayName} ••{account.Last4} is paid in full. Your paid-in-full letter is ready.", $"/loans/{account.Id}/letter");
     }
 
@@ -350,6 +369,7 @@ public partial class BankService
 
     private async Task<BankResult> LoanLateFeeIfDueAsync(int loanId, DateOnly today, BankSetting settings)
     {
+        _db.ChangeTracker.Clear();   // read the loan fresh inside this transaction (not a copy from the autopay step)
         var loan = await _db.Loans.FirstOrDefaultAsync(l => l.Id == loanId);
         if (loan is not { Status: LoanStatus.Active, NextDueDate: DateOnly due }) return new BankResult(false, "nothing due");
         // The next due date that hasn't had a fee yet (a customer can miss more than one).
@@ -366,6 +386,8 @@ public partial class BankService
         loan.LateFeeForDueDate = target;
         var t = AddTransaction(account, TransactionType.LateFee, fee, "Late fee",
                                memo: $"The {target:MMM d} payment was more than {settings.LoanGraceDays} days late");
+        if (-account.Balance != loan.PrincipalRemaining + loan.FeesOwed)
+            throw new InvalidOperationException($"Loan {loan.Id}: balance {account.Balance} doesn't match principal {loan.PrincipalRemaining} + fees {loan.FeesOwed}.");
         await _db.SaveChangesAsync();
         _alerts.Add(loan.UserId, AlertType.LoanLateFee, "Loan payment overdue",
             $"The {target:MMM d} payment on your {account.DisplayName} ••{account.Last4} is overdue, so a {fee:C} late fee was added. Please make a payment now.",

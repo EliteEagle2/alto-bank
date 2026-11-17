@@ -84,6 +84,10 @@ public partial class AdminService
         return (loan, account, null);
     }
 
+    // A staff waiver or credit that leaves nothing owed pays the loan off, exactly as the customer's last payment would
+    // (PaidOff, account Closed, autopay off, the paid-in-full alert), so it can never sit "Active" or "Overdue" at $0.
+    private void ClosePaidOffLoan(Loan loan, Account account) => BankService.MarkPaidOff(loan, account, _alerts);
+
     // The loan's balance must always equal -(principal + fees); a change that breaks that is a bug, so roll it back.
     private static void CheckLoanBalance(Loan loan, Account account)
     {
@@ -114,6 +118,7 @@ public partial class AdminService
             fee.Status = TransactionStatus.Reversed;
             await _db.SaveChangesAsync();
             fee.ReversedByTransactionId = w.Id;
+            if (loan.TotalOwed == 0m) ClosePaidOffLoan(loan, account);
             CheckLoanBalance(loan, account);
             _alerts.Add(account.UserId, AlertType.LoanLateFee, "Late fee waived",
                 $"We waived the {fee.Amount:C} late fee on your {account.DisplayName} ••{account.Last4}.", $"/accounts/{account.Id}");
@@ -136,15 +141,7 @@ public partial class AdminService
             var tx = AddTransaction(account, isCredit ? TransactionType.AdjustmentCredit : TransactionType.AdjustmentDebit, amount,
                                     isCredit ? "Adjustment: principal lowered" : "Adjustment: principal raised", memo: CustomerMemo);
             await _db.SaveChangesAsync();
-            if (loan.PrincipalRemaining == 0m && loan.FeesOwed == 0m)
-            {
-                loan.Status = LoanStatus.PaidOff;
-                loan.PaidOffAt = DateTime.UtcNow;
-                loan.NextDueDate = null;
-                loan.AutopayEnabled = false;
-                SetStatus(account, AccountStatus.Closed, "Paid in full");
-                account.ClosedAt = DateTime.UtcNow;
-            }
+            if (loan.TotalOwed == 0m) ClosePaidOffLoan(loan, account);
             CheckLoanBalance(loan, account);
             Notify(account, AlertType.LoanUpdate, "Loan adjusted",
                 $"We {(isCredit ? "lowered" : "raised")} the principal on your {account.DisplayName} ••{account.Last4} by {amount:C}. You now owe {loan.TotalOwed:C}.");

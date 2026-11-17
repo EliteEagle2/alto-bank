@@ -281,13 +281,24 @@ has "an expired offer says so" "$(curl -s -b $U5 $B/loans/offer/$A6)" "This offe
 post $U5 /loans/offer/$A6 /loans/offer/$A6/accept -d toAccountId=$U5CHK -d agree=true >/dev/null
 has "an expired offer can't be accepted" "$(cat /tmp/post.html)" "expired"
 check "no loan" "$(sql "SELECT COUNT(*) FROM Loans WHERE UserId = '$U5ID'")" 0
+has "an expired offer can be removed" "$(curl -s -b $U5 $B/loans/offer/$A6)" "Remove this offer"
+hasnt "an expired offer doesn't block a new application" "$(curl -s -b $U5 "$B/Accounts/Apply?type=Loan")" "loan application in progress"
+apply $U5 "$HIGH" -d LoanKind=Personal -d LoanAmount=2500 -d LoanTermMonths=12 --data-urlencode "LoanPurpose=Moving" -d DisburseToAccountId=$U5CHK >/dev/null
+check "after an offer expires, the customer can apply again" "$(sql "SELECT Status FROM AccountApplications WHERE UserId = '$U5ID' ORDER BY Id DESC LIMIT 1")" "Offered"
 
 echo "== Payments: scheduled, extra principal, payoff"
 # Riley (U) has the new $8,000 loan and $8,000 in checking.
 UL=$ULOAN
 I1=$(node -e "const p=8000,r=8.99/1200;console.log((Math.round(p*r*100+1e-9)/100).toFixed(2))")
 MPAY=$(lv $UL "printf('%.2f', MonthlyPayment)")
+pay $U $UL -d Kind=Scheduled -d FromAccountId=$UCHK >/dev/null
+has "no monthly payment on the day the loan is funded (it would cost a full month of interest)" "$(cat /tmp/post.html)" "Your first payment is due"
+check "nothing paid" "$(lv $UL PaymentsMade):$(bal $UCHK)" "0:8000.00"
+# Move time: the loan was funded 12 days ago, so its first period has started.
+sql "UPDATE Loans SET DisbursedAt = datetime(DisbursedAt, '-12 days'), NextDueDate = '$(d '+18 days')' WHERE AccountId = $UL" >/dev/null
+DUE1=$(lv $UL NextDueDate)
 PP=$(curl -s -b $U $B/loans/$UL/pay)
+has "pay page: the form carries the due date it pays" "$PP" "name=\"ForDueDate\" value=\"$DUE1\""
 has "pay page: monthly payment option" "$PP" "Monthly payment"
 has "pay page: shows the interest/principal split" "$PP" "\$$I1 interest"
 has "pay page: extra toward principal" "$PP" "Extra toward principal"
@@ -296,12 +307,14 @@ R=$(pay $U $UL -d Kind=Scheduled -d FromAccountId=$UCHK)
 check "scheduled payment -> PRG to the loan" "$R" "302 $B/accounts/$UL"
 check "paid the monthly payment from checking" "$(bal $UCHK)" "$(money "8000 - $MPAY")"
 check "interest first, the rest to principal" "$(lv $UL "printf('%.2f', PrincipalRemaining)")" "$(money "8000 - ($MPAY - $I1)")"
-check "one installment made, next due a month later" "$(lv $UL "PaymentsMade || ':' || NextDueDate")" "1:$(sql "SELECT date(FirstDueDate, '+1 month') FROM Loans WHERE AccountId = $UL")"
+check "one installment made, next due a month later" "$(lv $UL "PaymentsMade || ':' || NextDueDate")" "1:$(date -d "$DUE1 +1 month" +%F)"
 check "rows: interest charge + payment on the loan, transfer out of checking" "$(sql "SELECT GROUP_CONCAT(Type) FROM (SELECT Type FROM Transactions WHERE AccountId = $UL AND Type <> 'LoanDisbursement' ORDER BY Id)"):$(sql "SELECT Type FROM Transactions WHERE AccountId = $UCHK ORDER BY Id DESC LIMIT 1")" "InterestCharge,LoanPayment:TransferOut"
 check "payment record: the split" "$(sql "SELECT Kind || ':' || InstallmentNumber || ':' || printf('%.2f', Interest) FROM LoanPayments WHERE LoanId = (SELECT Id FROM Loans WHERE AccountId = $UL)")" "Scheduled:1:$I1"
 inv "after a scheduled payment" $UL
 pay $U $UL -d Kind=Scheduled -d FromAccountId=$UCHK >/dev/null
-has "the same month can't be paid twice" "$(cat /tmp/post.html)" "payment is already made"
+has "the same month can't be paid twice" "$(cat /tmp/post.html)" "payment is made"
+pay $U $UL -d Kind=Scheduled -d ForDueDate=$DUE1 -d FromAccountId=$UCHK >/dev/null
+has "a resubmitted form for a paid due date is refused" "$(cat /tmp/post.html)" "was already made, so nothing was paid again"
 check "still one installment" "$(lv $UL PaymentsMade)" 1
 LEFT_BEFORE=$(curl -s -b $U $B/api/loans/$UL | grep -oE '"paymentsRemaining":[0-9]+' | cut -d: -f2)
 PR=$(lv $UL "printf('%.2f', PrincipalRemaining)")
@@ -430,6 +443,15 @@ check "customer told it failed, with what to do" "$(sql "SELECT COUNT(*) FROM Al
 sleep 6
 check "not retried every run (one failure alert)" "$(sql "SELECT COUNT(*) FROM Alerts WHERE UserId = '$U3ID' AND Title = 'Loan autopay failed'")" 1
 inv "after failed autopay" $L3
+apost /admin/accounts/details/$U3CHK /admin/accounts/adjust/$U3CHK -d direction=credit -d amount=2000 --data-urlencode "reason=Test: payday after a failed autopay" >/dev/null
+sql "UPDATE Loans SET NextDueDate = '$(d '+0 days')' WHERE AccountId = $L3" >/dev/null   # (the missed payment, due today)
+R=$(post $U3 /accounts/$L3 /loans/$L3/autopay -d enabled=true -d fromAccountId=$U3CHK)
+has "saving autopay again says the past-due payment will be paid" "$(flash $U3 $B/accounts/$L3)" "past-due payment will be paid"
+waitfor "and the scheduler retries it" "SELECT PaymentsMade FROM Loans WHERE AccountId = $L3" "$((NP + 1))"
+inv "after the retried autopay" $L3
+check "autopay and a manual payment can't both pay on the due date" "$(pay $U3 $L3 -d Kind=Scheduled -d FromAccountId=$U3CHK | cut -c1-3):$(lv $L3 PaymentsMade)" "200:$((NP + 1))"
+apost /admin/accounts/details/$U3CHK /admin/accounts/adjust/$U3CHK -d direction=debit -d amount=$(bal $U3CHK) --data-urlencode "reason=Test: empty checking again" >/dev/null
+sql "UPDATE Loans SET NextDueDate = '$(d '-1 days')' WHERE AccountId = $L3" >/dev/null
 post $U3 /accounts/$L3 /loans/$L3/autopay -d enabled=false >/dev/null
 check "autopay off" "$(lv $L3 "AutopayEnabled || ':' || IFNULL(AutopayFromAccountId, 'none')")" "0:none"
 pay $U3 $L3 -d Kind=Scheduled -d FromAccountId=$U3CHK >/dev/null
@@ -468,6 +490,16 @@ has "no generic close on a loan" "$(flash $A $B/admin/loans/details/$JAUTO)" "Us
 check "loan untouched by the refused actions" "$(bal $JAUTO):$(sql "SELECT Status FROM Accounts WHERE Id = $JAUTO")" "$JB:Active"
 apost /admin/loans/details/$JOLD /admin/loans/adjust/$JOLD -d direction=debit -d amount=10 --data-urlencode "reason=On a paid-off loan" >/dev/null
 has "a paid-off loan can't be adjusted" "$(flash $A $B/admin/loans/details/$JOLD)" "paid off"
+# Staff bring a loan to $0 owed (credit the principal, then waive the last fee): it's paid off, not left Active at $0.
+L4P=$(lv $L4 "printf('%.2f', PrincipalRemaining)")
+sql "UPDATE Loans SET NextDueDate = '$(d '-12 days')', LateFeeForDueDate = NULL WHERE AccountId = $L4" >/dev/null
+waitfor "another missed payment: a second late fee" "SELECT COUNT(*) FROM Transactions WHERE AccountId = $L4 AND Type = 'LateFee' AND Status = 'Posted'" 2
+apost /admin/loans/details/$L4 /admin/loans/adjust/$L4 -d direction=credit -d amount=$L4P --data-urlencode "reason=Settlement: principal forgiven" >/dev/null
+check "principal forgiven, the fee still owed: still active" "$(lv $L4 "printf('%.2f', PrincipalRemaining) || ':' || printf('%.2f', FeesOwed) || ':' || Status")" "0.00:35.00:Active"
+L4FEE=$(sql "SELECT Id FROM Transactions WHERE AccountId = $L4 AND Type = 'LateFee' AND Status = 'Posted' ORDER BY Id DESC LIMIT 1")
+apost /admin/loans/details/$L4 /admin/loans/waivefee/$L4 -d feeTransactionId=$L4FEE --data-urlencode "reason=Settlement: fee waived too" >/dev/null
+check "waiving the last fee pays the loan off and closes it" "$(sql "SELECT l.Status || ':' || a.Status || ':' || printf('%.2f', a.Balance) || ':' || l.AutopayEnabled FROM Loans l JOIN Accounts a ON a.Id = l.AccountId WHERE l.AccountId = $L4")" "PaidOff:Closed:0.00:0"
+hasnt "and it isn't listed as overdue" "$(curl -s -b $A "$B/admin/loans?status=overdue")" "/admin/loans/details/$L4\""
 
 echo "== Settings: rate tiers"
 ST=$(curl -s -b $A $B/admin/settings)

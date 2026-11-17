@@ -25,9 +25,51 @@ Every suite runs against a separate test server on a freshly reset scratch datab
 | checkdeposit | uploads, limits, duplicates, races, pending balance, review queue | 121 |
 | disputes | eligibility, form rules, provisional credit, partial / P2P refunds, clawback overdraft, races | 134 |
 | creditcard | simulated decisions, limit + simultaneous purchases, statement cycle, grace period, interest, late fee + waive, autopay, cash back, card disputes, admin actions | 210 |
-| **Total** | | **1,287** |
+| loans | calculator math to the cent (independent exact-integer schedule), simulated decisions, offer / accept / decline / expiry, approve + counter-offer, disbursement on both sides, scheduled / extra principal / payoff, final payment to $0.00, late fee + overdue + waive, autopay success / failure / retry, admin adjustments and guards, net worth | 278 |
+| **Total** | | **1,565** |
 
 ## Phase 2
+
+### Feature 7: Loans, personal and auto (simulated credit)
+
+- **Calculator** (`/products/loans`): personal or auto, amount, term and APR give the monthly payment, total interest
+  and total cost, a stacked bar per year (principal vs interest, colors checked for color-blind readers) with a tooltip,
+  and the full schedule as a table. Every number comes from `GET /api/loans/calculator`, the same `LoanMath` a real loan
+  uses: `decimal` math, and payment n (the term) absorbs the cent rounding so the loan ends at exactly $0.00
+  ($20,000 at 6% for 60 months: $386.66 a month, a final $386.41, $3,199.35 interest).
+- **Applying**: "Alto Loan" is a fourth choice in the 7-step application (personal or auto in step 1). Step 6 asks for the
+  amount, the term, what it's for, the vehicle for an auto loan and the checking account the money goes to, with a live
+  payment estimate. The **simulated** decision (`LoanDecisionRules`) sets a rate tier from income and Alto history and
+  gives an **offer**, sends it to staff (frozen account, $20,000+, a payment over 15% of income or tier D) or denies it (an
+  overdue Alto loan, a payment over 25% of income). One loan application at a time; "Demo decision, no credit check"
+  everywhere a decision shows.
+- **The offer** (`/loans/offer/{id}`): a Truth-in-Lending style box (APR, finance charge, amount financed, total of
+  payments), the payment plan, where the money goes, and an agreement checkbox. Accept puts the money in checking with a row
+  on both sides; Decline asks once more. Offers expire after 30 days. Staff approve as offered, **counter-offer** (a new APR
+  and/or amount; the customer sees what they asked for and the new terms) or deny.
+- **The loan** (`/accounts/{id}`): principal remaining, rate, monthly payment, next payment and due date, payments made and to
+  go, a payoff progress bar, overdue / past-due banners; tabs Activity, Schedule (paid rows, then the rest, the next one
+  highlighted) and Payments & autopay. **Make a payment** (`/loans/{id}/pay`): the monthly payment (its interest / principal
+  split, plus any late fees), extra toward principal (the schedule gets shorter, the payment stays) or the payoff with
+  interest accrued day by day to today. Paying the last dollar closes the loan; a printable paid-in-full letter.
+- **Scheduler**: autopay on the due date (an alert if it fails; saving autopay again retries a missed payment), a late fee
+  once per missed payment after 10 grace days (the loan shows Overdue), and a reminder 5 days before a due date.
+- **Admin Loans** (Money section): Active / Overdue / Paid off with counts, a detail page (schedule, payment history with
+  each split, late fees with Waive, Post adjustment to the principal), each with a reason and an audit row. Settings: rate
+  tiers A-D, the auto discount, the review amount, the late fee and the grace days. Generic adjust / freeze / close / reverse
+  refuse loans.
+- **Dashboard**: cards and loans sit in "Your accounts" with checking and savings, and the headline is **net worth** (what
+  you have minus what you owe on cards and loans). The 30-day chart no longer counts paying your own card or loan as money in.
+- **Daily transfer limit**: payments to your own Alto card or loan no longer count toward it or get blocked by it (the money
+  stays inside Alto, and a $5,000 limit made a larger loan impossible to pay off in one go). This changes card payments too.
+- **Seed**: Jordan has an auto loan 6 payments in (autopay on) and a personal loan he paid off early (the letter); Maya's
+  personal loan is 15 days late (overdue, with the late fee); Samuel's $26,000 auto loan application waits for review.
+- **Review fixes**: an expired offer no longer blocks applying again (and can be removed); the monthly payment can't be
+  made on the day a loan is funded or twice on a due date (autopay plus a manual payment), and the form names the due date
+  it pays so a resubmit can't pay the next one; saving autopay again retries a missed payment and says so; payoff interest
+  never counts days before the loan was funded; a staff waiver or credit that leaves $0 owed pays the loan off instead of
+  leaving it Active / Overdue; the late fee re-reads the loan in its own transaction; paid-off loans don't get "autopay
+  turned off" alerts; the service re-checks every application rule; clearer past-due wording on Make a payment.
 
 ### Feature 6: Alto Peak credit card (simulated credit)
 

@@ -88,6 +88,7 @@ public class PayLoanForm
     public LoanPaymentKind Kind { get; set; } = LoanPaymentKind.Scheduled;
     [Range(0.01, 1_000_000)] public decimal? ExtraAmount { get; set; }
     public int? FromAccountId { get; set; }
+    public DateOnly? ForDueDate { get; set; }   // the due date the page showed (a resubmit can't pay the next one)
 }
 
 public class PayLoanViewModel

@@ -84,6 +84,7 @@
             {
                 <div class="notice notice-info mb-3"><i class="bi bi-clock-history"></i>
                     <div>This offer expired on @Model.ExpiresOn.ToString("MMMM d, yyyy"). You're welcome to <a asp-controller="Accounts" asp-action="Apply" asp-route-type="Loan">apply again</a>.</div></div>
+                <button type="button" class="btn btn-alto-ghost" data-bs-toggle="modal" data-bs-target="#declineModal">Remove this offer</button>
             }
             else if (!Model.CheckingAccounts.Any())
             {

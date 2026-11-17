@@ -102,7 +102,8 @@ public interface IBankService
     Task<(BankResult Result, Account? LoanAccount)> AcceptLoanOfferAsync(string userId, int applicationId, int toAccountId);
     Task<BankResult> DeclineLoanOfferAsync(string userId, int applicationId);
     /// <summary>Scheduled installment (+ unpaid fees), extra toward principal, or the payoff (with interest accrued to today).</summary>
-    Task<BankResult> PayLoanAsync(string userId, int loanAccountId, int fromAccountId, LoanPaymentKind kind, decimal? extraAmount);
+    /// (forDueDate: the due date the customer saw; a scheduled payment for any other date is refused, so a resubmit can't pay twice.)
+    Task<BankResult> PayLoanAsync(string userId, int loanAccountId, int fromAccountId, LoanPaymentKind kind, decimal? extraAmount, DateOnly? forDueDate = null);
     /// <summary>Called by the scheduler: autopay on the due date, the late fee after the grace days, a reminder (idempotent).</summary>
     Task<LoanCycleOutcome> RunLoanCycleAsync(int loanId, DateOnly today);
 

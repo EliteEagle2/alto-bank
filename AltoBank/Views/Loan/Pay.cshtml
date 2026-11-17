@@ -11,15 +11,17 @@
     var graceEnds = due.AddDays(v.GraceDays);
     var inv = System.Globalization.CultureInfo.InvariantCulture;
     var scheduledHelp = !q.CanPayScheduled
-        ? $"Your {due.AddMonths(-1):MMM d} payment is already made. The next one can be paid from {q.OpensOn:MMM d}."
+        ? BankService.ScheduledNotOpenYet(l, q)
         : $"Your {due:MMM d} payment: {q.InstallmentInterest:C} interest + {q.InstallmentPrincipal:C} principal"
           + (q.Fees > 0 ? $" + {q.Fees:C} late fees" : "") + "."
+          + (q.PaymentsPastDue > 1 ? $" This pays the {due:MMM d} payment; {q.PaymentsPastDue - 1} more {(q.PaymentsPastDue == 2 ? "is" : "are")} past due after it." : "")
           + (v.Overdue ? " It's overdue, so please pay it now." : v.PastDue ? $" Pay by {graceEnds:MMM d} to avoid a late fee." : "");
     var options = new List<(LoanPaymentKind Kind, string Label, decimal? Amount, string Help, bool Disabled)>
     {
         (LoanPaymentKind.Scheduled, v.PastDue ? "Past-due payment" : "Monthly payment", q.CanPayScheduled ? q.ScheduledAmount : null, scheduledHelp, !q.CanPayScheduled),
         (LoanPaymentKind.ExtraPrincipal, "Extra toward principal", null,
-            "All of it lowers what you owe, so you pay less interest and finish sooner. It doesn't replace your monthly payment.", false),
+            (v.PastDue ? $"Your {due:MMM d} payment is past due: pay that first. Extra payments don't count toward it. " : "")
+            + "All of it lowers what you owe, so you pay less interest and finish sooner. It doesn't replace your monthly payment.", false),
         (LoanPaymentKind.Payoff, "Pay off the loan", q.PayoffAmount,
             $"{l.PrincipalRemaining:C} principal + {q.AccruedInterest:C} interest to today ({q.DaysAccrued} day{(q.DaysAccrued == 1 ? "" : "s")} since {q.OpensOn:MMM d})"
             + (l.FeesOwed > 0 ? $" + {l.FeesOwed:C} late fees" : "") + ". Then you owe $0.00. No prepayment penalty.", false),
@@ -44,6 +46,7 @@
     {
         <form method="post" asp-action="Pay" asp-route-id="@a.Id" class="glass p-4" id="payLoanForm" novalidate>
             <div asp-validation-summary="ModelOnly" class="alert alert-danger small" role="alert"></div>
+            <input type="hidden" name="ForDueDate" value="@due.ToString("yyyy-MM-dd")" />
 
             <fieldset class="mb-4">
                 <legend class="h6 mb-3">What do you want to pay?</legend>

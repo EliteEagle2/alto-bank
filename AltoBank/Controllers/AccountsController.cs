@@ -529,7 +529,7 @@ public class AccountsController : Controller
         model.EstablishedCustomer = deposits.Count > 0 && (DateTime.UtcNow - deposits.Min(a => a.OpenedAt)).TotalDays >= 60 && deposits.Sum(a => a.Balance) >= 1_000m;
         if (model.CheckingAccounts.Count == 0)
             model.LoanUnavailableReason = "Open an Alto checking account first: that's where the loan money goes.";
-        else if ((await _bank.GetApplicationsAsync(user.Id)).Any(a => a.AccountType == AccountType.Loan && a.Status is ApplicationStatus.Pending or ApplicationStatus.Offered))
+        else if ((await _bank.GetApplicationsAsync(user.Id)).Any(a => BankService.LoanInProgress(a, BankTime.Today)))
             model.LoanUnavailableReason = "You have a loan application in progress. Check your Profile for its status or offer.";
 
         ViewBag.States = new SelectList(ApplicationOptions.States, "Key", "Value");

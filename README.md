@@ -32,6 +32,17 @@ Built by **Austin Emig** for **Server Sided Web Development**.
   owe, available credit, the statement balance, the minimum due and a credit-used bar. Monthly statements (printable),
   interest only when you don't pay the statement in full by the due date, a late fee if the minimum is late, 1.5% cash back
   you can redeem, Pay card (minimum, statement balance, current balance or another amount) and autopay.
+- **Loans (personal and auto, simulated credit):** a payment calculator with an amortization chart on the Loans page, and
+  a loan application in the same 7-step flow (amount, term, what it's for, the vehicle for an auto loan, and the checking
+  account the money goes to, with a live payment estimate). The demo decision is an **offer** you accept or decline, with
+  a Truth-in-Lending style box (APR, finance charge, amount financed, total of payments); large or borderline loans go to
+  staff, who can approve, counter-offer or deny. Accepting puts the money in checking right away. The loan page shows
+  what's left to repay, the rate, the payment and its due date, payments made and to go, a payoff progress bar and the full
+  schedule (the last payment lands on exactly $0.00). Make a payment: the monthly payment, extra toward principal (the
+  loan ends sooner) or the payoff with interest to today. Autopay, a late fee after 10 grace days, and a printable
+  paid-in-full letter.
+- **Net worth on the dashboard:** cards and loans sit in "Your accounts" with checking and savings, and the headline is
+  what you have minus what you owe.
 - **Disputes:** dispute a withdrawal, bill payment, card purchase or payment you sent within 60 days, straight from the transaction:
   choose what went wrong (with the expected amount for "Wrong amount" or the original for "Duplicate charge"), describe it,
   attach a receipt, review and submit. "I didn't authorize it" can freeze the debit card in the same step. A timeline
@@ -47,8 +58,10 @@ Built by **Austin Emig** for **Server Sided Web Development**.
 - A console with a work queue, customer search and a status bar (scheduler health, pending applications, frozen accounts).
 - Customers, accounts, transactions, applications, P2P payments, scheduled payments and a **check deposit review
   queue** (both images with click-to-zoom, duplicate-image warnings, the customer's deposit history) and a **dispute
-  queue** (the charge, the customer's history with that merchant, the attachment), and **Credit Cards** (statements, limit
-  changes, late fee waivers, refunding a credit balance, closing at $0), with filters.
+  queue** (the charge, the customer's history with that merchant, the attachment), **Credit Cards** (statements, limit
+  changes, late fee waivers, refunding a credit balance, closing at $0) and **Loans** (Active / Overdue / Paid off, the
+  schedule and payment history, waiving a late fee, adjustments), with filters. Loan applications are approved as
+  offered, counter-offered (a new rate or amount) or denied in Applications.
 - Disputes are approved through the existing reversal system (the whole charge, or only the difference for a wrong
   amount; a payment to another customer is refunded to the sender only). An optional **provisional credit** pays the
   customer right away and is taken back if the dispute is denied, even if that overdraws the account, which is flagged.
@@ -120,9 +133,9 @@ On the login page, click **Demo Customer** or **Demo Admin**, or sign in with:
 
 | Who | Email | Password |
 |---|---|---|
-| Customer (Jordan, pays the card in full with autopay) | demo@altobank.com | Demo123! |
-| Customer (Maya, carries a card balance with interest) | maya@altobank.com | Demo123! |
-| Customer (Sam, card application waiting for review) | sam@altobank.com | Demo123! |
+| Customer (Jordan, pays the card in full with autopay; an auto loan partway through and a paid-off loan) | demo@altobank.com | Demo123! |
+| Customer (Maya, carries a card balance with interest; an overdue personal loan) | maya@altobank.com | Demo123! |
+| Customer (Sam, card and auto loan applications waiting for review) | sam@altobank.com | Demo123! |
 | Admin and Owner (Alex) | admin@altobank.com | Admin123! |
 
 These are made-up demo accounts. The admin also has customer accounts of their own.
@@ -142,9 +155,10 @@ dotnet run -- --reset-db   # delete the database and start over with fresh demo 
 
 ## Tests
 
-`tests/` holds 15 end-to-end suites (1,200+ checks) that drive the running app over HTTP: money rules, races, ownership checks
+`tests/` holds 16 end-to-end suites (1,500+ checks) that drive the running app over HTTP: money rules, races, ownership checks
 (another customer's id returns 404), antiforgery, the scheduler, P2P, Bill Pay, staff permissions, profile settings, insights
-budgets, check deposits, disputes and the credit card statement cycle. Run them against a **separate test server with its own scratch database**, never your real `altobank.db`:
+budgets, check deposits, disputes, the credit card statement cycle and loans (the amortization math is checked to the cent
+against an independent exact-integer schedule, `tests/amortize.js`). Run them against a **separate test server with its own scratch database**, never your real `altobank.db`:
 
 ```powershell
 # terminal 1: a test server on a scratch database

@@ -87,11 +87,15 @@ public class LoanService : ILoanService
         var before = new { autopay = loan.AutopayEnabled, from = loan.AutopayFromAccountId };
         loan.AutopayEnabled = enabled;
         loan.AutopayFromAccountId = enabled ? fromAccountId : null;
+        var today = BankTime.Today;
+        var pastDue = enabled && loan.NextDueDate is DateOnly nd && nd <= today;
+        if (pastDue) loan.AutopayAttemptedFor = null;   // saving autopay again tries a missed payment again
         _audit.Add("Loan.Autopay.Set", $"Autopay on loan ••{loan.Account!.Last4}: {(enabled ? "on" : "off")}", "Account", loan.AccountId.ToString(),
                    before, new { autopay = enabled, from = loan.AutopayFromAccountId });
         await _db.SaveChangesAsync();
-        return new(true, enabled
-            ? $"Autopay is on: we'll make each monthly payment on its due date (next: {loan.NextDueDate:MMM d})."
-            : "Autopay is off. Remember to pay by each due date.");
+        var q = LoanQuote.For(loan, today);
+        return new(true, !enabled ? "Autopay is off. Remember to pay by each due date."
+            : pastDue ? $"Autopay is on. Your past-due payment{(q.PaymentsPastDue > 1 ? $"s ({q.PaymentsPastDue})" : "")} will be paid within a few minutes, then each one on its due date."
+            : $"Autopay is on: we'll make each monthly payment on its due date (next: {loan.NextDueDate:MMM d}).");
     }
 }

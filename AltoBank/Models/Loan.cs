@@ -74,8 +74,12 @@ public class Loan
     /// <summary>Share of the amount borrowed that's been repaid, 0-100.</summary>
     [NotMapped] public decimal PercentPaid => Principal <= 0 ? 0m : Math.Clamp(Math.Round((Principal - PrincipalRemaining) / Principal * 100m, 1), 0m, 100m);
 
-    /// <summary>The monthly period the next installment covers starts one month before its due date.</summary>
-    public DateOnly? PeriodStart => NextDueDate?.AddMonths(-1);
+    /// <summary>
+    /// The monthly period the next installment covers: from one month before its due date, but never before the loan was
+    /// funded (a first due date moved back to the 28th mustn't add interest for days before the money existed).
+    /// </summary>
+    public DateOnly? PeriodStart => NextDueDate is DateOnly d ? Max(d.AddMonths(-1), AltoBank.Services.BankTime.DateOf(DateTime.SpecifyKind(DisbursedAt, DateTimeKind.Utc))) : null;
+    private static DateOnly Max(DateOnly a, DateOnly b) => a > b ? a : b;
 
     /// <summary>Past the due date (still in the grace days, no fee yet).</summary>
     public bool IsPastDue(DateOnly today) => Status == LoanStatus.Active && NextDueDate is DateOnly d && today > d;
@@ -201,13 +205,17 @@ public record LoanQuote(
         if (loan.Status != LoanStatus.Active || loan.NextDueDate is not DateOnly due)
             return new LoanQuote(0, 0, 0, 0, false, null, 0, 0, 0, 0);
         var (payment, interest, principal) = LoanMath.NextInstallment(loan.PrincipalRemaining, loan.AprPercent, loan.MonthlyPayment, loan.PaymentsMade + 1 >= loan.TermMonths);
-        var periodStart = due.AddMonths(-1);
+        // Interest to today counts from the period start (never before funding). The scheduled payment for a period can be
+        // made from the day AFTER it starts: so not on the day the loan is funded, and not a second time on a due date
+        // (pay Dec 17 on Dec 17, and Jan 17's can't follow the same day, e.g. autopay and a manual payment).
+        var periodStart = loan.PeriodStart!.Value;
+        var opensOn = due.AddMonths(-1).AddDays(1);
         var days = Math.Max(0, today.DayNumber - periodStart.DayNumber);
         var accrued = LoanMath.AccruedInterest(loan.PrincipalRemaining, loan.AprPercent, days);
         var pastDue = 0;
         while (pastDue < 600 && due.AddMonths(pastDue) < today) pastDue++;   // due dates already behind us
         return new LoanQuote(payment + loan.FeesOwed, interest, principal, loan.FeesOwed,
-            CanPayScheduled: periodStart <= today, OpensOn: periodStart,
+            CanPayScheduled: opensOn <= today, OpensOn: opensOn,
             days, accrued, loan.PrincipalRemaining + accrued + loan.FeesOwed, pastDue);
     }
 }

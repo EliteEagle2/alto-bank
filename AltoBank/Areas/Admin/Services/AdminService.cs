@@ -525,7 +525,7 @@ public partial class AdminService : IAdminService
                 Notify(card, AlertType.BillFailed, "Card autopay turned off",
                     $"Autopay on your {card.DisplayName} ••{card.Last4} paid from {account.DisplayName} ••{account.Last4}, which is now closed. Turn autopay on again with another account.");
             }
-            foreach (var loan in await _db.Loans.Include(l => l.Account).Where(l => l.AutopayFromAccountId == account.Id).ToListAsync())
+            foreach (var loan in await _db.Loans.Include(l => l.Account).Where(l => l.AutopayEnabled && l.AutopayFromAccountId == account.Id).ToListAsync())
             {
                 loan.AutopayEnabled = false;
                 loan.AutopayFromAccountId = null;

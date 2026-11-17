@@ -118,7 +118,7 @@ public class LoanController : Controller
         if (form.FromAccountId is not int from) { ModelState.AddModelError(nameof(form.FromAccountId), "Choose the account to pay from."); from = 0; }
         if (!ModelState.IsValid) return await PayPageAsync(id, form);
 
-        var r = await _bank.PayLoanAsync(UserId, id, from, form.Kind, form.ExtraAmount);
+        var r = await _bank.PayLoanAsync(UserId, id, from, form.Kind, form.ExtraAmount, form.ForDueDate);
         if (!r.Success)
         {
             ModelState.AddModelError("", r.Message);
