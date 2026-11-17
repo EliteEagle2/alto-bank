@@ -1,0 +1,12 @@
+@model DisputeStatus
+@* A dispute's status for customers: an icon and a word, never color alone. *@
+@{
+    var (icon, css) = Model switch
+    {
+        DisputeStatus.Approved => ("bi-check-circle-fill", "is-approved"),
+        DisputeStatus.Denied => ("bi-x-circle-fill", "is-rejected"),
+        DisputeStatus.UnderReview => ("bi-search", "is-pending"),
+        _ => ("bi-hourglass-split", "is-pending")
+    };
+}
+<span class="check-status @css"><i class="bi @icon" aria-hidden="true"></i>@Dispute.LabelFor(Model)</span>

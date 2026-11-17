@@ -78,6 +78,15 @@ public interface IBankService
     /// </summary>
     Task<(BankResult Result, Transaction? Transaction)> PostCheckDepositInCurrentTransactionAsync(CheckDeposit deposit);
 
+    // ----- Disputes (money side; BankService.Disputes.cs). Both run inside the caller's DB transaction. -----
+    /// <summary>Credits the dispute's RefundAmount right away (provisional credit), linked to the disputed transaction.</summary>
+    Task<(BankResult Result, Transaction? Transaction)> PostProvisionalCreditInCurrentTransactionAsync(Dispute dispute);
+    /// <summary>
+    /// Takes a denied dispute's provisional credit back. Decision 5: this is the ONLY money movement allowed to overdraw;
+    /// Overdrew tells the caller so it can flag and audit it.
+    /// </summary>
+    Task<(BankResult Result, Transaction? Transaction, bool Overdrew)> PostProvisionalClawbackInCurrentTransactionAsync(Dispute dispute);
+
     // ----- Opening accounts -----
     Task<(BankResult Result, Account? Account)> OpenAccountAsync(string userId, OpenAccountRequest request);
     Task<(BankResult Result, Account? Account)> OpenAccountInCurrentTransactionAsync(string userId, OpenAccountRequest request);

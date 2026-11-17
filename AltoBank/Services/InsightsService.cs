@@ -97,7 +97,13 @@ internal static class Spending
         public decimal Spend => Categories.IsSpending(Category) ? (IsCredit ? -Amount : Amount) : 0m;
     }
 
-    /// <summary>Posted rows on the customer's accounts in [fromDay, toDay) (bank days), minus reversed pairs.</summary>
+    /// <summary>
+    /// Posted rows on the customer's accounts in [fromDay, toDay) (bank days). A refund-type row (a reversal, or a dispute's
+    /// provisional credit / clawback) points at its original charge and counts only while that original is still Posted:
+    ///   • fully reversed: the original is Reversed, so neither row counts (they cancel out);
+    ///   • partly refunded (a "Wrong amount" dispute) or a provisional credit: the original counts in full and the refund
+    ///     row takes its part back out of the same category.
+    /// </summary>
     public static Task<List<Row>> LoadAsync(ApplicationDbContext db, string userId, DateOnly fromDay, DateOnly toDay)
     {
         var start = BankTime.StartOfDayUtc(fromDay);
@@ -105,7 +111,8 @@ internal static class Spending
         return db.Transactions.AsNoTracking()
             .Where(t => t.Account!.UserId == userId && t.Date >= start && t.Date < end
                         && t.Status == TransactionStatus.Posted
-                        && t.Type != TransactionType.ReversalCredit && t.Type != TransactionType.ReversalDebit)
+                        && (t.ReversalOfTransactionId == null
+                            || db.Transactions.Any(o => o.Id == t.ReversalOfTransactionId && o.Status == TransactionStatus.Posted)))
             .Select(t => new Row(t.Id, t.Date, t.Type, t.Amount, t.Category, t.Description, t.CounterpartyName))
             .ToListAsync();
     }
@@ -216,11 +223,12 @@ public class InsightsService : IInsightsService
         month = Spending.MonthOf(month);
         var start = BankTime.StartOfDayUtc(month);
         var end = BankTime.StartOfDayUtc(month.AddMonths(1));
-        // Same rows the totals count (posted, no reversal pairs), so the list adds up to the amount in the legend.
+        // Same rows the totals count (Spending.LoadAsync), so the list adds up to the amount in the legend.
         return await _db.Transactions.AsNoTracking().Include(t => t.Account)
             .Where(t => t.Account!.UserId == userId && t.Category == category && t.Date >= start && t.Date < end
                         && t.Status == TransactionStatus.Posted
-                        && t.Type != TransactionType.ReversalCredit && t.Type != TransactionType.ReversalDebit)
+                        && (t.ReversalOfTransactionId == null
+                            || _db.Transactions.Any(o => o.Id == t.ReversalOfTransactionId && o.Status == TransactionStatus.Posted)))
             .OrderByDescending(t => t.Date).ThenByDescending(t => t.Id)
             .Take(DrillDownLimit + 1)   // one extra tells the page there are more
             .ToListAsync();

@@ -18,7 +18,9 @@ public enum TransactionType
     PaymentSent,        // Send & Request: money sent to another Alto customer (debit)
     PaymentReceived,    // Send & Request: money received from another Alto customer (credit)
     BillPayment,        // Bill Pay: money paid to a payee, now or on a schedule (debit)
-    CheckDeposit        // Mobile check deposit, posted when an admin approves it (credit)
+    CheckDeposit,       // Mobile check deposit, posted when an admin approves it (credit)
+    ProvisionalCredit,  // Dispute: money returned right away while the dispute is reviewed (credit)
+    ProvisionalClawback // Dispute denied: the provisional credit taken back; may overdraw (debit)
 }
 
 /// <summary>
@@ -94,7 +96,7 @@ public class Transaction
     {
         TransactionType.Deposit, TransactionType.TransferIn, TransactionType.Interest,
         TransactionType.AdjustmentCredit, TransactionType.ReversalCredit, TransactionType.PaymentReceived,
-        TransactionType.CheckDeposit
+        TransactionType.CheckDeposit, TransactionType.ProvisionalCredit
     };
 
     /// <summary>Money sent to another account. These count toward the daily transfer limit (withdrawals don't).</summary>
@@ -127,6 +129,8 @@ public class Transaction
         TransactionType.PaymentReceived => "Payment received",
         TransactionType.BillPayment => "Bill payment",
         TransactionType.CheckDeposit => "Mobile check deposit",
+        TransactionType.ProvisionalCredit => "Provisional credit",
+        TransactionType.ProvisionalClawback => "Provisional credit reversed",
         _ => type.ToString()
     };
 }

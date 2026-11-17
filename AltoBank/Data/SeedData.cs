@@ -129,6 +129,83 @@ public static class SeedData
         await CategorizeTransactionsAsync(db);
         await EnsureInsightsDemoDataAsync(services, db, userManager);
         await EnsureCheckDepositDemoDataAsync(services, db, userManager);
+        await EnsureDisputeDemoDataAsync(services, db, userManager);
+    }
+
+    /// <summary>
+    /// Disputes demo, made through the real flows (IDisputeService to file, IAdminService to decide), so the money,
+    /// alerts and audit rows are exactly what the app would produce:
+    ///   Jordan: one approved (refunded through the reversal system) and one under review ("Wrong amount").
+    ///   Maya:   one denied, filed while provisional credit was ON, so the credit and its clawback are both visible.
+    /// </summary>
+    private static async Task EnsureDisputeDemoDataAsync(IServiceProvider services, ApplicationDbContext db, UserManager<ApplicationUser> userManager)
+    {
+        if (await db.Disputes.AnyAsync()) return;
+        var jordan = await userManager.FindByEmailAsync(DemoEmail);
+        var maya = await userManager.FindByEmailAsync("maya@altobank.com");
+        if (jordan == null || maya == null) return;
+        var disputes = services.GetRequiredService<AltoBank.Services.IDisputeService>();
+        var admin = services.GetRequiredService<AltoBank.Areas.Admin.Services.IAdminService>();
+        var since = DateTime.UtcNow.AddDays(-45);
+
+        // Recent card purchases (withdrawals) on each customer's main checking, newest first.
+        // (The amount test is done in C#: SQLite stores decimals as text, so "Amount >= 15" in SQL wouldn't filter anything.)
+        async Task<List<Transaction>> Purchases(string userId, string number) =>
+            (await db.Transactions.AsNoTracking()
+                .Where(t => t.Account!.UserId == userId && t.Account.AccountNumber == number && t.Type == TransactionType.Withdrawal
+                            && t.Status == TransactionStatus.Posted && t.Date >= since)
+                .OrderByDescending(t => t.Date).ToListAsync())
+            .Where(t => t.Amount >= 15).ToList();
+        var jp = await Purchases(jordan.Id, "4410274821");
+        var mp = await Purchases(maya.Id, "5520831402");
+        if (jp.Count < 2 || mp.Count < 1) { Console.WriteLine("  Disputes demo: not enough recent purchases; skipped."); return; }
+
+        // The staff decisions are recorded as the seeded admin.
+        using var asAdmin = AltoBank.Services.AuditLogger.ActAs(new AltoBank.Services.AuditActor(null, AdminEmail, "Admin"));
+        async Task<Dispute?> File(string userId, Transaction t, DisputeReason reason, string text, decimal? expected = null)
+        {
+            var (r, d) = await disputes.SubmitAsync(userId, new AltoBank.Services.DisputeInput(t.Id, reason, text, expected, null, false), null);
+            if (!r.Success) Console.WriteLine($"  Disputes demo: couldn't file one ({r.Message}).");
+            return d;
+        }
+
+        // Jordan 1: an online order that never arrived -> approved, refunded in full.
+        var monthStart = AltoBank.Services.BankTime.StartOfMonthUtc(AltoBank.Services.BankTime.Today.Year, AltoBank.Services.BankTime.Today.Month);
+        var lastMonth = jp.Where(t => t.Date < monthStart).ToList();
+        var order = lastMonth.FirstOrDefault(t => t.Description.Contains("ShopNest") || t.Description.Contains("Outfitters"))
+                    ?? lastMonth.FirstOrDefault() ?? jp[0];
+        if (await File(jordan.Id, order, DisputeReason.NotReceived,
+                "I ordered this online but the package never arrived, and the store stopped answering my emails.") is { } refunded)
+        {
+            await admin.StartDisputeReviewAsync(refunded.Id, "Checking the order with the merchant");
+            await admin.ApproveDisputeAsync(refunded.Id, "The merchant couldn't show a delivery, so we refunded the full amount.");
+        }
+
+        // Jordan 2: charged more than expected -> under review.
+        var meal = jp.FirstOrDefault(t => t.Id != order.Id && t.Amount >= 25) ?? jp.First(t => t.Id != order.Id);
+        if (await File(jordan.Id, meal, DisputeReason.WrongAmount,
+                "The receipt I signed was for less than this. I think the tip was added twice.", expected: Math.Round(meal.Amount - 10m, 2)) is { } review)
+            await admin.StartDisputeReviewAsync(review.Id, "Asked the merchant for the itemized receipt");
+
+        // Maya: filed while provisional credit was ON (credited right away), then denied (credit taken back).
+        var settings = await db.BankSettings.FirstAsync();
+        var was = settings.ProvisionalCreditOnDisputes;
+        settings.ProvisionalCreditOnDisputes = true;
+        await db.SaveChangesAsync();
+        var charge = mp.First();
+        var denied = await File(maya.Id, charge, DisputeReason.NotAuthorized,
+            "I don't recognize this purchase. I wasn't in the store that day and still have my card.");
+        settings.ProvisionalCreditOnDisputes = was;
+        await db.SaveChangesAsync();
+        if (denied != null)
+        {
+            await admin.StartDisputeReviewAsync(denied.Id, "Requested the store's receipt");
+            await admin.DenyDisputeAsync(denied.Id, "The store sent a receipt signed with your card's chip and PIN at the time of purchase");
+        }
+
+        // Show the staff member who decided, as on a real admin action.
+        foreach (var d in await db.Disputes.Where(d => d.ReviewerEmail == "admin").ToListAsync()) d.ReviewerEmail = AdminEmail;
+        await db.SaveChangesAsync();
     }
 
     /// <summary>

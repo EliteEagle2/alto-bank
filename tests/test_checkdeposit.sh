@@ -248,11 +248,11 @@ sql "UPDATE BankSettings SET MobileDepositDailyLimit = 99999" >/dev/null
 SAMUSED=$(sql "SELECT IFNULL(SUM(Amount),0) FROM CheckDeposits WHERE UserId = '$SID' AND Status <> 'Rejected'")
 sql "UPDATE BankSettings SET MobileDepositDailyLimit = $(awk -v u=$SAMUSED 'BEGIN{printf "%.2f", u + 500}')" >/dev/null   # room for exactly one more $400
 for n in 1 2 3 4; do F="$(img png $((300+n)))"; BK="$(img png $((310+n)))"; ( deposit $S $SCHK 400 "$F" "$BK" > "$T/race$n.txt" ) & done; wait
-check "4 parallel \$400 deposits with \$500 left: exactly one accepted" "$(cat $T/race*.txt | grep -c '^302')" 1
+check "4 parallel \$400 deposits with \$500 left: exactly one accepted" "$(for f in $T/race*.txt; do cat "$f"; echo; done | grep -cE '^302 [^ ]*/checks/[0-9]+$')" 1
 sql "UPDATE BankSettings SET MobileDepositDailyLimit = 10000" >/dev/null
 DUP=$(img png 320)
 for n in 1 2 3; do ( deposit $C $JCHK 33 "$DUP" "$(img png $((330+n)))" > "$T/dup$n.txt" ) & done; wait
-check "3 parallel deposits of the same image: exactly one accepted" "$(cat $T/dup*.txt | grep -c '^302')" 1
+check "3 parallel deposits of the same image: exactly one accepted" "$(for f in $T/dup*.txt; do cat "$f"; echo; done | grep -cE '^302 [^ ]*/checks/[0-9]+$')" 1
 
 echo "== Approve refuses a check image that was already deposited"
 ORIG=$(sql "SELECT Id FROM CheckDeposits WHERE UserId = '$JID' AND Status = 'Approved' ORDER BY Id LIMIT 1")

@@ -58,6 +58,13 @@
                     </div>
                     <div class="col-12">
                         <div class="form-check form-switch">
+                            <input asp-for="ProvisionalCreditOnDisputes" class="form-check-input" role="switch" />
+                            <label asp-for="ProvisionalCreditOnDisputes" class="form-check-label"></label>
+                        </div>
+                        <div class="small text-muted-alto">ON: when a customer files a dispute, the amount is credited right away and taken back if the dispute is denied (even if that overdraws the account). Applies to disputes filed after the change.</div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch">
                             <input asp-for="AutoApproveApplications" class="form-check-input" role="switch" />
                             <label asp-for="AutoApproveApplications" class="form-check-label"></label>
                         </div>

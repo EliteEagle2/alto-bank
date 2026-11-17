@@ -16,6 +16,7 @@
         TransactionType.PaymentReceived => "bi-person-down",
         TransactionType.BillPayment => "bi-receipt",
         TransactionType.CheckDeposit => "bi-camera",
+        TransactionType.ProvisionalCredit or TransactionType.ProvisionalClawback => "bi-shield-exclamation",
         _ => "bi-arrow-counterclockwise"
     };
     var reversed = t.Status == TransactionStatus.Reversed;
@@ -28,7 +29,11 @@
             <span class="tx-title">@t.Description</span>
             <span class="tx-sub">@t.TypeLabel · @t.LocalDate.ToString("h:mm tt")
                 <span class="cat-chip" data-cat-chip>@Categories.Label(t.Category)</span>
-                @if (reversed) { <span class="badge-reversed">Reversed</span> }
+                @if (Model.Dispute is DisputeStatus ds)
+                {
+                    <span class="badge-dispute @(ds == DisputeStatus.Approved ? "is-refunded" : ds == DisputeStatus.Denied ? "is-denied" : "")">@(ds == DisputeStatus.Approved ? "Refunded" : ds == DisputeStatus.Denied ? "Dispute denied" : "Disputed")</span>
+                }
+                else if (reversed) { <span class="badge-reversed">Reversed</span> }
             </span>
         </span>
         <span class="tx-amounts">
@@ -63,5 +68,13 @@
             <button type="submit" class="btn btn-alto-outline btn-sm">Save</button>
             <span class="small text-muted-alto" data-cat-note>@(t.CategoryOverridden ? "You chose this category." : "Alto picked this category from the merchant name.")</span>
         </form>
+        @if (Model.CanDispute)
+        {
+            <a class="tx-dispute-link" href="@Url.Action("New", "MyDisputes", new { transactionId = t.Id })"><i class="bi bi-shield-exclamation" aria-hidden="true"></i>Dispute this transaction</a>
+        }
+        else if (Model.Dispute != null)
+        {
+            <a class="tx-dispute-link" href="@Url.Action("ForTransaction", "MyDisputes", new { transactionId = t.Id })"><i class="bi bi-shield-check" aria-hidden="true"></i>See your dispute</a>
+        }
     </div>
 </div>

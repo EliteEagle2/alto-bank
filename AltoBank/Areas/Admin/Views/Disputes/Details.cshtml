@@ -1,0 +1,152 @@
+@model DisputeDetailViewModel
+@{ ViewData["OwnHeading"] = true; /* this page shows its own heading, so the layout title is for screen readers only */ }
+@{
+    var d = Model.Dispute;
+    var t = d.Transaction!;
+    var name = $"{d.User?.FirstName} {d.User?.LastName}";
+    var acct = $"{d.Account?.DisplayName} ••{d.Account?.Last4}";
+    string Local(DateTime? x) => x == null ? "—" : BankTime.ToLocal(x.Value).ToString("MMM d, yyyy h:mm tt");
+    var full = d.RefundAmount == t.Amount;
+    var approveWhat = d.ProvisionalCreditTransactionId != null
+        ? $"The {d.RefundAmount:C} provisional credit already in {name}'s {acct} becomes final. No more money moves."
+        : $"{d.RefundAmount:C} is refunded to {name}'s {acct} through a reversal" + (full ? " and the charge is marked Reversed." : " (the difference they were overcharged); the charge itself stays.")
+          + (Model.IsP2P ? " Only the sender is refunded: nothing is taken back from the person they paid." : "");
+    var approve = new ConfirmModalViewModel("approveModal", $"Approve {d.Reference}",
+        approveWhat + " The customer gets an alert and sees your note below.", Url.Action("Approve", new { id = d.Id })!, "Approve & refund", "primary");
+    var denyWhat = "No refund. The customer sees the dispute as Denied with the reason you type below, so write it for them."
+        + (d.ProvisionalCreditTransactionId != null
+            ? $" The {d.RefundAmount:C} provisional credit is taken back from {acct}" + (d.Account!.Balance < d.RefundAmount ? $", which will overdraw it by {d.RefundAmount - d.Account.Balance:C} (the balance is {d.Account.Balance:C} now). That's allowed here, flagged in the work queue and audited." : ".")
+            : "");
+    var deny = new ConfirmModalViewModel("denyModal", $"Deny {d.Reference}", denyWhat, Url.Action("Deny", new { id = d.Id })!, "Deny dispute", "danger");
+}
+
+<div class="detail-head">
+    <div>
+        <a asp-action="Index" class="small text-decoration-none"><i class="bi bi-chevron-left"></i> Disputes</a>
+        <h2 class="mt-1">@name disputes <money amount="@t.Amount" /> <partial name="_StatusPill" model="d.Status.ToString()" /></h2>
+        <div class="text-muted-alto small"><span class="font-monospace">@d.Reference</span> · @Dispute.LabelFor(d.Reason) · filed @Local(d.SubmittedAt) · <a asp-controller="Customers" asp-action="Details" asp-route-id="@d.UserId">customer profile</a></div>
+    </div>
+    @if (d.IsOpen)
+    {
+        <div class="detail-actions">
+            @if (d.Status == DisputeStatus.Submitted)
+            {
+                <form method="post" asp-action="StartReview" asp-route-id="@d.Id" class="d-inline">
+                    <button type="submit" class="btn btn-admin-ghost"><i class="bi bi-search me-1"></i>Start review</button>
+                </form>
+            }
+            <button class="btn btn-admin" data-bs-toggle="modal" data-bs-target="#approveModal"><i class="bi bi-check2-circle me-1"></i>Approve</button>
+            <button class="btn btn-admin-danger" data-bs-toggle="modal" data-bs-target="#denyModal"><i class="bi bi-x-circle me-1"></i>Deny</button>
+        </div>
+    }
+</div>
+
+@if (d.ClawbackOverdrew)
+{
+    <div class="confirm-what danger mb-3" role="alert"><i class="bi bi-exclamation-octagon me-2"></i><strong>Clawback overdrew the account.</strong>
+        Taking back the provisional credit left @acct at <money amount="@(Model.Clawback?.BalanceAfter ?? 0)" />.
+        <a asp-controller="Accounts" asp-action="Details" asp-route-id="@d.AccountId">Open the account</a></div>
+}
+@if (!d.IsOpen)
+{
+    <div class="admin-card mb-3">
+        <dl class="kv mb-0">
+            <dt>Decision</dt><dd>@(d.Status == DisputeStatus.Approved ? "Approved" : "Denied") by @(d.ReviewerEmail ?? "—") on @Local(d.DecidedAt)</dd>
+            <dt>Note shown to the customer</dt><dd>@d.DecisionReason</dd>
+            @if (Model.Refund is { } r) { <dt>Refund</dt><dd><a asp-controller="Transactions" asp-action="Details" asp-route-id="@r.Id">Transaction #@r.Id</a>, <money amount="@r.Amount" /> (@r.TypeLabel)</dd> }
+        </dl>
+    </div>
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-lg-6">
+        <div class="admin-card h-100">
+            <h2 class="h6 mb-3">The disputed charge</h2>
+            <dl class="kv mb-0">
+                <dt>Transaction</dt><dd><a asp-controller="Transactions" asp-action="Details" asp-route-id="@t.Id">#@t.Id</a> · @t.TypeLabel · <partial name="_StatusPill" model="t.Status.ToString()" /></dd>
+                <dt>Description</dt><dd>@t.Description</dd>
+                <dt>Amount</dt><dd><money amount="@t.Amount" /></dd>
+                <dt>Date</dt><dd>@Local(t.Date)</dd>
+                <dt>Account</dt><dd><a asp-controller="Accounts" asp-action="Details" asp-route-id="@d.AccountId">@acct</a> · balance <money amount="@(d.Account?.Balance ?? 0)" /></dd>
+                @if (t.CounterpartyName != null) { <dt>@(Model.IsP2P ? "Paid to" : "Payee")</dt><dd>@t.CounterpartyName</dd> }
+                @if (d.ExpectedAmount is decimal e) { <dt>Customer expected</dt><dd><money amount="@e" /> → refund of the difference</dd> }
+                @if (Model.DuplicateOf is { } orig) { <dt>Duplicate of</dt><dd><a asp-controller="Transactions" asp-action="Details" asp-route-id="@orig.Id">#@orig.Id</a>, <money amount="@orig.Amount" /> on @Local(orig.Date)</dd> }
+                <dt>Refund if approved</dt><dd><strong><money amount="@d.RefundAmount" /></strong>@(Model.IsP2P ? " (sender only; the recipient keeps the payment)" : "")</dd>
+            </dl>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="admin-card h-100">
+            <h2 class="h6 mb-3">The customer says</h2>
+            <p class="text-prewrap">@d.Description</p>
+            <h3 class="h6 mt-3">Provisional credit</h3>
+            <p class="mb-0 small">
+                @if (!d.ProvisionalCreditEnabled) { <span>Off when this dispute was filed. Nothing was credited.</span> }
+                else if (Model.ProvisionalCredit is { } pc)
+                {
+                    <span><money amount="@pc.Amount" /> credited on @Local(pc.Date) (<a asp-controller="Transactions" asp-action="Details" asp-route-id="@pc.Id">#@pc.Id</a>).</span>
+                    @if (Model.Clawback is { } cb) { <span> Taken back on @Local(cb.Date) (<a asp-controller="Transactions" asp-action="Details" asp-route-id="@cb.Id">#@cb.Id</a>), balance after <money amount="@cb.BalanceAfter" />.</span> }
+                    else if (d.Status == DisputeStatus.Approved) { <span> Made final when the dispute was approved.</span> }
+                    else { <span> It will be taken back if you deny this dispute.</span> }
+                }
+                else { <span>On, but the credit couldn't be posted.</span> }
+            </p>
+            @if (d.Attachment != null)
+            {
+                <h3 class="h6 mt-3">Attachment</h3>
+                <a href="@Url.Action("Attachment", new { id = d.Id })" target="_blank" rel="noopener" class="dispute-attachment admin"><img src="@Url.Action("Attachment", new { id = d.Id })" alt="Attachment for @d.Reference" /></a>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        <div class="admin-card p-0 h-100">
+            <h2 class="h6 p-3 mb-0">@d.User?.FirstName's activity with "@(t.CounterpartyName ?? t.Description)" (90 days)</h2>
+            <div class="table-responsive">
+                <table class="table admin-table mb-0">
+                    <thead><tr><th>Date</th><th>Transaction</th><th>Account</th><th class="text-end">Amount</th><th>Status</th></tr></thead>
+                    <tbody>
+                        @foreach (var h in Model.MerchantHistory)
+                        {
+                            <tr class="@(h.Id == t.Id ? "row-highlight" : "")">
+                                <td class="text-nowrap">@BankTime.ToLocal(h.Date).ToString("MMM d")</td>
+                                <td><a asp-controller="Transactions" asp-action="Details" asp-route-id="@h.Id">#@h.Id</a> @h.TypeLabel @(h.Id == t.Id ? "(disputed)" : "")</td>
+                                <td>@h.Account?.DisplayName ••@h.Account?.Last4</td>
+                                <td class="text-end"><money amount="@h.SignedAmount" colorize="true" show-sign="true" /></td>
+                                <td><partial name="_StatusPill" model="h.Status.ToString()" /></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="admin-card p-0 h-100">
+            <h2 class="h6 p-3 mb-0">@d.User?.FirstName's other disputes</h2>
+            <div class="table-responsive">
+                <table class="table admin-table mb-0">
+                    <tbody>
+                        @if (!Model.OtherDisputes.Any()) { <tr><td class="text-center text-muted-alto py-3">None. This is their first dispute.</td></tr> }
+                        @foreach (var o in Model.OtherDisputes)
+                        {
+                            <tr>
+                                <td><a asp-action="Details" asp-route-id="@o.Id" class="font-monospace">@o.Reference</a><div class="small text-muted-alto">@o.Transaction?.Description</div></td>
+                                <td class="text-end"><money amount="@o.RefundAmount" /></td>
+                                <td><partial name="_StatusPill" model="o.Status.ToString()" /></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (d.IsOpen)
+{
+    <partial name="_ConfirmModal" model="approve" />
+    <partial name="_ConfirmModal" model="deny" />
+}

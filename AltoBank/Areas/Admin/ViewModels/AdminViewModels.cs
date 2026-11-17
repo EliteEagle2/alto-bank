@@ -76,6 +76,9 @@ public class OverviewViewModel
     public string? SchedulerLastRunSummary { get; set; }
     public List<CheckDeposit> PendingChecks { get; set; } = new();          // mobile check deposits waiting for review
     public int PendingCheckCount { get; set; }
+    public List<Dispute> OpenDisputes { get; set; } = new();                // submitted / under review, oldest first
+    public int OpenDisputeCount { get; set; }
+    public List<Dispute> ClawbackOverdrafts { get; set; } = new();          // denied disputes whose clawback left the account below $0
 }
 
 // ============================================================================
@@ -204,6 +207,7 @@ public class SettingsInput
     [Display(Name = "Auto-approve applications")] public bool AutoApproveApplications { get; set; }
     [Range(1, 1_000_000), Display(Name = "Mobile deposit: max per check")] public decimal MobileDepositPerCheckLimit { get; set; }
     [Range(1, 1_000_000), Display(Name = "Mobile deposit: max per day")] public decimal MobileDepositDailyLimit { get; set; }
+    [Display(Name = "Provisional credit on new disputes")] public bool ProvisionalCreditOnDisputes { get; set; }
 
     [Required(ErrorMessage = "Enter a reason for this change."), StringLength(500, MinimumLength = 5, ErrorMessage = "Reason must be at least 5 characters.")]
     public string Reason { get; set; } = "";

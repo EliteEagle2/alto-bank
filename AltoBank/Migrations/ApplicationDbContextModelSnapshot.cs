@@ -506,6 +506,9 @@ namespace AltoBank.Migrations
                     b.Property<decimal>("MobileDepositPerCheckLimit")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<bool>("ProvisionalCreditOnDisputes")
+                        .HasColumnType("INTEGER");
+
                     b.Property<decimal>("SavingsApy")
                         .HasColumnType("decimal(9,6)");
 
@@ -537,6 +540,7 @@ namespace AltoBank.Migrations
                             LargeTransactionThreshold = 2500m,
                             MobileDepositDailyLimit = 10000m,
                             MobileDepositPerCheckLimit = 5000m,
+                            ProvisionalCreditOnDisputes = false,
                             SavingsApy = 0.0410m
                         });
                 });
@@ -746,6 +750,99 @@ namespace AltoBank.Migrations
                     b.HasIndex("CustomerUserId", "CreatedAt");
 
                     b.ToTable("CustomerNotes");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.Dispute", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AccountId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Attachment")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("ClawbackOverdrew")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ClawbackTransactionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("DuplicateOfTransactionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("ExpectedAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("ProvisionalCreditEnabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ProvisionalCreditTransactionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("RefundAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("RefundTransactionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ReviewStartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReviewerEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(12)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Submitted");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TransactionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId");
+
+                    b.HasIndex("TransactionId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "SubmittedAt");
+
+                    b.HasIndex("UserId", "SubmittedAt");
+
+                    b.ToTable("Disputes");
                 });
 
             modelBuilder.Entity("AltoBank.Models.MoneyRequest", b =>
@@ -1430,6 +1527,33 @@ namespace AltoBank.Migrations
                         .IsRequired();
 
                     b.Navigation("Customer");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.Dispute", b =>
+                {
+                    b.HasOne("AltoBank.Models.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AltoBank.Models.Transaction", "Transaction")
+                        .WithMany()
+                        .HasForeignKey("TransactionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AltoBank.Models.ApplicationUser", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Account");
+
+                    b.Navigation("Transaction");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("AltoBank.Models.MoneyRequest", b =>

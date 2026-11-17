@@ -6,7 +6,8 @@
     var action = ViewContext.RouteData.Values["action"]?.ToString();
     var group = CustomerNav.Current(controller, action);
 }
-@if (group is { HasTabs: true })
+@* Tabs only on the pages that ARE tabs (not on, say, an account's details page, which also lights up "Accounts"). *@
+@if (group is { HasTabs: true } && group.Pages.Any(p => p.IsCurrent(controller, action)))
 {
     <div class="container pt-4">
         <div class="tab-scroller" data-tab-scroller>

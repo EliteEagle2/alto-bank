@@ -98,7 +98,16 @@ public partial class AdminService : IAdminService
             SchedulerLastRunSummary = settings.SchedulerLastRunSummary,
             PendingChecks = await _db.CheckDeposits.AsNoTracking().Include(d => d.User).Include(d => d.Account)
                 .Where(d => d.Status == CheckDepositStatus.Pending).OrderBy(d => d.SubmittedAt).Take(6).ToListAsync(),
-            PendingCheckCount = await _db.CheckDeposits.CountAsync(d => d.Status == CheckDepositStatus.Pending)
+            PendingCheckCount = await _db.CheckDeposits.CountAsync(d => d.Status == CheckDepositStatus.Pending),
+            OpenDisputes = await _db.Disputes.AsNoTracking().Include(d => d.User).Include(d => d.Transaction)
+                .Where(d => d.Status == DisputeStatus.Submitted || d.Status == DisputeStatus.UnderReview)
+                .OrderBy(d => d.SubmittedAt).Take(6).ToListAsync(),
+            OpenDisputeCount = await _db.Disputes.CountAsync(d => d.Status == DisputeStatus.Submitted || d.Status == DisputeStatus.UnderReview),
+            // Still below $0 after a clawback: flagged until the customer brings the balance back up. The balance test is
+            // done in C#: SQLite stores decimals as text, so "Balance < 0" in SQL would never match.
+            ClawbackOverdrafts = (await _db.Disputes.AsNoTracking().Include(d => d.User).Include(d => d.Account)
+                    .Where(d => d.ClawbackOverdrew).OrderBy(d => d.DecidedAt).ToListAsync())
+                .Where(d => d.Account!.Balance < 0).Take(6).ToList()
         };
     }
 
@@ -616,6 +625,13 @@ public partial class AdminService : IAdminService
             var linked = tx.LinkedTransactionId is int lid
                 ? await _db.Transactions.Include(t => t.Account).FirstOrDefaultAsync(t => t.Id == lid) : null;
             if (WhyNotReversible(tx, linked) is { } why) return Fail(why);
+            // A dispute (open, or one that refunded part of it) or a provisional credit already covers this money:
+            // decide it on the Disputes page instead, so nothing is refunded twice.
+            var legIdsToCheck = linked == null ? new[] { tx.Id } : new[] { tx.Id, linked.Id };
+            if (await _db.Disputes.AnyAsync(d => legIdsToCheck.Contains(d.TransactionId) && (d.Status == DisputeStatus.Submitted || d.Status == DisputeStatus.UnderReview)))
+                return Fail("This transaction has an open dispute. Approve or deny it on the Disputes page instead.");
+            if (await _db.Transactions.AnyAsync(r => r.ReversalOfTransactionId != null && legIdsToCheck.Contains(r.ReversalOfTransactionId.Value)))
+                return Fail("Part of this transaction was already refunded (a dispute or provisional credit), so it can't be reversed in full.");
 
             var legs = linked == null ? new[] { tx } : new[] { tx, linked };
             var reversals = new List<(Transaction Original, Transaction Reversal)>();
@@ -625,11 +641,7 @@ public partial class AdminService : IAdminService
                 var undoCredit = leg.IsCredit;   // undoing a credit takes money back out
                 if (undoCredit && account.Balance < leg.Amount)
                     return Fail($"Can't reverse: ••{account.Last4} only has {account.Balance:C}, and overdrafts aren't allowed.");
-                account.Balance += undoCredit ? -leg.Amount : leg.Amount;
-                var rev = AddTransaction(account, undoCredit ? TransactionType.ReversalDebit : TransactionType.ReversalCredit,
-                                         leg.Amount, $"Reversal: {leg.Description}", memo: CustomerMemo, counterpartyId: leg.CounterpartyAccountId);
-                rev.ReversalOfTransactionId = leg.Id;
-                rev.Category = leg.Category;   // a reversal belongs to the same category as what it undoes
+                var rev = PostReversalLeg(leg, leg.Amount, CustomerMemo);
                 leg.Status = TransactionStatus.Reversed;
                 reversals.Add((leg, rev));
             }
@@ -658,6 +670,23 @@ public partial class AdminService : IAdminService
                        reason: reason);
             return Ok($"Reversed transaction #{tx.Id}" + (linked != null ? " (both sides of the transfer)." : "."));
         });
+
+    /// <summary>
+    /// THE REVERSAL SYSTEM's money step for ONE leg: an offsetting transaction for <paramref name="amount"/> (the whole leg,
+    /// or part of it for a dispute refund), linked back to the original, in the original's category. The caller decides
+    /// whether the original becomes Reversed (only when the whole amount is undone) and saves.
+    /// </summary>
+    private Transaction PostReversalLeg(Transaction leg, decimal amount, string memo)
+    {
+        var account = leg.Account!;
+        var undoCredit = leg.IsCredit;   // undoing a credit takes money back out
+        account.Balance += undoCredit ? -amount : amount;
+        var rev = AddTransaction(account, undoCredit ? TransactionType.ReversalDebit : TransactionType.ReversalCredit,
+                                 amount, $"Reversal: {leg.Description}", memo: memo, counterpartyId: leg.CounterpartyAccountId);
+        rev.ReversalOfTransactionId = leg.Id;
+        rev.Category = leg.Category;   // a reversal belongs to the same category as what it undoes
+        return rev;
+    }
 
     private static string? WhyNotReversible(Transaction tx, Transaction? linked)
     {
@@ -745,6 +774,7 @@ public partial class AdminService : IAdminService
             AutoApproveApplications = s.AutoApproveApplications,
             MobileDepositPerCheckLimit = s.MobileDepositPerCheckLimit,
             MobileDepositDailyLimit = s.MobileDepositDailyLimit,
+            ProvisionalCreditOnDisputes = s.ProvisionalCreditOnDisputes,
             UpdatedAt = s.UpdatedAt,
             UpdatedBy = s.UpdatedBy
         };
@@ -764,6 +794,7 @@ public partial class AdminService : IAdminService
                 return Fail("The per-check mobile deposit limit can't be more than the daily limit.");
             s.MobileDepositPerCheckLimit = Math.Round(input.MobileDepositPerCheckLimit, 2);
             s.MobileDepositDailyLimit = Math.Round(input.MobileDepositDailyLimit, 2);
+            s.ProvisionalCreditOnDisputes = input.ProvisionalCreditOnDisputes;
             s.UpdatedAt = DateTime.UtcNow;
             s.UpdatedBy = AdminEmail;
             _audit.Add("Settings.Update", "Updated bank settings", "BankSetting", s.Id.ToString(), before, SettingsSnapshot(s), input.Reason);
@@ -1003,7 +1034,7 @@ public partial class AdminService : IAdminService
     private static object SettingsSnapshot(BankSetting s) => new
     {
         s.SavingsApy, s.CheckingApy, s.DefaultDailyTransferLimit, s.LargeTransactionThreshold, s.AutoApproveApplications,
-        s.MobileDepositPerCheckLimit, s.MobileDepositDailyLimit
+        s.MobileDepositPerCheckLimit, s.MobileDepositDailyLimit, s.ProvisionalCreditOnDisputes
     };
 
     private static object ProfileSnapshot(ApplicationUser u) => new

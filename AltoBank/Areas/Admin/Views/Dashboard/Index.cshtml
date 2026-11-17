@@ -39,6 +39,12 @@
     foreach (var c in Model.PendingChecks)
         queue.Add(("check", "bi-camera", "warn", $"{c.User?.FirstName} {c.User?.LastName}", $"{c.Amount:C} mobile check deposit to {c.Account?.DisplayName} ••{c.Account?.Last4}",
                    c.SubmittedAt, Url.Action("Details", "CheckDeposits", new { area = "Admin", id = c.Id })!, "Review"));
+    foreach (var d in Model.OpenDisputes)
+        queue.Add(("dispute", "bi-shield-exclamation", "warn", $"{d.User?.FirstName} {d.User?.LastName}", $"Disputes {d.Transaction?.Amount:C} {d.Transaction?.Description} ({Dispute.LabelFor(d.Status).ToLowerInvariant()})",
+                   d.SubmittedAt, Url.Action("Details", "Disputes", new { area = "Admin", id = d.Id })!, "Review"));
+    foreach (var d in Model.ClawbackOverdrafts)
+        queue.Add(("dispute", "bi-exclamation-octagon", "danger", $"{d.User?.FirstName} {d.User?.LastName}", $"{d.Account?.DisplayName} ••{d.Account?.Last4} is overdrawn by {-(d.Account?.Balance ?? 0):C} after a dispute clawback",
+                   d.DecidedAt, Url.Action("Details", "Accounts", new { area = "Admin", id = d.AccountId })!, "Open"));
     foreach (var a in Model.FrozenList)
         queue.Add(("frozen", "bi-snow", "danger", $"{a.User?.FirstName} {a.User?.LastName}", $"{a.DisplayName} ••{a.Last4} is frozen",
                    a.StatusChangedAt, Url.Action("Details", "Accounts", new { area = "Admin", id = a.Id })!, "Open"));
@@ -49,7 +55,7 @@
         queue.Add(("large", "bi-cash-stack", "info", $"{t.Account?.User?.FirstName} {t.Account?.User?.LastName}", $"{t.SignedAmount:+$#,0.00;-$#,0.00} · {t.Description}",
                    t.Date, Url.Action("Details", "Transactions", new { area = "Admin", id = t.Id })!, "Review"));
     queue = queue.OrderByDescending(q => q.When ?? DateTime.MinValue).ToList();
-    var kinds = new[] { ("all", "All", queue.Count), ("app", "Applications", Model.PendingList.Count), ("check", "Checks", Model.PendingChecks.Count), ("frozen", "Frozen", Model.FrozenList.Count),
+    var kinds = new[] { ("all", "All", queue.Count), ("app", "Applications", Model.PendingList.Count), ("check", "Checks", Model.PendingChecks.Count), ("dispute", "Disputes", Model.OpenDisputes.Count + Model.ClawbackOverdrafts.Count), ("frozen", "Frozen", Model.FrozenList.Count),
                         ("failed", "Failed payments", Model.FailedScheduled.Count), ("large", $"Large debits ≥ {Fmt(Model.LargeThreshold)}", Model.LargeTransactions.Count) };
     var schedulerOk = Model.SchedulerLastRunAt is DateTime last && DateTime.UtcNow - last < TimeSpan.FromMinutes(5);
 }

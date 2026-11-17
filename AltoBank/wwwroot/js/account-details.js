@@ -71,7 +71,8 @@
     const ICONS = {
         Deposit: 'bi-arrow-down-left', Withdrawal: 'bi-arrow-up-right', TransferIn: 'bi-arrow-left-right', TransferOut: 'bi-arrow-left-right',
         Interest: 'bi-percent', AdjustmentCredit: 'bi-sliders', AdjustmentDebit: 'bi-sliders',
-        PaymentSent: 'bi-send', PaymentReceived: 'bi-person-down', BillPayment: 'bi-receipt', CheckDeposit: 'bi-camera'
+        PaymentSent: 'bi-send', PaymentReceived: 'bi-person-down', BillPayment: 'bi-receipt', CheckDeposit: 'bi-camera',
+        ProvisionalCredit: 'bi-shield-exclamation', ProvisionalClawback: 'bi-shield-exclamation'
     };
     // Dates follow the BANK's time zone and calendar (not the browser's), same as the server-rendered rows.
     const TZ = root.dataset.tz || 'America/New_York';
@@ -101,7 +102,11 @@
         const sub = el('span', 'tx-sub', `${t.type} · ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: TZ })} `);
         const chip = el('span', 'cat-chip', t.categoryLabel); chip.dataset.catChip = '';
         sub.appendChild(chip);
-        if (reversed) sub.appendChild(el('span', 'badge-reversed', 'Reversed'));
+        if (t.disputeStatus) {
+            const refunded = t.disputeStatus === 'Approved', denied = t.disputeStatus === 'Denied';
+            sub.appendChild(el('span', 'badge-dispute' + (refunded ? ' is-refunded' : denied ? ' is-denied' : ''),
+                refunded ? 'Refunded' : denied ? 'Dispute denied' : 'Disputed'));
+        } else if (reversed) sub.appendChild(el('span', 'badge-reversed', 'Reversed'));
         desc.appendChild(sub);
         const amounts = el('span', 'tx-amounts');
         amounts.appendChild(el('span', 'money tx-amount ' + (t.isCredit ? 'amount-credit' : 'amount-debit'), (t.isCredit ? '+' : '−') + fmt(t.amount)));
@@ -116,6 +121,13 @@
          ['Type', t.type], ['Counterparty', t.counterparty || '—'], ['Memo', t.memo || '—'], ['Status', reversed ? 'Reversed' : 'Posted']]
             .forEach(([k, v]) => { const d = el('div'); d.append(el('dt', null, k), el('dd', k === 'Transaction ID' ? 'font-monospace' : null, v)); dl.append(d); });
         more.append(dl, buildCategoryForm(t));
+        if (t.canDispute || t.disputeStatus) {
+            const link = el('a', 'tx-dispute-link');
+            link.href = t.canDispute ? '/disputes/new?transactionId=' + t.id : '/disputes/for-transaction/' + t.id;
+            const i = el('i', 'bi ' + (t.canDispute ? 'bi-shield-exclamation' : 'bi-shield-check')); i.setAttribute('aria-hidden', 'true');
+            link.append(i, document.createTextNode(t.canDispute ? 'Dispute this transaction' : 'See your dispute'));
+            more.append(link);
+        }
         row.append(btn, more);
         return { row, day: t.bankDate, label: dayLabel(t.bankDate) };
     }

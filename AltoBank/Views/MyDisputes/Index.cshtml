@@ -1,0 +1,36 @@
+@model List<Dispute>
+@* /disputes — every dispute this customer has filed, newest first. *@
+<div class="container py-4">
+    <div class="feature-head">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-shield-exclamation text-gradient me-2"></i>Disputes</h2>
+            <p class="text-muted-alto mb-0">To dispute a charge, open it in your account's activity and choose <strong>Dispute this transaction</strong>.</p>
+        </div>
+    </div>
+    <section class="glass overflow-hidden" aria-label="Your disputes">
+        @if (!Model.Any())
+        {
+            <partial name="_EmptyState" model='@(new EmptyStateViewModel("bi-shield-check", "No disputes. If something on your statement looks wrong, open it in your activity and dispute it from there.", "Go to your accounts", "Accounts", "Index"))' />
+        }
+        else
+        {
+            <ul class="dispute-list">
+                @foreach (var d in Model)
+                {
+                    <li>
+                        <a asp-action="Details" asp-route-id="@d.Id">
+                            <span class="dispute-list-main">
+                                <span class="fw-semibold">@d.Transaction?.Description</span>
+                                <span class="small text-muted-alto">@Dispute.LabelFor(d.Reason), filed @BankTime.ToLocal(d.SubmittedAt).ToString("MMM d, yyyy")</span>
+                            </span>
+                            <span class="dispute-list-side">
+                                <money amount="@(d.Transaction?.Amount ?? 0)" />
+                                <partial name="_DisputeStatus" model="d.Status" />
+                            </span>
+                        </a>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+</div>

@@ -28,8 +28,8 @@ public static class CustomerNav
     public static readonly Group Home = new("Home", "bi-grid-1x2", new[] { new Page("Home", "bi-grid-1x2", "Dashboard", "Index") });
 
     public static readonly Group Accounts = new("Accounts", "bi-wallet2",
-        new[] { new Page("Accounts", "bi-wallet2", "Accounts", "Index") },
-        AlsoActiveOn: new[] { new Page("", "", "Transactions", "History", "History"), new Page("", "", "Cards", "Index") });
+        new[] { new Page("Accounts", "bi-wallet2", "Accounts", "Index", "Index"), new Page("Disputes", "bi-shield-exclamation", "MyDisputes", "Index") },
+        AlsoActiveOn: new[] { new Page("", "", "Accounts", ""), new Page("", "", "Transactions", "History", "History"), new Page("", "", "Cards", "Index") });
 
     public static readonly Group MoveMoney = new("Move money", "bi-arrow-left-right", new[]
     {

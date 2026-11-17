@@ -27,6 +27,10 @@ public class BankSetting
     [Column(TypeName = "decimal(18,2)")] public decimal MobileDepositPerCheckLimit { get; set; } = 5000m;
     [Column(TypeName = "decimal(18,2)")] public decimal MobileDepositDailyLimit { get; set; } = 10000m;
 
+    // Disputes: ON = credit the customer right away when they file a dispute (taken back if it's denied).
+    // Captured on each dispute when it's filed, so changing this doesn't affect open disputes.
+    public bool ProvisionalCreditOnDisputes { get; set; }
+
     // ON: applications are approved instantly. OFF: they wait as "Pending" for an admin.
     public bool AutoApproveApplications { get; set; } = true;
 

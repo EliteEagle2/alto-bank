@@ -29,6 +29,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<SchedulerRunLog> SchedulerRunLogs => Set<SchedulerRunLog>();
     public DbSet<Budget> Budgets => Set<Budget>();
     public DbSet<CheckDeposit> CheckDeposits => Set<CheckDeposit>();
+    public DbSet<Dispute> Disputes => Set<Dispute>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -72,6 +73,19 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             c.HasIndex(x => x.FrontHash);
             c.HasIndex(x => new { x.Status, x.SubmittedAt });   // the admin queue
             c.HasIndex(x => new { x.UserId, x.SubmittedAt });   // the customer list + daily limit
+        });
+
+        // ----- Disputes: ONE per transaction (the unique index makes simultaneous submits create only one) -----
+        builder.Entity<Dispute>(d =>
+        {
+            d.Property(x => x.Reason).HasConversion<string>().HasMaxLength(20);
+            d.Property(x => x.Status).HasConversion<string>().HasMaxLength(12).HasDefaultValue(DisputeStatus.Submitted);
+            d.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            d.HasOne(x => x.Account).WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
+            d.HasOne(x => x.Transaction).WithMany().HasForeignKey(x => x.TransactionId).OnDelete(DeleteBehavior.Restrict);
+            d.HasIndex(x => x.TransactionId).IsUnique();
+            d.HasIndex(x => new { x.Status, x.SubmittedAt });   // the admin queue
+            d.HasIndex(x => new { x.UserId, x.SubmittedAt });
         });
 
         // ----- Spending Insights: one budget per (customer, category); removing only sets Status -----

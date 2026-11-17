@@ -27,6 +27,7 @@ public static class AdminNav
             new AdminNavLink("Payments", "bi-send", "P2P Payments"),
             new AdminNavLink("Scheduled", "bi-calendar-week", "Scheduled Payments"),
             new AdminNavLink("CheckDeposits", "bi-camera", "Check Deposits"),
+            new AdminNavLink("Disputes", "bi-shield-exclamation", "Disputes"),
         }),
         new("System", new[]
         {

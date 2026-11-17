@@ -1,0 +1,112 @@
+@model Dispute
+@* One dispute: Submitted → Under review → Refunded / Denied, with dates, the decision reason, the refund (or the
+   provisional credit and any clawback) and the attachment. *@
+@{
+    var d = Model;
+    var t = d.Transaction!;
+    string Local(DateTime? x) => x == null ? "" : BankTime.ToLocal(x.Value).ToString("MMM d, yyyy h:mm tt");
+    var decided = !d.IsOpen;
+    var activityUrl = Url.Action("Details", "Accounts", new { id = d.AccountId })! + "#activity";
+}
+
+<div class="container py-4 check-page">
+    <div class="feature-head">
+        <div>
+            <a asp-action="Index" class="small text-decoration-none"><i class="bi bi-chevron-left"></i> All disputes</a>
+            <h2 class="mt-1 mb-1">@t.Description <partial name="_DisputeStatus" model="d.Status" /></h2>
+            <p class="text-muted-alto mb-0"><money amount="@t.Amount" /> on @t.LocalDate.ToString("MMM d, yyyy"), @Dispute.LabelFor(d.Reason).ToLowerInvariant(). Reference <span class="font-monospace text-nowrap">@d.Reference</span></p>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <section class="glass p-4 h-100" aria-labelledby="timelineTitle">
+                <h3 class="h6 mb-3" id="timelineTitle">What's happening</h3>
+                <ol class="check-timeline">
+                    <li class="is-done">
+                        <span class="tl-dot" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
+                        <div><strong>Submitted</strong><div class="small text-muted-alto">@Local(d.SubmittedAt)</div>
+                            @if (d.ProvisionalCreditTransactionId != null)
+                            {
+                                <div class="small mt-1"><money amount="@d.RefundAmount" /> credited to your account while we review (provisional credit).</div>
+                            }
+                        </div>
+                    </li>
+                    <li class="@(d.ReviewStartedAt != null ? (decided ? "is-done" : "is-current") : "")">
+                        <span class="tl-dot" aria-hidden="true">@if (d.ReviewStartedAt != null) { <i class="bi @(decided ? "bi-check-lg" : "bi-search")"></i> }</span>
+                        <div><strong>Under review</strong>
+                            <div class="small text-muted-alto">@(d.ReviewStartedAt != null ? Local(d.ReviewStartedAt) : "We'll start looking at it soon.")</div>
+                        </div>
+                    </li>
+                    @if (d.Status == DisputeStatus.Approved)
+                    {
+                        <li class="is-done is-good">
+                            <span class="tl-dot" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
+                            <div><strong>Refunded</strong><div class="small text-muted-alto">@Local(d.DecidedAt)</div>
+                                <div class="small mt-1">
+                                    @if (d.ProvisionalCreditTransactionId != null)
+                                    {
+                                        <span>The <money amount="@d.RefundAmount" /> we credited earlier is yours to keep.</span>
+                                    }
+                                    else
+                                    {
+                                        <span><money amount="@d.RefundAmount" /> was refunded@(d.Reason == DisputeReason.WrongAmount ? " (the difference)" : "").</span>
+                                    }
+                                    <a href="@activityUrl">See it in your activity</a>
+                                </div>
+                            </div>
+                        </li>
+                    }
+                    else if (d.Status == DisputeStatus.Denied)
+                    {
+                        <li class="is-done is-bad">
+                            <span class="tl-dot" aria-hidden="true"><i class="bi bi-x-lg"></i></span>
+                            <div><strong>Denied</strong><div class="small text-muted-alto">@Local(d.DecidedAt)</div>
+                                @if (d.ClawbackTransactionId != null)
+                                {
+                                    <div class="small mt-1">The <money amount="@d.RefundAmount" /> provisional credit was taken back. <a href="@activityUrl">See your activity</a></div>
+                                }
+                            </div>
+                        </li>
+                    }
+                    else
+                    {
+                        <li>
+                            <span class="tl-dot" aria-hidden="true"></span>
+                            <div><strong>Decision</strong><div class="small text-muted-alto">We'll send you an alert when we decide.</div></div>
+                        </li>
+                    }
+                </ol>
+                @if (d.DecisionReason != null)
+                {
+                    <div class="check-reason @(d.Status == DisputeStatus.Approved ? "is-good" : "")" role="status">
+                        <div class="fw-semibold mb-1">@(d.Status == DisputeStatus.Approved ? "Our note" : "Why it was denied")</div>
+                        <p class="mb-0">@d.DecisionReason</p>
+                    </div>
+                }
+            </section>
+        </div>
+
+        <div class="col-lg-6">
+            <section class="glass p-4" aria-labelledby="detailsTitle">
+                <h3 class="h6 mb-3" id="detailsTitle">What you told us</h3>
+                <dl class="kv-list">
+                    <div><dt>Reason</dt><dd>@Dispute.LabelFor(d.Reason)</dd></div>
+                    @if (d.ExpectedAmount is decimal e)
+                    {
+                        <div><dt>You expected</dt><dd><money amount="@e" /> (a refund of <money amount="@d.RefundAmount" /> if we agree)</dd></div>
+                    }
+                    <div><dt>Account</dt><dd>@d.Account?.DisplayName ••@d.Account?.Last4</dd></div>
+                    <div><dt>What happened</dt><dd class="text-prewrap">@d.Description</dd></div>
+                </dl>
+                @if (d.Attachment != null)
+                {
+                    <figure class="mt-3 mb-0 dispute-attachment">
+                        <img src="@Url.Action("Attachment", new { id = d.Id })" alt="Your attachment for dispute @d.Reference" />
+                        <figcaption class="small text-muted-alto">Your attachment</figcaption>
+                    </figure>
+                }
+            </section>
+        </div>
+    </div>
+</div>

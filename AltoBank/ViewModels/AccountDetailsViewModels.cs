@@ -20,6 +20,10 @@ public class AccountDetailsViewModel
 
     // Mobile check deposits waiting for review. NOT in the posted or available balance (shown on their own line).
     public List<CheckDeposit> PendingChecks { get; set; } = new();
+
+    // Disputes: which first-page rows can be disputed, and the status of any dispute (for the badge).
+    public HashSet<int> Disputable { get; set; } = new();
+    public Dictionary<int, DisputeStatus> DisputeStatuses { get; set; } = new();
     public decimal PendingTotal => PendingChecks.Sum(c => c.Amount);
 
     // Header + Account Info
@@ -45,7 +49,7 @@ public class AccountDetailsViewModel
 }
 
 /// <summary>One activity row (_TransactionRow partial). Counterparty = the other account in a transfer.</summary>
-public record TransactionRowViewModel(Transaction Transaction, string? Counterparty);
+public record TransactionRowViewModel(Transaction Transaction, string? Counterparty, bool CanDispute = false, DisputeStatus? Dispute = null);
 
 /// <summary>
 /// A value with optional Show + Copy buttons (_CopyField partial).

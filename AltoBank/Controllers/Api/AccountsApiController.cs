@@ -41,8 +41,12 @@ public class AccountsApiController : ControllerBase
     private readonly IAuditLogger _audit;
     private readonly UserManager<ApplicationUser> _userManager;
 
-    public AccountsApiController(IBankService bank, ICardService cards, IAuditLogger audit, UserManager<ApplicationUser> userManager)
+    private readonly IDisputeService _disputes;
+
+    public AccountsApiController(IBankService bank, ICardService cards, IAuditLogger audit, UserManager<ApplicationUser> userManager,
+                                 IDisputeService disputes)
     {
+        _disputes = disputes;
         _bank = bank;
         _cards = cards;
         _audit = audit;
@@ -92,8 +96,13 @@ public class AccountsApiController : ControllerBase
 
         var result = await _bank.GetActivityAsync(UserId, id, new ActivityFilter(search, kind, from, to), page, pageSize);
         var labels = await _bank.GetAccountLabelsAsync(UserId);
+        var (disputable, statuses) = await _disputes.GetRowInfoAsync(UserId, result.Items);
         return new ActivityPageDto(
-            result.Items.Select(t => ToDto(t, labels)).ToList(), page, pageSize, result.TotalCount,
+            result.Items.Select(t => ToDto(t, labels) with
+            {
+                CanDispute = disputable.Contains(t.Id),
+                DisputeStatus = statuses.TryGetValue(t.Id, out var st) ? st.ToString() : null
+            }).ToList(), page, pageSize, result.TotalCount,
             HasMore: page * pageSize < result.TotalCount,
             result.MoneyIn, result.MoneyOut, result.MoneyIn - result.MoneyOut);
     }

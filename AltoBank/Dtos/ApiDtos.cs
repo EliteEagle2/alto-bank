@@ -31,7 +31,8 @@ public record ActivityItemDto(
     decimal Amount, decimal SignedAmount, decimal BalanceAfter, string Status,
     string? Memo, string? Counterparty, int? ReversalOfTransactionId, int? ReversedByTransactionId,
     DateOnly BankDate,    // the day this falls on in the bank's time zone (for "Today" / "Yesterday" grouping)
-    string Category, string CategoryLabel, bool CategoryOverridden);   // Spending Insights
+    string Category, string CategoryLabel, bool CategoryOverridden,    // Spending Insights
+    bool CanDispute = false, string? DisputeStatus = null);           // Disputes: eligible now / status of an existing dispute
 
 /// <summary>A page of activity plus the money in/out totals for the WHOLE filtered range.</summary>
 public record ActivityPageDto(
@@ -187,3 +188,28 @@ public record CheckDepositDto(
     int Id, string Reference, int AccountId, string Account, decimal Amount, string Status,
     DateTime SubmittedAt, DateTime? ReviewedAt, string? RejectReason, int? TransactionId,
     string FrontImageUrl, string BackImageUrl);
+
+// ----- Disputes (/api/disputes) -----
+
+/// <summary>POST /api/disputes as multipart/form-data. reason: NotAuthorized, WrongAmount, NotReceived, Duplicate or Other.</summary>
+public class DisputeUploadDto
+{
+    [Required] public int TransactionId { get; set; }
+    [Required] public string Reason { get; set; } = "";
+    [Required, StringLength(1000, MinimumLength = 20)] public string Description { get; set; } = "";
+    /// <summary>"WrongAmount": what you expected to pay (less than the charge).</summary>
+    [Range(typeof(decimal), "0.01", "1000000")] public decimal? ExpectedAmount { get; set; }
+    /// <summary>"Duplicate": the original charge (one of the similar charges on the same account).</summary>
+    public int? DuplicateOfTransactionId { get; set; }
+    /// <summary>"NotAuthorized": also freeze the account's debit card.</summary>
+    public bool FreezeCard { get; set; }
+    /// <summary>Optional JPG/PNG, 5 MB max.</summary>
+    public IFormFile? Attachment { get; set; }
+}
+
+/// <summary>A dispute. Status: Submitted, UnderReview, Approved, Denied.</summary>
+public record DisputeDto(
+    int Id, string Reference, int TransactionId, string Transaction, decimal TransactionAmount,
+    string Reason, string Status, decimal RefundAmount, decimal? ExpectedAmount, bool ProvisionalCredit,
+    DateTime SubmittedAt, DateTime? ReviewStartedAt, DateTime? DecidedAt, string? DecisionReason,
+    int? RefundTransactionId, int? ProvisionalCreditTransactionId, int? ClawbackTransactionId, string? AttachmentUrl);

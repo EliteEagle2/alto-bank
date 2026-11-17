@@ -27,10 +27,12 @@ public class AccountsController : Controller
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly ITimeLimitedDataProtector _identityProtector;
     private readonly ICheckDepositService _checks;
+    private readonly IDisputeService _disputes;
 
     public AccountsController(IBankService bank, UserManager<ApplicationUser> userManager, IDataProtectionProvider dataProtection,
-                              ICheckDepositService checks)
+                              ICheckDepositService checks, IDisputeService disputes)
     {
+        _disputes = disputes;
         _checks = checks;
         _bank = bank;
         _userManager = userManager;
@@ -71,6 +73,7 @@ public class AccountsController : Controller
             months.Add(m);
 
         ViewData["Title"] = account.DisplayName;
+        var (disputable, disputeStatuses) = await _disputes.GetRowInfoAsync(UserId, activity.Items);
         return View(new AccountDetailsViewModel
         {
             Account = account,
@@ -89,7 +92,9 @@ public class AccountsController : Controller
             RoutingNumber = BankService.RoutingNumber,
             BankName = BankService.BankName,
             BankAddress = BankService.BankAddress,
-            PendingChecks = await _checks.GetPendingAsync(UserId, id)
+            PendingChecks = await _checks.GetPendingAsync(UserId, id),
+            Disputable = disputable,
+            DisputeStatuses = disputeStatuses
         });
     }
 
