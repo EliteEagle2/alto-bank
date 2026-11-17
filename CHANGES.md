@@ -97,7 +97,7 @@ Every suite runs against a separate test server on a freshly reset scratch datab
   generic account actions (adjust, close, reopen) send staff to the card page instead.
 - **Kept out of deposit flows**: a card can't be used for transfers, deposits, withdrawals, P2P, bill pay, scheduled
   payments, check deposits or as the default account. The dashboard's total counts checking and savings only (net worth
-  with cards and loans comes with Feature 7).
+  with cards and loans came in Feature 7).
 - **Seed**: three months of history replayed through the real code. Jordan pays in full with autopay (no interest),
   Maya pays minimums (interest and one late fee), Samuel has an application waiting for review.
 - **Review fixes**: statements now assign activity by bank date (correct catch-up after downtime); refunds, waivers and

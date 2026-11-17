@@ -1828,7 +1828,7 @@ h2 .check-status { font-size: .85rem; margin-left: .4rem; }
 .amort-tip[hidden] { display: none; }
 .calc-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
 @media (max-width: 575.98px) { .calc-summary { grid-template-columns: 1fr 1fr; } }
-.calc-segment { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 3px; gap: 3px; }
+.calc-segment { display: flex; width: max-content; border: 1px solid var(--border); border-radius: 999px; padding: 3px; gap: 3px; }
 .calc-segment label { padding: .35rem .9rem; border-radius: 999px; cursor: pointer; font-size: .9rem; }
 .calc-segment input:checked + label { background: var(--primary); color: #1b1405; font-weight: 600; }
 .calc-segment input:focus-visible + label { outline: 2px solid var(--primary); outline-offset: 2px; }
