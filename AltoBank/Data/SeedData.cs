@@ -175,7 +175,7 @@ public static class SeedData
         var order = lastMonth.FirstOrDefault(t => t.Description.Contains("ShopNest") || t.Description.Contains("Outfitters"))
                     ?? lastMonth.FirstOrDefault() ?? jp[0];
         if (await File(jordan.Id, order, DisputeReason.NotReceived,
-                "I ordered this online but the package never arrived, and the store stopped answering my emails.") is { } refunded)
+                "I paid for an order that never arrived, and the merchant stopped answering my emails and calls.") is { } refunded)
         {
             await admin.StartDisputeReviewAsync(refunded.Id, "Checking the order with the merchant");
             await admin.ApproveDisputeAsync(refunded.Id, "The merchant couldn't show a delivery, so we refunded the full amount.");

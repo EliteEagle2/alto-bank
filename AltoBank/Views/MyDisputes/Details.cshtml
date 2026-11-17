@@ -14,7 +14,7 @@
         <div>
             <a asp-action="Index" class="small text-decoration-none"><i class="bi bi-chevron-left"></i> All disputes</a>
             <h2 class="mt-1 mb-1">@t.Description <partial name="_DisputeStatus" model="d.Status" /></h2>
-            <p class="text-muted-alto mb-0"><money amount="@t.Amount" /> on @t.LocalDate.ToString("MMM d, yyyy"), @Dispute.LabelFor(d.Reason).ToLowerInvariant(). Reference <span class="font-monospace text-nowrap">@d.Reference</span></p>
+            <p class="text-muted-alto mb-0"><money amount="@t.Amount" /> on @t.LocalDate.ToString("MMM d, yyyy"). Reason: @Dispute.LabelFor(d.Reason). Reference <span class="font-monospace text-nowrap">@d.Reference</span></p>
         </div>
     </div>
 
