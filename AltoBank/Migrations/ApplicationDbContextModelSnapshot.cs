@@ -158,6 +158,9 @@ namespace AltoBank.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("DisburseToAccountId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ESignName")
                         .IsRequired()
                         .HasMaxLength(110)
@@ -197,12 +200,39 @@ namespace AltoBank.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("IsCounterOffer")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("LivedAtAddressTwoYears")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("LoanAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("LoanAprPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("LoanKind")
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("LoanMonthlyPayment")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("LoanPurpose")
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LoanRateTier")
+                        .HasMaxLength(1)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("LoanTermMonths")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("MiddleInitial")
@@ -218,6 +248,12 @@ namespace AltoBank.Migrations
 
                     b.Property<string>("Occupation")
                         .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("OfferRespondedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("OfferedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<decimal>("OpeningDeposit")
@@ -243,6 +279,9 @@ namespace AltoBank.Migrations
                     b.Property<string>("PrevZip")
                         .HasMaxLength(5)
                         .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("RequestedLoanAmount")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime?>("ReviewedAt")
                         .HasColumnType("TEXT");
@@ -281,6 +320,17 @@ namespace AltoBank.Migrations
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<string>("VehicleMake")
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("VehicleModel")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("VehicleYear")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Zip")
                         .IsRequired()
@@ -526,6 +576,9 @@ namespace AltoBank.Migrations
                     b.Property<bool>("AutoApproveApplications")
                         .HasColumnType("INTEGER");
 
+                    b.Property<decimal>("AutoLoanRateDiscount")
+                        .HasColumnType("decimal(5,2)");
+
                     b.Property<decimal>("CardCashBackRate")
                         .HasColumnType("decimal(6,4)");
 
@@ -548,6 +601,27 @@ namespace AltoBank.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("LargeTransactionThreshold")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("LoanGraceDays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("LoanLateFee")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("LoanRateTierA")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("LoanRateTierB")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("LoanRateTierC")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("LoanRateTierD")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("LoanReviewAmount")
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<decimal>("MobileDepositDailyLimit")
@@ -585,6 +659,7 @@ namespace AltoBank.Migrations
                         {
                             Id = 1,
                             AutoApproveApplications = true,
+                            AutoLoanRateDiscount = 2.50m,
                             CardCashBackRate = 0.015m,
                             CardLateFee = 29m,
                             CardMinimumPaymentFloor = 25m,
@@ -593,6 +668,13 @@ namespace AltoBank.Migrations
                             CheckingApy = 0.0000m,
                             DefaultDailyTransferLimit = 5000m,
                             LargeTransactionThreshold = 2500m,
+                            LoanGraceDays = 10,
+                            LoanLateFee = 35m,
+                            LoanRateTierA = 8.99m,
+                            LoanRateTierB = 11.99m,
+                            LoanRateTierC = 15.99m,
+                            LoanRateTierD = 19.99m,
+                            LoanReviewAmount = 20000m,
                             MobileDepositDailyLimit = 10000m,
                             MobileDepositPerCheckLimit = 5000m,
                             ProvisionalCreditOnDisputes = false,
@@ -977,6 +1059,169 @@ namespace AltoBank.Migrations
                     b.HasIndex("UserId", "SubmittedAt");
 
                     b.ToTable("Disputes");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.Loan", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AccountId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ApplicationId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("AprPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<DateOnly?>("AutopayAttemptedFor")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("AutopayEnabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("AutopayFromAccountId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("DisbursedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("DisbursedToAccountId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("FeesOwed")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateOnly>("FirstDueDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("LateFeeForDueDate")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("MonthlyPayment")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateOnly?>("NextDueDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("PaidOffAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("PaymentsMade")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Principal")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("PrincipalRemaining")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Purpose")
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RateTier")
+                        .HasMaxLength(1)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Active");
+
+                    b.Property<int>("TermMonths")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("VehicleMake")
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("VehicleModel")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("VehicleYear")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId")
+                        .IsUnique();
+
+                    b.HasIndex("ApplicationId")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "Status");
+
+                    b.ToTable("Loans");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.LoanPayment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("ByAutopay")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Fees")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("FromAccountId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("InstallmentNumber")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Interest")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("LoanId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("PaidAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Principal")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("PrincipalAfter")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int?>("TransactionId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LoanId", "PaidAt");
+
+                    b.ToTable("LoanPayments");
                 });
 
             modelBuilder.Entity("AltoBank.Models.MoneyRequest", b =>
@@ -1701,6 +1946,28 @@ namespace AltoBank.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("AltoBank.Models.Loan", b =>
+                {
+                    b.HasOne("AltoBank.Models.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Account");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.LoanPayment", b =>
+                {
+                    b.HasOne("AltoBank.Models.Loan", "Loan")
+                        .WithMany("Payments")
+                        .HasForeignKey("LoanId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Loan");
+                });
+
             modelBuilder.Entity("AltoBank.Models.MoneyRequest", b =>
                 {
                     b.HasOne("AltoBank.Models.ApplicationUser", "Payer")
@@ -1904,6 +2171,11 @@ namespace AltoBank.Migrations
                     b.Navigation("Applications");
 
                     b.Navigation("Notes");
+                });
+
+            modelBuilder.Entity("AltoBank.Models.Loan", b =>
+                {
+                    b.Navigation("Payments");
                 });
 
             modelBuilder.Entity("AltoBank.Models.ScheduledPayment", b =>

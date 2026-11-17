@@ -1,0 +1,82 @@
+@model LoanView
+@* PAID-IN-FULL LETTER (simulated, printable): a standalone light page like the statements; Print / Save as PDF. *@
+@{
+    Layout = null;
+    var l = Model.Loan;
+    var a = Model.Account;
+    var owner = ViewData["Owner"] as ApplicationUser;
+    var name = $"{owner?.FirstName} {owner?.LastName}".Trim();
+    var paidOn = l.PaidOffAt is DateTime p ? BankTime.ToLocal(p) : BankTime.ToLocal(DateTime.UtcNow);
+    var totalPaid = Model.Payments.Sum(x => x.Amount);
+    var interestPaid = Model.Payments.Sum(x => x.Interest);
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Paid in full · @a.DisplayName ••@a.Last4</title>
+    <link rel="icon" type="image/svg+xml" href="~/img/mark.svg" />
+    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&display=swap" rel="stylesheet" />
+    <style>
+        :root { --ink: #101826; --muted: #5b6478; --line: #dfe3ea; --accent: #8FB8E8; --green: #0f9d6b; }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: #eef1f6; color: var(--ink); font: 15px/1.6 "Public Sans", system-ui, sans-serif; }
+        .sheet { max-width: 760px; margin: 24px auto; background: #fff; padding: 48px 56px; border-radius: 12px; box-shadow: 0 10px 30px rgba(11,15,26,.12); }
+        .toolbar { max-width: 760px; margin: 16px auto 0; display: flex; gap: 8px; justify-content: flex-end; padding: 0 12px; }
+        .toolbar a, .toolbar button { font: 600 13px "Public Sans", sans-serif; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: #fff; color: var(--ink); text-decoration: none; cursor: pointer; }
+        .toolbar button { background: var(--accent); color: #fff; border-color: var(--accent); }
+        header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid var(--accent); padding-bottom: 16px; margin-bottom: 28px; gap: 16px; }
+        .brand { font: 700 22px "Bricolage Grotesque", sans-serif; letter-spacing: .2em; }
+        .brand small { display: block; font: 400 12px "Public Sans", sans-serif; letter-spacing: 0; color: var(--muted); }
+        .date { color: var(--muted); text-align: right; }
+        h1 { font: 700 26px "Bricolage Grotesque", sans-serif; margin: 0 0 6px; }
+        .stamp { display: inline-block; border: 2px solid var(--green); color: var(--green); font: 700 13px "Public Sans", sans-serif; letter-spacing: .12em;
+                 padding: 4px 10px; border-radius: 6px; transform: rotate(-2deg); margin-bottom: 18px; }
+        table { width: 100%; border-collapse: collapse; margin: 18px 0; }
+        td { padding: 8px 0; border-bottom: 1px solid var(--line); }
+        td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+        .sign { margin-top: 36px; }
+        .sign .who { font: 600 15px "Public Sans", sans-serif; }
+        footer { margin-top: 32px; color: var(--muted); font-size: 11px; border-top: 1px solid var(--line); padding-top: 12px; }
+        @@media (max-width: 640px) { .sheet { padding: 24px 20px; margin: 12px; } header { flex-direction: column; } .date { text-align: left; } }
+        @@media print { body { background: #fff; } .toolbar { display: none; } .sheet { box-shadow: none; margin: 0; max-width: none; padding: 0; } }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <a asp-controller="Accounts" asp-action="Details" asp-route-id="@a.Id">← Back to the loan</a>
+        <button type="button" onclick="window.print()">Print / Save as PDF</button>
+    </div>
+    <main class="sheet">
+        <header>
+            <div class="brand">ALTO BANK<small>@BankService.BankAddress</small></div>
+            <div class="date">@paidOn.ToString("MMMM d, yyyy")</div>
+        </header>
+
+        <p>@name<br />@owner?.Street@(owner?.Apt == null ? "" : ", " + owner.Apt)<br />@owner?.City, @owner?.State @owner?.Zip</p>
+
+        <div class="stamp">PAID IN FULL</div>
+        <h1>Your @l.KindLabel.ToLowerInvariant() is paid in full</h1>
+        <p>Dear @owner?.FirstName,</p>
+        <p>This letter confirms that your Alto Bank @l.KindLabel.ToLowerInvariant() ending in @a.Last4 was paid in full on @paidOn.ToString("MMMM d, yyyy").
+            The balance is $0.00 and you owe nothing more on this loan.@(l.Vehicle != null ? $" Alto Bank has no further claim on your {l.Vehicle}." : "")</p>
+
+        <table aria-label="Loan summary">
+            <tr><td>Loan</td><td>@l.KindLabel ••@a.Last4@(l.Vehicle != null ? $" ({l.Vehicle})" : "")</td></tr>
+            <tr><td>Amount borrowed</td><td>@l.Principal.ToString("C")</td></tr>
+            <tr><td>Rate</td><td>@l.AprPercent.ToString("0.00")% APR, @l.TermMonths months</td></tr>
+            <tr><td>Funded</td><td>@BankTime.ToLocal(l.DisbursedAt).ToString("MMMM d, yyyy")</td></tr>
+            <tr><td>Payments made</td><td>@Model.Payments.Count</td></tr>
+            <tr><td>Interest paid</td><td>@interestPaid.ToString("C")</td></tr>
+            <tr><td>Total paid</td><td>@totalPaid.ToString("C")</td></tr>
+            <tr><td><strong>Balance</strong></td><td><strong>$0.00</strong></td></tr>
+        </table>
+
+        <p>Thank you for banking with Alto. Please keep this letter for your records.</p>
+        <div class="sign"><div class="who">Alto Bank Loan Servicing</div><div style="color: var(--muted)">@BankService.BankName · @BankService.BankAddress</div></div>
+
+        <footer>Demo document generated by Alto Bank (fictional, for a class project). This is not a real loan or a real lien release.</footer>
+    </main>
+</body>
+</html>

@@ -1,9 +1,13 @@
 @model Account
 @* Reusable account summary card (used on the Dashboard and Accounts pages).
-   Shows the nickname when set, and a progress bar for savings accounts with a goal. *@
-<div class="glass glass-hover account-card @(Model.AccountType == AccountType.Savings ? "savings" : Model.IsCreditCard ? "credit" : "")">
+   Shows the nickname when set, and a progress bar for savings accounts with a goal.
+   Loans: the page puts ViewData["LoanViews"] (account id → LoanView) so the card can show the next payment. *@
+@{
+    var loanView = Model.IsLoan && ViewData["LoanViews"] is Dictionary<int, LoanView> lv ? lv.GetValueOrDefault(Model.Id) : null;
+}
+<div class="glass glass-hover account-card @(Model.AccountType == AccountType.Savings ? "savings" : Model.IsCreditCard ? "credit" : Model.IsLoan ? "loan" : "")">
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <span class="account-type">@(Model.IsCreditCard ? "Credit card" : Model.AccountType.ToString())</span>
+        <span class="account-type">@(Model.IsCreditCard ? "Credit card" : Model.IsLoan ? (loanView?.Loan.KindLabel ?? "Loan") : Model.AccountType.ToString())</span>
         <span class="account-digits">•••• @Model.Last4</span>
     </div>
     @* The account name links to the Account Details page at /accounts/{id}. *@
@@ -15,6 +19,22 @@
         <div class="text-muted-alto small mb-2">Owed · <money amount="@Model.AvailableCredit" /> available of <money amount="@(Model.CreditLimit ?? 0)" /></div>
         <div class="util-bar util-@(Model.Utilization >= 90 ? "high" : Model.Utilization >= 30 ? "mid" : "low") mb-3" role="img" aria-label="@Model.Utilization% of the credit limit used">
             <span style="width: @Model.Utilization.ToString(System.Globalization.CultureInfo.InvariantCulture)%"></span></div>
+    }
+    else if (Model.IsLoan)
+    {
+        @* A loan balance is money OWED (stored negative): what's left to repay, and the next payment. *@
+        <div class="account-balance"><money amount="@Model.AmountOwed" /></div>
+        @if (loanView == null || loanView.Loan.Status == LoanStatus.PaidOff)
+        {
+            <div class="text-muted-alto small mb-3">@(Model.Status == AccountStatus.Closed ? "Paid in full" : "Left to repay")</div>
+        }
+        else
+        {
+            var lnext = loanView.Loan.NextDueDate!.Value;
+            <div class="small mb-2 @(loanView.PastDue ? "text-danger-alto" : "text-muted-alto")">Left to repay · <money amount="@loanView.Quote.ScheduledAmount" /> @(loanView.Overdue ? "overdue since" : loanView.PastDue ? "was due" : "due") @lnext.ToString("MMM d")</div>
+            <div class="util-bar util-progress mb-3" role="img" aria-label="@loanView.Loan.PercentPaid% of the loan paid off">
+                <span style="width: @loanView.Loan.PercentPaid.ToString(System.Globalization.CultureInfo.InvariantCulture)%"></span></div>
+        }
     }
     else
     {
@@ -43,6 +63,13 @@
             @if (Model.Status != AccountStatus.Closed && Model.AmountOwed > 0)
             {
                 <a class="btn btn-alto-ghost btn-sm" asp-controller="CreditCard" asp-action="Pay" asp-route-id="@Model.Id">Pay card</a>
+            }
+        }
+        else if (Model.IsLoan)
+        {
+            @if (Model.Status != AccountStatus.Closed)
+            {
+                <a class="btn btn-alto-ghost btn-sm" asp-controller="Loan" asp-action="Pay" asp-route-id="@Model.Id">Make a payment</a>
             }
         }
         else

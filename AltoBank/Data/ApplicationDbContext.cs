@@ -31,6 +31,8 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     public DbSet<CheckDeposit> CheckDeposits => Set<CheckDeposit>();
     public DbSet<Dispute> Disputes => Set<Dispute>();
     public DbSet<CreditCardStatement> CreditCardStatements => Set<CreditCardStatement>();
+    public DbSet<Loan> Loans => Set<Loan>();
+    public DbSet<LoanPayment> LoanPayments => Set<LoanPayment>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -85,6 +87,23 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
             s.HasIndex(x => x.DueDate);
         });
 
+        // ----- Loans: one per loan account; payments never deleted -----
+        builder.Entity<Loan>(l =>
+        {
+            l.Property(x => x.Kind).HasConversion<string>().HasMaxLength(10);
+            l.Property(x => x.Status).HasConversion<string>().HasMaxLength(10).HasDefaultValue(LoanStatus.Active);
+            l.HasOne(x => x.Account).WithMany().HasForeignKey(x => x.AccountId).OnDelete(DeleteBehavior.Restrict);
+            l.HasIndex(x => x.AccountId).IsUnique();
+            l.HasIndex(x => x.ApplicationId).IsUnique();   // accepting the same offer twice can't make two loans
+            l.HasIndex(x => new { x.UserId, x.Status });
+        });
+        builder.Entity<LoanPayment>(p =>
+        {
+            p.Property(x => x.Kind).HasConversion<string>().HasMaxLength(16);
+            p.HasOne(x => x.Loan).WithMany(l => l.Payments).HasForeignKey(x => x.LoanId).OnDelete(DeleteBehavior.Restrict);
+            p.HasIndex(x => new { x.LoanId, x.PaidAt });
+        });
+
         // ----- Disputes: ONE per transaction (the unique index makes simultaneous submits create only one) -----
         builder.Entity<Dispute>(d =>
         {
@@ -111,6 +130,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
         {
             app.Property(a => a.Status).HasConversion<string>();
             app.Property(a => a.AccountType).HasConversion<string>();
+            app.Property(a => a.LoanKind).HasConversion<string>().HasMaxLength(10);
             app.HasOne(a => a.User).WithMany(u => u.Applications)
                .HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Restrict);
             app.HasOne(a => a.Account).WithMany()

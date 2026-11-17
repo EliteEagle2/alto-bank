@@ -209,7 +209,9 @@ public partial class BankService : IBankService
 
     /// <summary>
     /// Money in vs. money out per day across ALL of a user's accounts (dashboard chart).
-    /// Transfers between the user's own accounts are left out, since they aren't new money in or out.
+    /// Transfers between the user's own accounts are left out, since they aren't new money in or out. So are payments
+    /// to the customer's own card or loan (the checking side is a transfer) and the loan side of borrowing (the money
+    /// arriving in checking is the "in").
     /// </summary>
     public async Task<List<DailyFlowDto>> GetDailyFlowsAsync(string userId, int days)
     {
@@ -217,7 +219,8 @@ public partial class BankService : IBankService
         var since = BankTime.StartOfDayUtc(firstDay);
         var rows = await _db.Transactions.AsNoTracking()
             .Where(t => t.Account!.UserId == userId && t.Date >= since
-                        && t.Type != TransactionType.TransferIn && t.Type != TransactionType.TransferOut)
+                        && t.Type != TransactionType.TransferIn && t.Type != TransactionType.TransferOut
+                        && t.Type != TransactionType.CardPayment && t.Type != TransactionType.LoanPayment && t.Type != TransactionType.LoanDisbursement)
             .Select(t => new { t.Date, t.Type, t.Amount })
             .ToListAsync();
 
@@ -237,7 +240,8 @@ public partial class BankService : IBankService
     /// <summary>
     /// The account's daily transfer limit and how much of it has been used today. "Today" is the BANK day
     /// (midnight to midnight in the bank time zone). Counts money sent to other accounts: transfers out
-    /// and payments sent to other customers. Withdrawals don't count.
+    /// and payments sent to other customers. Withdrawals don't count, and neither do payments to the customer's own
+    /// Alto card or loan (that money never leaves the bank, and a limit there could make a loan impossible to pay off).
     /// </summary>
     public async Task<(decimal Limit, decimal UsedToday)> GetDailyTransferUsageAsync(Account account)
     {
@@ -247,7 +251,9 @@ public partial class BankService : IBankService
         // SQLite can't SUM decimals in SQL, so the (few) amounts are added up in memory.
         var amounts = await _db.Transactions.AsNoTracking()
             .Where(t => t.AccountId == account.Id && Transaction.LimitedTypes.Contains(t.Type)
-                        && t.Status == TransactionStatus.Posted && t.Date >= today)
+                        && t.Status == TransactionStatus.Posted && t.Date >= today
+                        && !_db.Accounts.Any(c => c.Id == t.CounterpartyAccountId
+                                                  && (c.AccountType == AccountType.CreditCard || c.AccountType == AccountType.Loan)))
             .Select(t => t.Amount)
             .ToListAsync();
         return (limit, amounts.Sum());
@@ -387,7 +393,15 @@ public partial class BankService : IBankService
             application.FundingAccountId = request.InitialDeposit > 0 ? request.FundingAccountId : null;
 
             BankResult r;
-            if (application.AccountType == AccountType.CreditCard)
+            if (application.AccountType == AccountType.Loan)
+            {
+                // SIMULATED loan decision (LoanDecisionRules): an offer to accept, a staff review, or a denial. No credit check.
+                application.OpeningDeposit = 0m;
+                application.FundingAccountId = null;
+                r = await DecideLoanAsync(userId, application, settings);
+                if (!r.Success) return r;
+            }
+            else if (application.AccountType == AccountType.CreditCard)
             {
                 // SIMULATED credit decision (CreditDecisionRules): income range + housing + Alto history. No credit check.
                 var decision = CreditDecisionRules.Decide(application.IncomeRange, application.MonthlyHousingPayment ?? 0m, await CreditHistoryAsync(userId));
@@ -498,6 +512,7 @@ public partial class BankService : IBankService
 
         bool isChecking = request.Type == AccountType.Checking;
         bool isCard = request.Type == AccountType.CreditCard;
+        if (request.Type == AccountType.Loan) return (new(false, "A loan is opened by accepting a loan offer."), null);
         if (isCard && request.InitialDeposit > 0) return (new(false, "A credit card can't take an opening deposit."), null);
         if (isCard && (request.CreditLimit is not decimal lim || lim < CreditDecisionRules.MinLimit || lim > 25_000m))
             return (new(false, "A credit card needs a credit limit between $500 and $25,000."), null);
@@ -620,9 +635,10 @@ public partial class BankService : IBankService
             ? new(false, $"{account.DisplayName} is closed, so it can't receive money.")
             : null;
 
-    // A credit card isn't a place to keep money: it has its own Pay card / purchase actions.
-    private static string NotForTransfers(Account account) =>
-        $"{account.DisplayName} is a credit card, so it can't be used for deposits, withdrawals or transfers. Use Pay card on the card's page instead.";
+    // A credit card or a loan isn't a place to keep money: each has its own payment page.
+    private static string NotForTransfers(Account account) => account.IsLoan
+        ? $"{account.DisplayName} is a loan, so it can't be used for deposits, withdrawals or transfers. Use Make a payment on the loan's page instead."
+        : $"{account.DisplayName} is a credit card, so it can't be used for deposits, withdrawals or transfers. Use Pay card on the card's page instead.";
 
     private async Task<BankResult?> CheckDailyLimitAsync(Account from, decimal amount)
     {
@@ -723,7 +739,7 @@ public partial class BankService : IBankService
             Category = CategoryRules.For(type, description)   // Spending Insights: automatic category
         };
         _db.Transactions.Add(t);
-        if (!Transaction.IsCreditType(type))
+        if (!Transaction.IsCreditType(type) && type != TransactionType.LoanDisbursement)   // borrowing isn't a purchase
         {
             AddBalanceAlerts(account, amount);
             if (Categories.IsSpending(t.Category)) _budgetTouched.Add((account.UserId, t.Category));

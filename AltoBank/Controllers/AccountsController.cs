@@ -29,10 +29,12 @@ public class AccountsController : Controller
     private readonly ICheckDepositService _checks;
     private readonly IDisputeService _disputes;
     private readonly ICreditCardService _creditCards;
+    private readonly ILoanService _loans;
 
     public AccountsController(IBankService bank, UserManager<ApplicationUser> userManager, IDataProtectionProvider dataProtection,
-                              ICheckDepositService checks, IDisputeService disputes, ICreditCardService creditCards)
+                              ICheckDepositService checks, IDisputeService disputes, ICreditCardService creditCards, ILoanService loans)
     {
+        _loans = loans;
         _creditCards = creditCards;
         _disputes = disputes;
         _checks = checks;
@@ -45,7 +47,11 @@ public class AccountsController : Controller
     private string UserId => _userManager.GetUserId(User)!;
 
     // GET /Accounts
-    public async Task<IActionResult> Index() => View(await _bank.GetAccountsAsync(UserId));
+    public async Task<IActionResult> Index()
+    {
+        ViewData["LoanViews"] = (await _loans.GetLoansAsync(UserId)).ToDictionary(v => v.Account.Id);   // loan cards show the next payment
+        return View(await _bank.GetAccountsAsync(UserId));
+    }
 
     // =====================================================================
     // ACCOUNT DETAILS — /accounts/{id}
@@ -111,6 +117,11 @@ public class AccountsController : Controller
             vm.CardAprPercent = settings.CardPurchaseAprPercent;
             vm.CashBackPercent = settings.CardCashBackRate * 100m;
         }
+        if (account.IsLoan)
+        {
+            vm.Loan = await _loans.GetLoanAsync(UserId, account.Id);
+            vm.PayFromAccounts = await _creditCards.GetPayFromAccountsAsync(UserId);
+        }
         return View(vm);
     }
 
@@ -122,6 +133,7 @@ public class AccountsController : Controller
         if (data == null) return NotFound();
         // An Alto Peak card has real statements (close date, minimum, due date), not calendar months.
         if (data.Account.IsCreditCard) return Redirect(Url.Action(nameof(Details), new { id })! + "#statements");
+        if (data.Account.IsLoan) return Redirect(Url.Action(nameof(Details), new { id })! + "#schedule");
         return View(data);
     }
 
@@ -151,7 +163,7 @@ public class AccountsController : Controller
     // GET /Accounts/Apply?type=Savings — prefilled from the profile and the last application
     // =====================================================================
     [HttpGet]
-    public async Task<IActionResult> Apply(AccountType? type)
+    public async Task<IActionResult> Apply(AccountType? type, LoanKind? kind)
     {
         var user = await _userManager.GetUserAsync(User);
         if (user == null) return Challenge();
@@ -159,6 +171,7 @@ public class AccountsController : Controller
         var model = new AccountApplicationViewModel
         {
             AccountType = type,
+            LoanKind = type == AccountType.Loan ? kind ?? LoanKind.Personal : null,
             FirstName = user.FirstName,
             MiddleInitial = user.MiddleInitial,
             LastName = user.LastName,
@@ -185,6 +198,7 @@ public class AccountsController : Controller
 
         await PrepareFormAsync(model, user);
         model.FundingAccountId = model.FundingAccounts.FirstOrDefault()?.Id; // default: fund from an Alto account
+        model.DisburseToAccountId = model.CheckingAccounts.FirstOrDefault()?.Id; // loans: the first checking account
         return View(model);
     }
 
@@ -219,6 +233,7 @@ public class AccountsController : Controller
         if (!ModelState.IsValid) return View(model);
 
         var dob = model.DateOfBirth!.Value;
+        var isLoan = model.AccountType == AccountType.Loan;
         // A readable label for where the opening deposit came from.
         string? fundingLabel = null;
         if (deposit > 0)
@@ -260,6 +275,14 @@ public class AccountsController : Controller
             SourceOfFunds = string.Join(", ", model.SourceOfFunds.Distinct()),
             SsnLast4 = ssnLast4!,
             OpeningDeposit = deposit,
+            LoanKind = isLoan ? model.LoanKind : null,
+            LoanAmount = isLoan ? model.LoanAmount : null,
+            LoanTermMonths = isLoan ? model.LoanTermMonths : null,
+            LoanPurpose = isLoan ? Trim(model.LoanPurpose) : null,
+            VehicleYear = isLoan && model.LoanKind == LoanKind.Auto ? model.VehicleYear : null,
+            VehicleMake = isLoan && model.LoanKind == LoanKind.Auto ? Trim(model.VehicleMake) : null,
+            VehicleModel = isLoan && model.LoanKind == LoanKind.Auto ? Trim(model.VehicleModel) : null,
+            DisburseToAccountId = isLoan ? model.DisburseToAccountId : null,
             MonthlyHousingPayment = model.AccountType == AccountType.CreditCard ? model.MonthlyHousingPayment : null,
             AgreedCardmemberAgreement = model.AccountType == AccountType.CreditCard && model.AgreeCardmemberAgreement,
             FundingSource = deposit > 0 ? (model.FundingAccountId == null ? $"External: {fundingLabel}" : fundingLabel) : null,
@@ -302,6 +325,9 @@ public class AccountsController : Controller
             return RedirectToAction(nameof(Index));
         }
 
+        // A loan: the offer page (accept / decline), or the loan itself once accepted.
+        if (app.AccountType == AccountType.Loan && app.Status is ApplicationStatus.Offered or ApplicationStatus.Approved)
+            return RedirectToAction("Offer", "Loan", new { applicationId = app.Id });
         // Waiting for an admin (auto-approve is OFF) or denied: show the status page instead.
         if (app.Status != ApplicationStatus.Approved || app.Account == null)
             return View("ApplicationStatus", app);
@@ -330,8 +356,11 @@ public class AccountsController : Controller
     {
         deposit = m.InitialDeposit ?? 0m;
         var isCard = m.AccountType == AccountType.CreditCard;
-        if (isCard) deposit = 0m;   // a credit card has no opening deposit
+        var isLoan = m.AccountType == AccountType.Loan;
+        if (isCard || isLoan) deposit = 0m;   // a credit card or a loan has no opening deposit
         if (isCard && m.CardUnavailableReason != null) ModelState.AddModelError(nameof(m.AccountType), m.CardUnavailableReason);
+        if (isLoan && m.LoanUnavailableReason != null) ModelState.AddModelError(nameof(m.AccountType), m.LoanUnavailableReason);
+        if (isLoan && m.LoanKind is not (LoanKind.Personal or LoanKind.Auto)) ModelState.AddModelError(nameof(m.LoanKind), "Choose a personal or an auto loan.");
 
         // ----- Step 1 -----
         if (m.AccountType == AccountType.Checking && !CardDesigns.All.Contains(m.CardDesign))
@@ -403,6 +432,32 @@ public class AccountsController : Controller
             if (!m.AgreeCardmemberAgreement)
                 ModelState.AddModelError(nameof(m.AgreeCardmemberAgreement), "Please agree to the Cardmember Agreement.");
         }
+        else if (isLoan)
+        {
+            ModelState.Remove(nameof(m.InitialDeposit));
+            if (m.LoanKind is LoanKind kind)
+            {
+                var (min, max, minTerm, maxTerm) = LoanMath.Limits(kind);
+                if (m.LoanAmount is not decimal amt || amt < min || amt > max)
+                    ModelState.AddModelError(nameof(m.LoanAmount), $"Enter an amount from {min:C0} to {max:C0}.");
+                else if (decimal.Round(amt, 0) != amt)
+                    ModelState.AddModelError(nameof(m.LoanAmount), "Enter whole dollars (no cents).");
+                if (m.LoanTermMonths is not int term || !LoanMath.Terms(kind).Contains(term))
+                    ModelState.AddModelError(nameof(m.LoanTermMonths), $"Choose a term from {minTerm} to {maxTerm} months.");
+                if (m.LoanPurpose == null || !ApplicationOptions.LoanPurposes(kind).Contains(m.LoanPurpose))
+                    ModelState.AddModelError(nameof(m.LoanPurpose), "Choose what the loan is for.");
+                if (kind == LoanKind.Auto)
+                {
+                    var thisYear = BankTime.Today.Year;
+                    if (m.VehicleYear is not int y || y < thisYear - 25 || y > thisYear + 1)
+                        ModelState.AddModelError(nameof(m.VehicleYear), $"Enter a model year from {thisYear - 25} to {thisYear + 1}.");
+                    if (string.IsNullOrWhiteSpace(m.VehicleMake)) ModelState.AddModelError(nameof(m.VehicleMake), "Enter the make (for example, Subaru).");
+                    if (string.IsNullOrWhiteSpace(m.VehicleModel)) ModelState.AddModelError(nameof(m.VehicleModel), "Enter the model (for example, Outback).");
+                }
+            }
+            if (m.DisburseToAccountId is not int to || m.CheckingAccounts.All(c => c.Id != to))
+                ModelState.AddModelError(nameof(m.DisburseToAccountId), "Choose the Alto checking account the money should go to.");
+        }
         else if (decimal.Round(deposit, 2) != deposit)
             ModelState.AddModelError(nameof(m.InitialDeposit), "Opening deposit can have at most 2 decimal places.");
         if (deposit > 0)
@@ -425,7 +480,7 @@ public class AccountsController : Controller
         }
 
         // ----- Step 7 -----
-        if (!isCard && !m.AgreeAccountAgreement) ModelState.AddModelError(nameof(m.AgreeAccountAgreement), "Please agree to the Account Agreement.");
+        if (!isCard && !isLoan && !m.AgreeAccountAgreement) ModelState.AddModelError(nameof(m.AgreeAccountAgreement), "Please agree to the Account Agreement.");
         if (!m.AgreePrivacy) ModelState.AddModelError(nameof(m.AgreePrivacy), "Please acknowledge the Privacy Notice.");
         if (!m.AgreeESign) ModelState.AddModelError(nameof(m.AgreeESign), "Please agree to the E-Sign Consent.");
         if (m.ESignName != null && !ApplicationRules.SignatureMatches(m.ESignName, m.FirstName, m.MiddleInitial, m.LastName))
@@ -466,6 +521,16 @@ public class AccountsController : Controller
             model.CardUnavailableReason = "You already have an Alto Peak card.";
         else if ((await _bank.GetApplicationsAsync(user.Id)).Any(a => a.AccountType == AccountType.CreditCard && a.Status == ApplicationStatus.Pending))
             model.CardUnavailableReason = "Your Alto Peak application is being reviewed.";
+
+        // Loans: the money goes into checking, and one loan application at a time.
+        model.CheckingAccounts = await _loans.GetDisburseAccountsAsync(user.Id);
+        model.LoanSettings = settings;
+        var deposits = all.Where(a => a.IsDepositAccount && a.Status != AccountStatus.Closed).ToList();
+        model.EstablishedCustomer = deposits.Count > 0 && (DateTime.UtcNow - deposits.Min(a => a.OpenedAt)).TotalDays >= 60 && deposits.Sum(a => a.Balance) >= 1_000m;
+        if (model.CheckingAccounts.Count == 0)
+            model.LoanUnavailableReason = "Open an Alto checking account first: that's where the loan money goes.";
+        else if ((await _bank.GetApplicationsAsync(user.Id)).Any(a => a.AccountType == AccountType.Loan && a.Status is ApplicationStatus.Pending or ApplicationStatus.Offered))
+            model.LoanUnavailableReason = "You have a loan application in progress. Check your Profile for its status or offer.";
 
         ViewBag.States = new SelectList(ApplicationOptions.States, "Key", "Value");
         ViewBag.EmploymentStatuses = new SelectList(ApplicationOptions.EmploymentStatuses);

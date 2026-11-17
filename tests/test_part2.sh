@@ -24,12 +24,12 @@ check "customer POST to admin action rejected" "$(code -b $C -X POST $B/admin/ac
 echo "== Overview + stats"
 OV=$(curl -s -b $A $B/admin)
 check "6 stat strip cells" "$(echo "$OV" | grep -c 'class="kpi-cell')" 6
-has "pending applications tile = 2 (Samuel: savings + Alto Peak card)" "$OV" 'data-kpi="pending">2<'
+has "pending applications tile = 3 (Samuel: savings, Alto Peak card, auto loan)" "$OV" 'data-kpi="pending">3<'
 has "work queue panel" "$OV" "Work queue"
 ST=$(curl -s -b $A "$B/api/admin/stats")
 check "stats: 12 weeks of new accounts" "$(echo "$ST" | grep -o '"weekStart"' | wc -l | tr -d ' ')" 12
 has "stats: deposits by type" "$ST" '"depositsByType":{"Checking"'
-has "stats: pending = 2" "$ST" '"pendingApplications":2'
+has "stats: pending = 3" "$ST" '"pendingApplications":3'
 
 echo "== Customers list / search / sort"
 NCUST=$(curl -s -b $A "$B/api/admin/customers" | grep -o '"email"' | wc -l | tr -d ' ')

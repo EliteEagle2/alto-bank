@@ -6,10 +6,10 @@
 }
 <ul class="nav admin-tabs mb-3">
     <li class="nav-item"><a class="nav-link @(q.Status == null ? "active" : "")" asp-action="Index">All (@total)</a></li>
-    @foreach (var s in new[] { ApplicationStatus.Pending, ApplicationStatus.Approved, ApplicationStatus.Denied })
+    @foreach (var s in new[] { ApplicationStatus.Pending, ApplicationStatus.Offered, ApplicationStatus.Approved, ApplicationStatus.Denied, ApplicationStatus.OfferDeclined })
     {
         <li class="nav-item">
-            <a class="nav-link @(q.Status == s ? "active" : "")" asp-action="Index" asp-route-status="@s">@s (@counts.GetValueOrDefault(s))</a>
+            <a class="nav-link @(q.Status == s ? "active" : "")" asp-action="Index" asp-route-status="@s">@(s switch { ApplicationStatus.Offered => "Offer sent", ApplicationStatus.OfferDeclined => "Offer declined", _ => s.ToString() }) (@counts.GetValueOrDefault(s))</a>
         </li>
     }
 </ul>
@@ -26,7 +26,7 @@
                         <td><a asp-action="Details" asp-route-id="@app.Id" class="font-monospace">ALTO-@app.Id.ToString("D6")</a></td>
                         <td class="text-nowrap">@BankTime.ToLocal(app.SubmittedAt).ToString("MMM d, yyyy h:mm tt")</td>
                         <td>@app.FirstName @app.LastName<div class="small text-muted-alto">@app.User?.Email</div></td>
-                        <td>@app.AccountType @if (app.Nickname != null) { <div class="small text-muted-alto">"@app.Nickname"</div> }</td>
+                        <td>@(app.AccountType == AccountType.Loan ? $"{app.LoanKind} loan, {app.LoanAmount:C0}" : app.AccountType.ToString()) @if (app.Nickname != null) { <div class="small text-muted-alto">"@app.Nickname"</div> }</td>
                         <td class="text-end"><money amount="@app.OpeningDeposit" /></td>
                         <td><partial name="_StatusPill" model="app.Status.ToString()" /></td>
                         <td class="small text-muted-alto">@(app.ReviewedBy ?? "—")</td>

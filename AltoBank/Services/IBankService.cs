@@ -97,6 +97,15 @@ public interface IBankService
     /// <summary>Called by the scheduler: statement close + interest, autopay, late fee for one card (idempotent).</summary>
     Task<CardCycleOutcome> RunCardCycleAsync(int cardAccountId, DateOnly today);
 
+    // ----- Loans (money side; BankService.Loans.cs) -----
+    /// <summary>Accepts a loan offer: opens the Loan account and sends the money to the customer's checking (both sides recorded).</summary>
+    Task<(BankResult Result, Account? LoanAccount)> AcceptLoanOfferAsync(string userId, int applicationId, int toAccountId);
+    Task<BankResult> DeclineLoanOfferAsync(string userId, int applicationId);
+    /// <summary>Scheduled installment (+ unpaid fees), extra toward principal, or the payoff (with interest accrued to today).</summary>
+    Task<BankResult> PayLoanAsync(string userId, int loanAccountId, int fromAccountId, LoanPaymentKind kind, decimal? extraAmount);
+    /// <summary>Called by the scheduler: autopay on the due date, the late fee after the grace days, a reminder (idempotent).</summary>
+    Task<LoanCycleOutcome> RunLoanCycleAsync(int loanId, DateOnly today);
+
     // ----- Opening accounts -----
     Task<(BankResult Result, Account? Account)> OpenAccountAsync(string userId, OpenAccountRequest request);
     Task<(BankResult Result, Account? Account)> OpenAccountInCurrentTransactionAsync(string userId, OpenAccountRequest request);

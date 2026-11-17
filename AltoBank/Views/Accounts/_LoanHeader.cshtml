@@ -1,0 +1,105 @@
+@model AccountDetailsViewModel
+@* Top of a LOAN's page. The account's Balance is stored negative (money owed); everything here is shown in plain words:
+   what's left to repay, the rate, the payment and when it's due, and how far along the loan is. *@
+@{
+    var v = Model.Loan!;
+    var l = v.Loan;
+    var a = Model.Account;
+    var q = v.Quote;
+    var today = BankTime.Today;
+    var active = l.Status == LoanStatus.Active;
+    var graceEnds = l.NextDueDate?.AddDays(v.GraceDays);
+    var pct = l.PercentPaid;
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    var totalPayments = l.PaymentsMade + v.PaymentsRemaining;
+}
+
+@if (!active)
+{
+    <div class="status-banner paid" role="status"><i class="bi bi-trophy"></i>
+        <div><strong>Paid in full@(l.PaidOffAt == null ? "" : " on " + BankTime.ToLocal(l.PaidOffAt.Value).ToString("MMMM d, yyyy")).</strong>
+            Nothing more is owed. <a asp-controller="Loan" asp-action="Letter" asp-route-id="@a.Id" target="_blank" rel="noopener">View your paid-in-full letter</a>.</div></div>
+}
+else if (v.Overdue)
+{
+    <div class="status-banner frozen" role="alert"><i class="bi bi-exclamation-triangle"></i>
+        <div><strong>Your @l.NextDueDate!.Value.ToString("MMM d") payment is overdue.</strong>
+            @(q.PaymentsPastDue > 1 ? $"{q.PaymentsPastDue} payments are past due. " : "")@(l.FeesOwed > 0 ? $"Late fees of {l.FeesOwed:C} were added. " : "")Please <a asp-controller="Loan" asp-action="Pay" asp-route-id="@a.Id">make a payment</a> now.</div></div>
+}
+else if (v.PastDue)
+{
+    <div class="status-banner frozen" role="alert"><i class="bi bi-clock-history"></i>
+        <div><strong>Your <money amount="@q.ScheduledAmount" /> payment was due @l.NextDueDate!.Value.ToString("MMM d").</strong>
+            Pay by @graceEnds!.Value.ToString("MMM d") to avoid a <money amount="@v.LateFee" /> late fee.</div></div>
+}
+
+<div class="acct-header">
+    <div class="acct-card-wrap">
+        <div class="loan-tile @(l.Kind == LoanKind.Auto ? "loan-tile--auto" : "")">
+            <i class="bi @(l.Kind == LoanKind.Auto ? "bi-car-front" : "bi-person-check") loan-tile-icon" aria-hidden="true"></i>
+            <div class="loan-tile-kind">@l.KindLabel</div>
+            <div class="loan-tile-name">@(l.Vehicle ?? l.Purpose ?? "Personal loan")</div>
+            <div class="loan-tile-meta"><money amount="@l.Principal" /> · @l.TermMonths months · @l.AprPercent.ToString("0.00")% APR</div>
+        </div>
+    </div>
+
+    <div class="acct-summary">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+            <span class="account-type">Loan</span>
+            <span class="acct-status acct-status--@(active ? (v.Overdue ? "frozen" : "active") : "closed")">@(active ? (v.Overdue ? "Overdue" : "Active") : "Paid off")</span>
+            <span class="text-muted-alto small">Funded @BankTime.ToLocal(l.DisbursedAt).ToString("MMM d, yyyy")</span>
+        </div>
+        <h1 class="acct-name" data-account-name>@a.DisplayName</h1>
+        <div class="account-digits mb-3">•••• @a.Last4</div>
+
+        <div class="acct-balances">
+            <div>
+                <div class="acct-label">Principal remaining <span class="text-muted-alto">(you owe)</span></div>
+                <div class="acct-balance"><money amount="@l.PrincipalRemaining" /></div>
+                @if (l.FeesOwed > 0) { <div class="small text-danger-alto">+ <money amount="@l.FeesOwed" /> in late fees</div> }
+            </div>
+            <div>
+                <div class="acct-label">Monthly payment</div>
+                <div class="acct-available"><money amount="@l.MonthlyPayment" /></div>
+                <div class="small text-muted-alto">@l.AprPercent.ToString("0.00")% APR, fixed</div>
+            </div>
+            <div>
+                <div class="acct-label">Next payment</div>
+                @if (active)
+                {
+                    <div class="acct-available @(v.PastDue ? "text-danger-alto" : "")"><money amount="@q.ScheduledAmount" /></div>
+                    <div class="small @(v.PastDue ? "text-danger-alto" : "text-muted-alto")">@(v.PastDue ? "Was due " : "Due ")@l.NextDueDate!.Value.ToString("MMM d")@(l.AutopayEnabled && !v.PastDue ? " · autopay on" : "")</div>
+                }
+                else { <div class="acct-available">None</div><div class="small text-muted-alto">Paid in full</div> }
+            </div>
+            <div>
+                <div class="acct-label">Payments</div>
+                <div class="acct-available">@l.PaymentsMade <span class="small text-muted-alto">made</span></div>
+                <div class="small text-muted-alto">@(active ? $"{v.PaymentsRemaining} to go · last one {v.PayoffDate:MMM yyyy}" : "All done")</div>
+            </div>
+        </div>
+
+        <div class="util mt-3" style="max-width: 520px">
+            <div class="d-flex justify-content-between small mb-1">
+                <span>Paid off</span>
+                <span class="text-muted-alto"><money amount="@(l.Principal - l.PrincipalRemaining)" /> of <money amount="@l.Principal" /> (@pct%)</span>
+            </div>
+            <div class="util-bar util-progress" role="progressbar" aria-valuenow="@Math.Round(pct)" aria-valuemin="0" aria-valuemax="100" aria-label="Loan paid off">
+                <span style="width: @pct.ToString(inv)%"></span>
+            </div>
+        </div>
+
+        <div class="acct-actions">
+            @if (active)
+            {
+                <a class="btn btn-alto" asp-controller="Loan" asp-action="Pay" asp-route-id="@a.Id"><i class="bi bi-cash-coin me-1"></i>Make a payment</a>
+                <a class="btn btn-alto-ghost" href="#schedule"><i class="bi bi-table me-1"></i>See the schedule</a>
+            }
+            else
+            {
+                <a class="btn btn-alto" asp-controller="Loan" asp-action="Letter" asp-route-id="@a.Id" target="_blank" rel="noopener"><i class="bi bi-file-earmark-check me-1"></i>Paid-in-full letter</a>
+            }
+            <a class="btn btn-link text-muted-alto" asp-controller="Accounts" asp-action="Index"><i class="bi bi-chevron-left"></i> Back to accounts</a>
+        </div>
+    </div>
+</div>

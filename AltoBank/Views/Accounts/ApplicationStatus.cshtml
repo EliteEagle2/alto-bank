@@ -4,8 +4,10 @@
     ViewData["IsDecision"] = true;
     var pending = Model.Status == ApplicationStatus.Pending;
     ViewData["Title"] = pending ? "Application under review" : "Application decision";
-    var isCard = Model.AccountType == AccountType.CreditCard;
-    var product = Model.AccountType switch { AccountType.Checking => "Alto Checking", AccountType.Savings => "Summit Savings", _ => "Alto Peak Card" };
+    var isLoan = Model.AccountType == AccountType.Loan;
+    var isCard = Model.AccountType == AccountType.CreditCard || isLoan;   // a credit decision: show the demo note
+    var product = Model.AccountType switch { AccountType.Checking => "Alto Checking", AccountType.Savings => "Summit Savings", AccountType.Loan => $"{Model.LoanKind} loan", _ => "Alto Peak Card" };
+    var declined = Model.Status == ApplicationStatus.OfferDeclined;
 }
 
 <div class="apply-grid decision" id="decision" data-animate="false" data-user-key="@Model.UserId">
@@ -14,7 +16,7 @@
     </aside>
 
     <section class="apply-main">
-        <div class="glass reviewing @(pending ? "" : "denied")">
+        <div class="glass reviewing @(pending || declined ? "" : "denied")">
             @if (pending)
             {
                 @* Pending: an admin has to approve it (Settings → "Auto-approve applications" is OFF). *@
@@ -29,6 +31,11 @@
                     <p class="small text-muted-alto mb-3">@(Model.DecisionNote ?? "")</p>
                     <div class="mb-4"><span class="demo-note">Demo decision, no credit check</span></div>
                 }
+            }
+            else if (declined)
+            {
+                <h1 class="h3 mt-2 mb-2">You declined this loan offer</h1>
+                <p class="text-muted-alto mb-4">Nothing was borrowed and nothing is owed. You're welcome to <a asp-controller="Accounts" asp-action="Apply" asp-route-type="Loan">apply again</a> any time.</p>
             }
             else
             {
@@ -49,7 +56,12 @@
                 <div><dt>Application #</dt><dd class="font-monospace">ALTO-@Model.Id.ToString("D6")</dd></div>
                 <div><dt>Product</dt><dd>@product</dd></div>
                 <div><dt>Submitted</dt><dd>@BankTime.ToLocal(Model.SubmittedAt).ToString("MMM d, yyyy h:mm tt")</dd></div>
-                <div><dt>Status</dt><dd>@Model.Status</dd></div>
+                <div><dt>Status</dt><dd>@(pending ? "In review" : declined ? "Offer declined" : Model.Status.ToString())</dd></div>
+                @if (isLoan)
+                {
+                    <div><dt>Loan</dt><dd><money amount="@(Model.LoanAmount ?? 0)" /> for @Model.LoanTermMonths months</dd></div>
+                    @if (Model.LoanKind == LoanKind.Auto) { <div><dt>Vehicle</dt><dd>@Model.VehicleYear @Model.VehicleMake @Model.VehicleModel</dd></div> }
+                }
                 @if (isCard && Model.Status == ApplicationStatus.Pending && Model.CreditLimit is decimal proposed)
                 {
                     <div><dt>Proposed limit</dt><dd><money amount="@proposed" /></dd></div>

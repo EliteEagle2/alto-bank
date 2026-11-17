@@ -1,0 +1,66 @@
+@model LoanListViewModel
+@* /admin/loans — every personal and auto loan. Owed = principal still to repay + unpaid late fees. *@
+@{
+    var q = Model.Query;
+    string Tab(string? s) => Url.Action("Index", new { status = s, customer = q.Customer })!;
+    var tabs = new (string? Key, string Label)[] { (null, "All"), ("active", "Active"), ("overdue", "Overdue"), ("paidoff", "Paid off") };
+    var today = BankTime.Today;
+}
+@section PageActions {
+    <a class="btn btn-admin-ghost btn-sm" asp-controller="Applications" asp-action="Index" asp-route-status="Pending">
+        <i class="bi bi-file-earmark-check me-1"></i>Pending applications (@Model.PendingApplications)</a>
+    <a class="btn btn-admin-ghost btn-sm" asp-controller="Applications" asp-action="Index" asp-route-status="Offered">
+        <i class="bi bi-envelope-check me-1"></i>Offers waiting (@Model.OpenOffers)</a>
+}
+
+<ul class="nav admin-tabs mb-3">
+    @foreach (var (key, label) in tabs)
+    {
+        var n = key == null ? (int?)null : Model.Counts.GetValueOrDefault(key);
+        <li class="nav-item"><a class="nav-link @(string.Equals(q.Status, key, StringComparison.OrdinalIgnoreCase) || (q.Status == null && key == null) ? "active" : "")" href="@Tab(key)">@label@(n == null ? "" : $" ({n})")</a></li>
+    }
+</ul>
+
+<form method="get" class="filter-bar" role="search">
+    @if (!string.IsNullOrEmpty(q.Status)) { <input type="hidden" name="status" value="@q.Status" /> }
+    <div><label for="customer">Customer</label><input id="customer" name="customer" class="form-control" value="@q.Customer" placeholder="Name or email" /></div>
+    <div class="filter-actions"><button type="submit" class="btn btn-admin btn-sm">Filter</button></div>
+</form>
+
+<div class="admin-card p-0">
+    <div class="table-responsive">
+        <table class="table admin-table table-hover mb-0">
+            <thead><tr><th>Loan</th><th>Customer</th><th class="text-end">Owed</th><th class="text-end">Rate</th><th>Repaid</th><th>Next payment</th><th>Status</th></tr></thead>
+            <tbody>
+                @if (!Model.Loans.Items.Any()) { <tr><td colspan="7" class="text-center text-muted-alto py-4">No loans here.</td></tr> }
+                @foreach (var v in Model.Loans.Items)
+                {
+                    var l = v.Loan;
+                    var status = l.Status == LoanStatus.PaidOff ? "PaidOff" : v.Overdue ? "Overdue" : "Active";
+                    <tr>
+                        <td><a asp-action="Details" asp-route-id="@v.Account.Id">@v.Account.DisplayName ••@v.Account.Last4</a>
+                            <div class="small text-muted-alto">@(l.Vehicle ?? l.Purpose ?? l.KindLabel)</div></td>
+                        <td>@v.Account.User?.FirstName @v.Account.User?.LastName<div class="small text-muted-alto">@v.Account.User?.Email</div></td>
+                        <td class="text-end"><money amount="@l.TotalOwed" /><div class="small text-muted-alto">of <money amount="@l.Principal" /></div></td>
+                        <td class="text-end">@l.AprPercent.ToString("0.00")%</td>
+                        <td style="min-width:7rem">
+                            <div class="util-bar util-low" role="img" aria-label="@l.PercentPaid% repaid"><span style="width:@l.PercentPaid.ToString(System.Globalization.CultureInfo.InvariantCulture)%"></span></div>
+                            <div class="small text-muted-alto">@l.PercentPaid% · @l.PaymentsMade paid</div>
+                        </td>
+                        <td class="small">
+                            @if (l.NextDueDate is DateOnly due)
+                            {
+                                <money amount="@v.Quote.ScheduledAmount" /> <span class="@(v.PastDue ? "text-danger-alto" : "text-muted-alto")">@(v.PastDue ? "was due" : "due") @due.ToString("MMM d")</span>
+                                @if (l.FeesOwed > 0) { <div class="text-danger-alto"><i class="bi bi-exclamation-triangle me-1"></i><money amount="@l.FeesOwed" /> in late fees</div> }
+                                @if (l.AutopayEnabled) { <div class="text-muted-alto">Autopay on</div> }
+                            }
+                            else { <span class="text-muted-alto">Paid off @(l.PaidOffAt == null ? "" : BankTime.ToLocal(l.PaidOffAt.Value).ToString("MMM d, yyyy"))</span> }
+                        </td>
+                        <td><partial name="_StatusPill" model="status" /></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <partial name="_Pager" model="Model.Loans.Pager" />
+</div>

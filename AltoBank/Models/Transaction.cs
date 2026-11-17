@@ -27,7 +27,10 @@ public enum TransactionType
     LateFee,            // Alto Peak: minimum not paid by the due date (debit)
     FeeWaiver,          // Alto Peak: a fee taken back by staff (credit)
     CashBackCredit,     // Alto Peak: cash back redeemed as a statement credit (credit)
-    RewardRedemption    // Alto Peak: cash back redeemed into checking (credit on the checking account)
+    RewardRedemption,   // Alto Peak: cash back redeemed into checking (credit on the checking account)
+    LoanDisbursement,   // Loan: the amount borrowed, on the loan account (debit: adds to what's owed)
+    LoanProceeds,       // Loan: the borrowed money arriving in checking (credit)
+    LoanPayment         // Loan: a payment to the loan (credit: lowers what's owed)
 }
 
 /// <summary>
@@ -104,7 +107,8 @@ public class Transaction
         TransactionType.Deposit, TransactionType.TransferIn, TransactionType.Interest,
         TransactionType.AdjustmentCredit, TransactionType.ReversalCredit, TransactionType.PaymentReceived,
         TransactionType.CheckDeposit, TransactionType.ProvisionalCredit,
-        TransactionType.CardPayment, TransactionType.FeeWaiver, TransactionType.CashBackCredit, TransactionType.RewardRedemption
+        TransactionType.CardPayment, TransactionType.FeeWaiver, TransactionType.CashBackCredit, TransactionType.RewardRedemption,
+        TransactionType.LoanProceeds, TransactionType.LoanPayment
     };
 
     /// <summary>Money sent to another account. These count toward the daily transfer limit (withdrawals don't).</summary>
@@ -146,6 +150,9 @@ public class Transaction
         TransactionType.FeeWaiver => "Fee waived",
         TransactionType.CashBackCredit => "Cash back (statement credit)",
         TransactionType.RewardRedemption => "Cash back",
+        TransactionType.LoanDisbursement => "Loan funds",
+        TransactionType.LoanProceeds => "Loan deposit",
+        TransactionType.LoanPayment => "Loan payment",
         _ => type.ToString()
     };
 }

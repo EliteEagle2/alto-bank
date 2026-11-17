@@ -2,10 +2,20 @@
 @using System.Globalization
 @* STEP 6 — checking/savings: optional opening deposit from an Alto account (a real transfer) or an external bank
    (simulated); data-balance lets apply.js warn about overdrafts. Alto Peak card: monthly housing payment + Cardmember
-   Agreement instead (used by the SIMULATED decision, no credit check). The server checks everything again on submit. *@
+   Agreement instead (used by the SIMULATED decision, no credit check). A loan: amount, term, what it's for (+ the vehicle),
+   and the checking account the money goes to, with a live payment estimate. The server checks everything again on submit. *@
+@{
+    var ls = Model.LoanSettings;
+    var rates = System.Text.Json.JsonSerializer.Serialize(new
+    {
+        A = ls.LoanRateTierA, B = ls.LoanRateTierB, C = ls.LoanRateTierC, D = ls.LoanRateTierD,
+        auto = ls.AutoLoanRateDiscount, min = AltoBank.Services.LoanDecisionRules.MinApr, established = Model.EstablishedCustomer
+    });
+    var allTerms = new[] { 12, 24, 36, 48, 60, 72 };
+}
 <section class="step-pane" data-step="6" aria-labelledby="s6-title">
     <p class="step-kicker">Step 6 of 7</p>
-    <div data-show-when="AccountType!=CreditCard">
+    <div data-show-when="AccountType!=CreditCard&AccountType!=Loan">
         <h1 class="step-title" id="s6-title">Fund your new account</h1>
         <p class="step-lead">There's no minimum. Add money now or skip this and fund it later.</p>
     </div>
@@ -47,7 +57,102 @@
         </div>
     </div>
 
-    <div class="row g-4" data-show-when="AccountType!=CreditCard">
+    <div data-show-when="AccountType=Loan" hidden>
+        <h1 class="step-title">Your loan</h1>
+        <p class="step-lead">How much, for how long, and where the money should go. You'll see your exact rate and payment before you accept anything.</p>
+    </div>
+
+    <div class="row g-4" data-show-when="AccountType=Loan" hidden>
+        <div class="col-lg-7">
+            <div class="row g-3">
+                <div class="col-sm-7">
+                    <div class="field" data-field="LoanAmount">
+                        <label asp-for="LoanAmount" class="form-label">How much do you need?</label>
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text">$</span>
+                            <input asp-for="LoanAmount" type="text" class="form-control" inputmode="numeric" placeholder="e.g. 8000" autocomplete="off" />
+                        </div>
+                        <div class="form-text text-muted-alto" data-loan-range>Personal loans: $1,000 to $25,000.</div>
+                        <div class="field-msg" data-msg="LoanAmount"><span asp-validation-for="LoanAmount"></span></div>
+                    </div>
+                </div>
+                <div class="col-sm-5">
+                    <div class="field" data-field="LoanTermMonths">
+                        <label asp-for="LoanTermMonths" class="form-label">Pay it back over</label>
+                        <select asp-for="LoanTermMonths" class="form-select form-select-lg">
+                            <option value="">Choose…</option>
+                            @foreach (var t in allTerms)
+                            {
+                                <option value="@t" data-personal="@(LoanMath.Terms(LoanKind.Personal).Contains(t) ? "true" : "false")" data-auto="@(LoanMath.Terms(LoanKind.Auto).Contains(t) ? "true" : "false")">@t months (@(t / 12) year@(t == 12 ? "" : "s"))</option>
+                            }
+                        </select>
+                        <div class="field-msg" data-msg="LoanTermMonths"><span asp-validation-for="LoanTermMonths"></span></div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="field" data-field="LoanPurpose">
+                        <label asp-for="LoanPurpose" class="form-label">What's it for?</label>
+                        <select asp-for="LoanPurpose" class="form-select">
+                            <option value="">Choose…</option>
+                            @foreach (var p in ApplicationOptions.PersonalLoanPurposes) { <option value="@p" data-kind="Personal">@p</option> }
+                            @foreach (var p in ApplicationOptions.AutoLoanPurposes) { <option value="@p" data-kind="Auto">@p</option> }
+                        </select>
+                        <div class="field-msg" data-msg="LoanPurpose"><span asp-validation-for="LoanPurpose"></span></div>
+                    </div>
+                </div>
+                <div class="col-12" data-show-when="LoanKind=Auto" hidden>
+                    <div class="row g-3">
+                        <div class="col-4">
+                            <div class="field" data-field="VehicleYear">
+                                <label asp-for="VehicleYear" class="form-label">Year</label>
+                                <input asp-for="VehicleYear" type="text" class="form-control" inputmode="numeric" maxlength="4" placeholder="@BankTime.Today.Year" autocomplete="off" />
+                                <div class="field-msg" data-msg="VehicleYear"><span asp-validation-for="VehicleYear"></span></div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="field" data-field="VehicleMake">
+                                <label asp-for="VehicleMake" class="form-label">Make</label>
+                                <input asp-for="VehicleMake" class="form-control" maxlength="30" placeholder="Subaru" autocomplete="off" />
+                                <div class="field-msg" data-msg="VehicleMake"><span asp-validation-for="VehicleMake"></span></div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="field" data-field="VehicleModel">
+                                <label asp-for="VehicleModel" class="form-label">Model</label>
+                                <input asp-for="VehicleModel" class="form-control" maxlength="40" placeholder="Outback" autocomplete="off" />
+                                <div class="field-msg" data-msg="VehicleModel"><span asp-validation-for="VehicleModel"></span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="field" data-field="DisburseToAccountId">
+                        <label asp-for="DisburseToAccountId" class="form-label">Send the money to</label>
+                        <select asp-for="DisburseToAccountId" class="form-select">
+                            @foreach (var c in Model.CheckingAccounts)
+                            {
+                                <option value="@c.Id">@c.DisplayName ••@c.Last4</option>
+                            }
+                        </select>
+                        <div class="form-text text-muted-alto">It arrives as soon as you accept the offer. You can change this on the offer page too.</div>
+                        <div class="field-msg" data-msg="DisburseToAccountId"><span asp-validation-for="DisburseToAccountId"></span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="review-card p-3 loan-estimate" data-loan-estimate data-rates="@rates" aria-live="polite">
+                <div class="small text-muted-alto mb-1">Estimated monthly payment</div>
+                <div class="loan-estimate-value" data-est-payment>—</div>
+                <div class="small" data-est-detail>Enter an amount and a term to see your estimate.</div>
+                <hr />
+                <p class="small mb-2">Your rate comes from the income you chose in step 4 and your history with Alto. It's fixed for the whole loan, there are no fees, and you can pay it off early at no cost.</p>
+                <span class="demo-note">Demo decision, no credit check</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4" data-show-when="AccountType!=CreditCard&AccountType!=Loan">
         <div class="col-lg-6">
             <div class="field" data-field="InitialDeposit">
                 <label asp-for="InitialDeposit" class="form-label">Opening deposit <span class="opt">(optional)</span></label>

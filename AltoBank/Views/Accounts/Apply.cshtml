@@ -6,7 +6,7 @@
     // If the server rejected the application, start on the first step that has an error.
     int StepFor(string key) => key switch
     {
-        "AccountType" or "Nickname" or "CardDesign" => 1,
+        "AccountType" or "Nickname" or "CardDesign" or "LoanKind" => 1,
         "FirstName" or "MiddleInitial" or "LastName" or "DobMonth" or "DobDay" or "DobYear" or "DateOfBirth" or "Citizenship" => 2,
         "Phone" or "Street" or "Apt" or "City" or "State" or "Zip" or "LivedTwoYears"
             or "PrevStreet" or "PrevCity" or "PrevState" or "PrevZip" => 3,

@@ -73,6 +73,24 @@
                         </div>
                     }
                     <div class="col-12 small text-muted-alto">Interest uses the daily balance method and is only charged when the last statement wasn't paid in full by its due date. The minimum payment is the larger of the two amounts (or the whole balance if that's less).</div>
+                    <div class="col-12"><h3 class="h6 mt-2 mb-0">Loans</h3></div>
+                    @foreach (var (field, prefix, suffix, step) in new[] {
+                        ("LoanRateTierA", "", "%", "0.01"), ("LoanRateTierB", "", "%", "0.01"), ("LoanRateTierC", "", "%", "0.01"), ("LoanRateTierD", "", "%", "0.01"),
+                        ("AutoLoanRateDiscount", "", "pts", "0.01"), ("LoanReviewAmount", "$", "", "1"), ("LoanLateFee", "$", "", "0.01"), ("LoanGraceDays", "", "days", "1") })
+                    {
+                        var raw = Model.GetType().GetProperty(field)!.GetValue(Model);
+                        <div class="col-sm-6 col-lg-3">
+                            <label for="@field" class="form-label">@Html.DisplayName(field)</label>
+                            <div class="input-group">
+                                @if (prefix != "") { <span class="input-group-text">@prefix</span> }
+                                <input id="@field" name="@field" class="form-control" type="number" step="@step" min="0"
+                                       value="@(raw is IFormattable fv ? fv.ToString(null, System.Globalization.CultureInfo.InvariantCulture) : "")" />
+                                @if (suffix != "") { <span class="input-group-text">@suffix</span> }
+                            </div>
+                            <span class="field-validation-error" data-valmsg-for="@field"></span>
+                        </div>
+                    }
+                    <div class="col-12 small text-muted-alto">The simulated decision puts each application in a tier by income (one tier better for established customers). Auto loans get the discount off their tier. Loans at or above the review amount, tier D, or with a payment over 15% of income wait for staff review. A payment more than the grace days late is overdue and gets the late fee.</div>
                     <div class="col-12">
                         <div class="form-check form-switch">
                             <input asp-for="ProvisionalCreditOnDisputes" class="form-check-input" role="switch" />

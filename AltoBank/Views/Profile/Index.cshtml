@@ -219,7 +219,7 @@
                                         <tr>
                                             <td class="text-muted-alto text-nowrap">@BankTime.ToLocal(app.SubmittedAt).ToString("MMM d, yyyy")</td>
                                             <td>
-                                                @(app.AccountType switch { AccountType.Checking => "Alto Checking", AccountType.Savings => "Summit Savings", _ => "Alto Peak Card" })
+                                                @(app.AccountType switch { AccountType.Checking => "Alto Checking", AccountType.Savings => "Summit Savings", AccountType.Loan => $"{app.LoanKind} loan, {app.LoanAmount:C0}", _ => "Alto Peak Card" })
                                                 @if (app.Account != null)
                                                 {
                                                     <a class="small d-block" asp-controller="Accounts" asp-action="Details" asp-route-id="@app.Account.Id">@app.Account.DisplayName ••@app.Account.Last4</a>
@@ -232,16 +232,18 @@
                                                     {
                                                         ApplicationStatus.Approved => ("credit", "bi-check-circle"),
                                                         ApplicationStatus.Pending => ("pending", "bi-hourglass-split"),
+                                                        ApplicationStatus.Offered => ("pending", "bi-envelope-check"),
+                                                        ApplicationStatus.OfferDeclined => ("debit", "bi-dash-circle"),
                                                         _ => ("debit", "bi-x-circle")
                                                     };
                                                 }
                                                 <a class="type-badge @css text-decoration-none" asp-controller="Accounts" asp-action="Decision" asp-route-id="@app.Id">
-                                                    <i class="bi @icon me-1"></i>@(app.Status == ApplicationStatus.Pending ? "In review" : app.Status.ToString())
+                                                    <i class="bi @icon me-1"></i>@(app.Status switch { ApplicationStatus.Pending => "In review", ApplicationStatus.Offered => "Offer ready: review it", ApplicationStatus.OfferDeclined => "Offer declined", _ => app.Status.ToString() })
                                                 </a>
                                                 @if (app.Status == ApplicationStatus.Denied && !string.IsNullOrWhiteSpace(app.DenialReason))
                                                 {
                                                     <div class="small text-muted-alto mt-1">Reason: @app.DenialReason</div>
-                                                    @if (app.AccountType == AccountType.CreditCard) { <span class="demo-note mt-1">Demo decision, no credit check</span> }
+                                                    @if (app.AccountType is AccountType.CreditCard or AccountType.Loan) { <span class="demo-note mt-1">Demo decision, no credit check</span> }
                                                 }
                                             </td>
                                         </tr>

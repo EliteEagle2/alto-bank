@@ -4,14 +4,25 @@
     var app = Model;
     var name = $"{app.FirstName} {app.LastName}";
     var isCard = app.AccountType == AccountType.CreditCard;
-    var product = app.AccountType switch { AccountType.Checking => "Alto Checking", AccountType.Savings => "Summit Savings", _ => "Alto Peak Card" };
+    var isLoan = app.AccountType == AccountType.Loan;
+    var product = app.AccountType switch { AccountType.Checking => "Alto Checking", AccountType.Savings => "Summit Savings", AccountType.Loan => $"{app.LoanKind} loan", _ => "Alto Peak Card" };
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
     var limitText = isCard ? $" with a {(app.CreditLimit ?? AltoBank.Services.CreditDecisionRules.MinLimit):C} credit limit (the proposed limit)" : "";
     var depositText = app.OpeningDeposit > 0
         ? $"{app.OpeningDeposit:C} will be moved in from {(app.FundingSource ?? "an external bank (simulated)")}; funds and limits are re-checked now."
         : "There is no opening deposit.";
-    var approve = new ConfirmModalViewModel("approveModal", $"Approve application ALTO-{app.Id:D6}",
+    var approve = isLoan
+        ? new ConfirmModalViewModel("approveModal", $"Approve application ALTO-{app.Id:D6} as offered",
+            $"{name} gets an offer for {app.LoanAmount:C} at {app.LoanAprPercent:0.00}% APR for {app.LoanTermMonths} months ({app.LoanMonthlyPayment:C} a month). Nothing is lent until they accept it; then the money goes to their checking account.",
+            Url.Action("Approve", new { id = app.Id })!, "Send the offer", "primary")
+        : new ConfirmModalViewModel("approveModal", $"Approve application ALTO-{app.Id:D6}",
         $"A new {product} account will be opened for {name}" + (app.AccountType == AccountType.Checking ? " with a virtual debit card" : "") + limitText + $". {(isCard ? "" : depositText + " ")}The customer sees the approval right away.",
         Url.Action("Approve", new { id = app.Id })!, "Approve & open account", "primary");
+    var counter = new ConfirmModalViewModel("counterModal", $"Counter-offer for ALTO-{app.Id:D6}",
+        $"Change the APR, the amount, or both (the {app.LoanTermMonths}-month term stays the same). {name} sees the new terms as an offer to accept.",
+        Url.Action("Counter", new { id = app.Id })!, "Send counter-offer", "primary",
+        new[] { new ConfirmField("apr", "APR (%)", "number", false, null, "1.99", "0.01", app.LoanAprPercent?.ToString("0.00", inv)),
+                new ConfirmField("amount", "Amount ($)", "number", false, null, "1000", "1", app.LoanAmount?.ToString("0", inv)) });
     var deny = new ConfirmModalViewModel("denyModal", $"Deny application ALTO-{app.Id:D6}",
         $"No account will be opened and no money moves. {name} will see the application as Denied, together with the reason you type below, so write it for the customer.",
         Url.Action("Deny", new { id = app.Id })!, "Deny application", "danger");
@@ -27,7 +38,8 @@
     @if (app.Status == ApplicationStatus.Pending)
     {
         <div class="detail-actions">
-            <button class="btn btn-admin" data-bs-toggle="modal" data-bs-target="#approveModal"><i class="bi bi-check2-circle me-1"></i>Approve</button>
+            <button class="btn btn-admin" data-bs-toggle="modal" data-bs-target="#approveModal"><i class="bi bi-check2-circle me-1"></i>@(isLoan ? "Approve as offered" : "Approve")</button>
+            @if (isLoan) { <button class="btn btn-admin" data-bs-toggle="modal" data-bs-target="#counterModal"><i class="bi bi-arrow-left-right me-1"></i>Counter-offer</button> }
             <button class="btn btn-admin-danger" data-bs-toggle="modal" data-bs-target="#denyModal"><i class="bi bi-x-circle me-1"></i>Deny</button>
         </div>
     }
@@ -40,6 +52,8 @@
             <dt>Decision</dt><dd>@app.Status by @(app.ReviewedBy ?? "—") on @Local(app.ReviewedAt)</dd>
             @if (app.DenialReason != null) { <dt>Reason shown to customer</dt><dd>@app.DenialReason</dd> }
             @if (app.Account != null) { <dt>Account opened</dt><dd><a asp-area="Admin" asp-controller="Accounts" asp-action="Details" asp-route-id="@app.Account.Id">@app.Account.DisplayName ••@app.Account.Last4</a></dd> }
+            @if (isLoan && app.Status == ApplicationStatus.Offered) { <dt>Offer</dt><dd>Waiting for the customer to accept (expires @AltoBank.Services.BankService.OfferExpiresOn(app).ToString("MMM d, yyyy"))</dd> }
+            @if (isLoan && app.OfferRespondedAt != null) { <dt>Customer answered</dt><dd>@(app.Status == ApplicationStatus.OfferDeclined ? "Declined the offer" : "Accepted the offer") on @Local(app.OfferRespondedAt)</dd> }
         </dl>
     </div>
 }
@@ -70,7 +84,15 @@
                 <dt>Employment</dt><dd>@app.EmploymentStatus@(app.Employer == null ? "" : $" · {app.Occupation} at {app.Employer}")</dd>
                 <dt>Income</dt><dd>@app.IncomeRange</dd>
                 <dt>Source of funds</dt><dd>@app.SourceOfFunds</dd>
-                @if (isCard)
+                @if (isLoan)
+                {
+                    <dt>Loan</dt><dd>@product, @app.LoanTermMonths months@(app.LoanPurpose == null ? "" : $" · {app.LoanPurpose}")</dd>
+                    @if (app.LoanKind == LoanKind.Auto) { <dt>Vehicle</dt><dd>@app.VehicleYear @app.VehicleMake @app.VehicleModel</dd> }
+                    <dt>Amount</dt><dd><money amount="@(app.LoanAmount ?? 0)" />@if (app.RequestedLoanAmount is decimal req && req != app.LoanAmount) { <span class="small text-muted-alto"> (asked for <money amount="@req" />)</span> }</dd>
+                    <dt>@(app.Status == ApplicationStatus.Pending ? "Proposed terms" : "Terms")</dt><dd>Tier @app.LoanRateTier · @app.LoanAprPercent?.ToString("0.00")% APR · <money amount="@(app.LoanMonthlyPayment ?? 0)" /> a month@(app.IsCounterOffer ? " · counter-offer" : "")</dd>
+                    <dt>Decision</dt><dd>@(app.DecisionNote ?? "—") <span class="demo-note">Demo decision, no credit check</span></dd>
+                }
+                else if (isCard)
                 {
                     <dt>Monthly housing</dt><dd><money amount="@(app.MonthlyHousingPayment ?? 0)" /></dd>
                     <dt>Proposed limit</dt><dd>@(app.CreditLimit is decimal l ? l.ToString("C") : "—")</dd>
@@ -92,4 +114,5 @@
 {
     <partial name="_ConfirmModal" model="approve" />
     <partial name="_ConfirmModal" model="deny" />
+    @if (isLoan) { <partial name="_ConfirmModal" model="counter" /> }
 }

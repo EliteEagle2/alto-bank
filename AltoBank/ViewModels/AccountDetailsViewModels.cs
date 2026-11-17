@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using AltoBank.Models;
+using AltoBank.Services;
 
 namespace AltoBank.ViewModels;
 
@@ -47,6 +48,12 @@ public class AccountDetailsViewModel
 
     public bool IsChecking => Account.AccountType == AccountType.Checking;
     public bool IsCreditCard => Account.IsCreditCard;
+    public bool IsLoan => Account.IsLoan;
+    /// <summary>Card or loan: the balance is money owed, so rows show "Owed" instead of a running balance.</summary>
+    public bool ShowsOwed => Account.IsCreditCard || Account.IsLoan;
+
+    // ----- Loan only -----
+    public LoanView? Loan { get; set; }
 
     // ----- Alto Peak card only -----
     public CreditCardStatement? LatestStatement { get; set; }
@@ -74,6 +81,38 @@ public record TransactionRowViewModel(Transaction Transaction, string? Counterpa
 public record CopyFieldViewModel(
     string Id, string Label, string Display,
     string? CopyValue = null, string? RevealUrl = null, string? RevealField = null, bool Monospace = true);
+
+/// <summary>Make a loan payment form (/loans/{id}/pay).</summary>
+public class PayLoanForm
+{
+    public LoanPaymentKind Kind { get; set; } = LoanPaymentKind.Scheduled;
+    [Range(0.01, 1_000_000)] public decimal? ExtraAmount { get; set; }
+    public int? FromAccountId { get; set; }
+}
+
+public class PayLoanViewModel
+{
+    public LoanView Loan { get; set; } = null!;
+    public List<Account> FromAccounts { get; set; } = new();
+    public PayLoanForm Form { get; set; } = new();
+}
+
+/// <summary>The loan offer page (/loans/offer/{applicationId}): the terms, the Truth-in-Lending box, where the money goes.</summary>
+public class LoanOfferViewModel
+{
+    public AccountApplication Application { get; set; } = null!;
+    public List<Account> CheckingAccounts { get; set; } = new();
+    public decimal FinanceCharge { get; set; }          // total interest over the full schedule
+    public decimal TotalOfPayments { get; set; }
+    public decimal FinalPayment { get; set; }           // the last payment (adjusted so the loan ends at $0.00)
+    public DateOnly FirstDueDate { get; set; }
+    public DateOnly ExpiresOn { get; set; }
+    public bool Expired { get; set; }
+    public decimal LateFee { get; set; }
+    public int GraceDays { get; set; }
+    public int? ToAccountId { get; set; }
+    public bool Agreed { get; set; }
+}
 
 /// <summary>Pay card form (/credit-card/{id}/pay).</summary>
 public class PayCardForm

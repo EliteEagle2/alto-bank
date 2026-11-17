@@ -12,7 +12,9 @@ public enum ApplicationStatus
 {
     Pending,
     Approved,
-    Denied
+    Denied,
+    Offered,        // loans only: a decision with terms the customer still has to accept
+    OfferDeclined   // loans only: the customer said no to the offer (or it expired)
 }
 
 /// <summary>
@@ -92,6 +94,25 @@ public class AccountApplication
     // The simulated decision: the credit limit offered (approved, or proposed for a pending review) and why.
     [Column(TypeName = "decimal(18,2)")] public decimal? CreditLimit { get; set; }
     [StringLength(300)] public string? DecisionNote { get; set; }
+
+    // ----- Loan (personal or auto) applications only -----
+    public LoanKind? LoanKind { get; set; }
+    [Column(TypeName = "decimal(18,2)")] public decimal? LoanAmount { get; set; }
+    public int? LoanTermMonths { get; set; }
+    [StringLength(60)] public string? LoanPurpose { get; set; }
+    public int? VehicleYear { get; set; }
+    [StringLength(30)] public string? VehicleMake { get; set; }
+    [StringLength(40)] public string? VehicleModel { get; set; }
+    // The checking account the money goes into once the offer is accepted.
+    public int? DisburseToAccountId { get; set; }
+    // The simulated decision's offer (or what staff countered with): rate tier, APR, the monthly payment.
+    [StringLength(1)] public string? LoanRateTier { get; set; }
+    [Column(TypeName = "decimal(5,2)")] public decimal? LoanAprPercent { get; set; }
+    [Column(TypeName = "decimal(18,2)")] public decimal? LoanMonthlyPayment { get; set; }
+    public bool IsCounterOffer { get; set; }
+    [Column(TypeName = "decimal(18,2)")] public decimal? RequestedLoanAmount { get; set; }   // what the customer asked for (if countered)
+    public DateTime? OfferedAt { get; set; }
+    public DateTime? OfferRespondedAt { get; set; }
 
     // ----- Step 7: electronic signature -----
     [Required, StringLength(110)] public string ESignName { get; set; } = string.Empty;

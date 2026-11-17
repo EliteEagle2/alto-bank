@@ -82,7 +82,7 @@ public partial class BankService
         // Can't pay the card below $0 (no overpaying into a credit balance).
         if (amount > owed)
             return new(false, owed == 0 ? "Your card is paid off. There's nothing to pay." : $"That's more than you owe ({owed:C}). You can pay up to {owed:C}.");
-        if (await CheckDailyLimitAsync(from, amount) is { } overLimit) return overLimit;
+        // No daily transfer limit: paying your own card keeps the money inside Alto (see GetDailyTransferUsageAsync).
         if (amount > from.Balance) return new(false, $"Insufficient funds. {from.DisplayName} has {from.Balance:C} available.");
 
         from.Balance -= amount;

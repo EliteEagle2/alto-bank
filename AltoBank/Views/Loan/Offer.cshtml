@@ -1,0 +1,157 @@
+@model LoanOfferViewModel
+@* THE LOAN OFFER — /loans/offer/{applicationId}. The simulated decision (or a staff counter-offer) as terms the customer
+   accepts or declines: a Truth-in-Lending style box (placeholder disclosure), the payment plan, where the money goes.
+   Nothing is lent until "Accept" is pressed; the server re-checks everything then. *@
+@{
+    Layout = "_ApplyLayout";
+    ViewData["IsDecision"] = true;
+    var app = Model.Application;
+    var amount = app.LoanAmount!.Value;
+    var apr = app.LoanAprPercent!.Value;
+    var monthly = app.LoanMonthlyPayment!.Value;
+    var term = app.LoanTermMonths!.Value;
+    var kind = app.LoanKind == LoanKind.Auto ? "auto loan" : "personal loan";
+    var countered = app.IsCounterOffer && (app.RequestedLoanAmount is decimal req && req != amount);
+}
+
+<div class="apply-grid decision" id="decision" data-animate="false" data-user-key="@app.UserId">
+    <aside class="apply-aside">
+        <partial name="_ApplicationStepNav" model="8" />
+    </aside>
+
+    <section class="apply-main">
+        <div class="glass p-4 p-lg-5">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <span class="demo-note">Demo decision, no credit check</span>
+                <span class="small text-muted-alto">Offer ALTO-@app.Id.ToString("D6") · valid until @Model.ExpiresOn.ToString("MMM d, yyyy")</span>
+            </div>
+            <h1 class="h3 mb-2">@(app.IsCounterOffer ? "Here's what we can offer" : "You're approved!") </h1>
+            <p class="text-muted-alto mb-4">
+                @if (countered)
+                {
+                    <span>You asked for <money amount="@app.RequestedLoanAmount!.Value" />. After reviewing your application we can lend you <strong class="text-light"><money amount="@amount" /></strong> at @apr.ToString("0.00")% APR.</span>
+                }
+                else if (app.IsCounterOffer)
+                {
+                    <span>After reviewing your application we can offer your <money amount="@amount" /> @kind at @apr.ToString("0.00")% APR.</span>
+                }
+                else
+                {
+                    <span>@app.FirstName, here's your @kind offer. Look it over, then accept to get your money, or decline. Nothing is borrowed until you accept.</span>
+                }
+            </p>
+
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger small" role="alert"></div>
+
+            @* Truth in Lending style disclosure (placeholder, simulated): the four boxed figures, then the payment plan. *@
+            <div class="tila mb-4" aria-label="Truth in Lending disclosure">
+                <div class="tila-grid">
+                    <div class="tila-cell is-key">
+                        <div class="tila-title">Annual percentage rate</div>
+                        <div class="tila-help">The cost of your credit as a yearly rate</div>
+                        <div class="tila-value">@apr.ToString("0.00")%</div>
+                    </div>
+                    <div class="tila-cell">
+                        <div class="tila-title">Finance charge</div>
+                        <div class="tila-help">The dollar amount the credit will cost you</div>
+                        <div class="tila-value"><money amount="@Model.FinanceCharge" /></div>
+                    </div>
+                    <div class="tila-cell">
+                        <div class="tila-title">Amount financed</div>
+                        <div class="tila-help">The amount of credit provided to you</div>
+                        <div class="tila-value"><money amount="@amount" /></div>
+                    </div>
+                    <div class="tila-cell">
+                        <div class="tila-title">Total of payments</div>
+                        <div class="tila-help">What you'll have paid after all payments</div>
+                        <div class="tila-value"><money amount="@Model.TotalOfPayments" /></div>
+                    </div>
+                </div>
+                <div class="tila-foot">
+                    <dl>
+                        <dt>Your payments</dt>
+                        <dd><strong>@(Model.FinalPayment == monthly ? term : term - 1) payments of <money amount="@monthly" /></strong>, monthly, starting @Model.FirstDueDate.ToString("MMMM d, yyyy")@if (Model.FinalPayment != monthly) {<span>, then a final payment of <money amount="@Model.FinalPayment" /></span>}</dd>
+                        <dt>Interest rate</dt><dd>@apr.ToString("0.00")% fixed. There's no origination fee, so your APR is the same as your rate.</dd>
+                        <dt>Late charge</dt><dd><money amount="@Model.LateFee" /> if a payment is more than @Model.GraceDays days late</dd>
+                        <dt>Prepayment</dt><dd>No penalty for paying early or paying extra</dd>
+                        @if (app.LoanKind == LoanKind.Auto) { <dt>Vehicle</dt><dd>@app.VehicleYear @app.VehicleMake @app.VehicleModel</dd> }
+                        @if (app.LoanPurpose != null) { <dt>Purpose</dt><dd>@app.LoanPurpose</dd> }
+                    </dl>
+                </div>
+            </div>
+
+            @if (Model.Expired)
+            {
+                <div class="notice notice-info mb-3"><i class="bi bi-clock-history"></i>
+                    <div>This offer expired on @Model.ExpiresOn.ToString("MMMM d, yyyy"). You're welcome to <a asp-controller="Accounts" asp-action="Apply" asp-route-type="Loan">apply again</a>.</div></div>
+            }
+            else if (!Model.CheckingAccounts.Any())
+            {
+                <div class="notice notice-info mb-3"><i class="bi bi-wallet2"></i>
+                    <div>The money goes into an Alto checking account, and you don't have an open one. <a asp-controller="Accounts" asp-action="Apply" asp-route-type="Checking">Open checking</a>, then come back to accept.</div></div>
+            }
+            else
+            {
+                <form method="post" asp-action="Accept" asp-route-applicationId="@app.Id" id="acceptOffer" novalidate>
+                    <div class="row g-3 align-items-end mb-3">
+                        <div class="col-md-7">
+                            <label class="form-label fw-semibold" for="toAccountId">Where should we send the money?</label>
+                            <select id="toAccountId" name="toAccountId" class="form-select">
+                                @foreach (var c in Model.CheckingAccounts)
+                                {
+                                    <option value="@c.Id" selected="@(c.Id == Model.ToAccountId)">@c.DisplayName ••@c.Last4 (@c.Balance.ToString("C"))</option>
+                                }
+                            </select>
+                            <span class="field-validation-error">@Html.ValidationMessage("toAccountId")</span>
+                        </div>
+                        <div class="col-md-5 small text-muted-alto">It arrives right away, and you'll see it on both the loan and the checking account.</div>
+                    </div>
+                    <div class="form-check mb-1">
+                        <input class="form-check-input" type="checkbox" name="agree" id="agree" value="true" @(Model.Agreed ? "checked" : "") />
+                        <label class="form-check-label" for="agree">
+                            I've read the <a href="#" data-bs-toggle="modal" data-bs-target="#loanAgreement">Truth in Lending disclosure and Loan Agreement</a>, and I agree to repay
+                            <money amount="@Model.TotalOfPayments" /> as shown above.
+                        </label>
+                    </div>
+                    <span class="field-validation-error d-block mb-3">@Html.ValidationMessage("agree")</span>
+                    <div class="d-flex flex-wrap gap-2">
+                        <button type="submit" class="btn btn-alto"><i class="bi bi-check2-circle me-1"></i>Accept and get <money amount="@amount" /></button>
+                        <button type="button" class="btn btn-alto-ghost" data-bs-toggle="modal" data-bs-target="#declineModal">Decline offer</button>
+                    </div>
+                </form>
+            }
+        </div>
+    </section>
+</div>
+
+@* Decline: asked once more, so it can't happen by accident. *@
+<div class="modal fade" id="declineModal" tabindex="-1" aria-labelledby="declineTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content glass">
+            <div class="modal-header border-0"><h2 class="modal-title h5" id="declineTitle">Decline this offer?</h2>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button></div>
+            <div class="modal-body">Nothing will be borrowed. You can apply again later, but you'd get a new decision.</div>
+            <div class="modal-footer border-0">
+                <button type="button" class="btn btn-alto-ghost" data-bs-dismiss="modal">Keep the offer</button>
+                <form method="post" asp-action="Decline" asp-route-applicationId="@app.Id"><button type="submit" class="btn btn-danger">Decline offer</button></form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* Placeholder disclosure (simulated). *@
+<div class="modal fade" id="loanAgreement" tabindex="-1" aria-labelledby="loanAgreementTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+        <div class="modal-content glass">
+            <div class="modal-header border-0"><h2 class="modal-title h5" id="loanAgreementTitle">Truth in Lending disclosure &amp; Loan Agreement</h2>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button></div>
+            <div class="modal-body small">
+                <p><strong>Demo placeholder.</strong> Alto Bank is fictional and this loan is simulated for a class project. No credit check was made, no real money is lent, and nothing here is a real contract.</p>
+                <p>In a real loan agreement you would promise to repay the amount financed (<money amount="@amount" />) plus interest at @apr.ToString("0.00")% per year, in @term monthly payments. Interest is charged each month on the principal still owed (the rate ÷ 12). Each payment pays that month's interest first, then principal. The last payment is adjusted so the loan ends at exactly $0.00.</p>
+                <p>You may pay extra or pay the loan off at any time with no penalty; a payoff includes interest up to that day. A payment more than @Model.GraceDays days late gets a <money amount="@Model.LateFee" /> late fee and the loan is reported as overdue in your account.</p>
+                <p class="mb-0">The figures in the boxes are the federal Truth in Lending Act's four key disclosures: the APR, the finance charge, the amount financed and the total of payments.</p>
+            </div>
+            <div class="modal-footer border-0"><button type="button" class="btn btn-alto" data-bs-dismiss="modal">Close</button></div>
+        </div>
+    </div>
+</div>

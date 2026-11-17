@@ -29,8 +29,9 @@
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const TITLES = ['Account', 'About you', 'Contact & address', 'Employment', 'Verify identity', 'Fund account', 'Review & sign'];
-    // Step 6 is "Card details" for the Alto Peak card (no funding).
-    const stepTitle = i => (i === 5 && get('AccountType') === 'CreditCard') ? 'Card details' : TITLES[i];
+    // Step 6 is "Card details" for the Alto Peak card and "Loan details" for a loan (no funding).
+    const stepTitle = i => i !== 5 ? TITLES[i]
+        : get('AccountType') === 'CreditCard' ? 'Card details' : get('AccountType') === 'Loan' ? 'Loan details' : TITLES[i];
     function refreshStepTitles() {
         const t6 = document.querySelector('[data-nav-step="6"] .step-nav-title');
         if (t6) t6.textContent = stepTitle(5);
@@ -186,6 +187,27 @@
             return m.value > 100000 ? 'Enter a monthly amount between $0 and $100,000.' : '';
         },
         AgreeCardmemberAgreement: () => get('AgreeCardmemberAgreement') ? '' : 'Please agree to the Cardmember Agreement.',
+        LoanKind: () => get('LoanKind') ? '' : 'Choose a personal or an auto loan.',
+        LoanAmount: () => {
+            const raw = get('LoanAmount').replace(/[$,]/g, '');
+            const [min, max] = loanLimits();
+            if (!raw) return 'Enter how much you want to borrow.';
+            if (!/^\d+$/.test(raw)) return 'Enter whole dollars (no cents).';
+            return +raw < min || +raw > max ? `Enter an amount from ${fmtWhole(min)} to ${fmtWhole(max)}.` : '';
+        },
+        LoanTermMonths: () => {
+            const t = get('LoanTermMonths');
+            if (!t) return 'Choose how long to pay it back.';
+            return loanTerms().includes(+t) ? '' : 'Choose one of the terms in the list.';
+        },
+        LoanPurpose: () => get('LoanPurpose') ? '' : "Choose what it's for.",
+        VehicleYear: () => {
+            const y = +get('VehicleYear'), now = new Date().getFullYear();
+            return /^\d{4}$/.test(get('VehicleYear')) && y >= now - 25 && y <= now + 1 ? '' : `Enter a model year from ${now - 25} to ${now + 1}.`;
+        },
+        VehicleMake: () => required(get('VehicleMake'), 'Enter the make (for example, Subaru).', 30),
+        VehicleModel: () => required(get('VehicleModel'), 'Enter the model (for example, Outback).', 40),
+        DisburseToAccountId: () => get('DisburseToAccountId') ? '' : 'Choose the checking account for the money.',
         ExternalBankName: () => get('ExternalBankName').length >= 2 ? '' : 'Enter the name of your other bank.',
         ExternalLast4: () => /^\d{4}$/.test(get('ExternalLast4')) ? '' : 'Enter the last 4 digits of that account.',
         AgreeAccountAgreement: () => get('AgreeAccountAgreement') ? '' : 'Please agree to the Account Agreement.',
@@ -406,6 +428,8 @@
     });
 
     ['ExternalLast4'].forEach(id => { const el = byId(id); if (el) el.addEventListener('input', () => { el.value = digits(el.value).slice(0, 4); }); });
+    // Loan amount and vehicle year: digits only, so "$8,000" can't reach the server as text it can't read.
+    [['LoanAmount', 6], ['VehicleYear', 4]].forEach(([id, max]) => { const el = byId(id); if (el) el.addEventListener('input', () => { el.value = digits(el.value).slice(0, max); }); });
     const mi = byId('MiddleInitial');
     if (mi) mi.addEventListener('input', () => { mi.value = mi.value.replace(/[^A-Za-z]/g, '').slice(0, 1).toUpperCase(); });
 
@@ -537,6 +561,56 @@
         render(); save();
     }));
 
+    // ---------- Loans: limits, terms and the payment estimate (the server's LoanMath / LoanDecisionRules) ----------
+    const fmtWhole = v => v.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+    const isAuto = () => get('LoanKind') === 'Auto';
+    const loanLimits = () => isAuto() ? [5000, 50000] : [1000, 25000];
+    const loanTerms = () => isAuto() ? [24, 36, 48, 60, 72] : [12, 24, 36, 48, 60];
+    const TIER_BY_INCOME = { 'Under $25,000': 'D', '$25,000 – $49,999': 'C', '$50,000 – $99,999': 'B', '$100,000 – $199,999': 'A', '$200,000 or more': 'A' };
+    function loanEstimate() {
+        const box = $('[data-loan-estimate]');
+        if (!box) return null;
+        const rates = JSON.parse(box.dataset.rates);
+        let tier = TIER_BY_INCOME[get('IncomeRange')] || 'D';
+        if (rates.established && tier !== 'A') tier = String.fromCharCode(tier.charCodeAt(0) - 1);   // one tier better
+        const apr = Math.max(rates.min, rates[tier] - (isAuto() ? rates.auto : 0));
+        const amount = +get('LoanAmount').replace(/[$,]/g, '');
+        const months = +get('LoanTermMonths');
+        if (RULES.LoanAmount() || !months || !loanTerms().includes(months)) return { tier, apr, payment: null };
+        const rate = apr / 100 / 12;
+        const cents = v => Math.round(v * 100 + Number.EPSILON) / 100;
+        const payment = cents(amount * rate / (1 - Math.pow(1 + rate, -months)));
+        let left = amount, interest = 0;   // the schedule: the last payment takes what's left
+        for (let i = 0; i < months && left > 0; i++) {
+            const int = cents(left * rate);
+            interest += int;
+            left = cents(left - Math.min(left, payment - int));
+        }
+        return { tier, apr, payment, interest: cents(interest), months, amount };
+    }
+    function loanUi() {
+        const sel = byId('LoanTermMonths');
+        if (sel) {
+            const ok = loanTerms();
+            Array.from(sel.options).forEach(o => { if (o.value) { const on = ok.includes(+o.value); o.hidden = !on; o.disabled = !on; } });
+            if (sel.value && !ok.includes(+sel.value)) sel.value = '';
+        }
+        const purpose = byId('LoanPurpose');
+        if (purpose) {
+            const kind = isAuto() ? 'Auto' : 'Personal';
+            Array.from(purpose.options).forEach(o => { if (o.value) { const on = o.dataset.kind === kind; o.hidden = !on; o.disabled = !on; } });
+            if (purpose.selectedOptions[0] && purpose.selectedOptions[0].disabled) purpose.value = '';
+        }
+        const range = $('[data-loan-range]');
+        if (range) { const [min, max] = loanLimits(); range.textContent = `${isAuto() ? 'Auto' : 'Personal'} loans: ${fmtWhole(min)} to ${fmtWhole(max)}.`; }
+        const est = loanEstimate();
+        if (!est) return;
+        $('[data-est-payment]').textContent = est.payment == null ? '—' : fmtMoney(est.payment);
+        $('[data-est-detail]').textContent = est.payment == null
+            ? `Estimated rate ${est.apr.toFixed(2)}% APR (tier ${est.tier}). Enter an amount and a term to see the payment.`
+            : `for ${est.months} months at about ${est.apr.toFixed(2)}% APR (tier ${est.tier}). About ${fmtMoney(est.interest)} in interest in all.`;
+    }
+
     // ---------- Step 7: review sections (built with textContent — never innerHTML with user input) ----------
     function addressText(prefix, s, a, c, st, z) {
         const street = [get(prefix + s), get(prefix + a)].filter(Boolean).join(', ');
@@ -551,8 +625,9 @@
         const dep = depositValue();
         const sections = [
             [1, 'Account', [
-                ['Account type', type === 'Checking' ? 'Alto Checking' : type === 'Savings' ? 'Summit Savings' : type === 'CreditCard' ? 'Alto Peak Card' : '—'],
-                ['Nickname', get('Nickname') || 'None'],
+                ['Account type', type === 'Checking' ? 'Alto Checking' : type === 'Savings' ? 'Summit Savings' : type === 'CreditCard' ? 'Alto Peak Card'
+                                 : type === 'Loan' ? (isAuto() ? 'Alto auto loan' : 'Alto personal loan') : '—'],
+                ...(type === 'Loan' ? [] : [['Nickname', get('Nickname') || 'None']]),
                 ...(type === 'Checking' ? [['Debit card design', DESIGNS[get('CardDesign')]]] : []),
             ]],
             [2, 'About you', [
@@ -577,7 +652,17 @@
                 ['Status', get('IdentityToken') ? `Verified (SSN on file ***-**-${last4Input.value})` : 'Not verified'],
                 ['Security check', get('QuizStreet') && get('QuizZip') ? 'Completed' : 'Not completed'],
             ]],
-            type === 'CreditCard'
+            type === 'Loan'
+                ? [6, 'Loan details', [
+                    ['Amount', fmtWhole(+get('LoanAmount').replace(/[$,]/g, '') || 0)],
+                    ['Term', get('LoanTermMonths') ? get('LoanTermMonths') + ' months' : '—'],
+                    ['For', get('LoanPurpose')],
+                    ...(isAuto() ? [['Vehicle', [get('VehicleYear'), get('VehicleMake'), get('VehicleModel')].join(' ')]] : []),
+                    ['Money goes to', (byId('DisburseToAccountId') && byId('DisburseToAccountId').selectedOptions[0] || {}).textContent || '—'],
+                    ['Estimate', (e => e && e.payment != null ? `${fmtMoney(e.payment)} a month at about ${e.apr.toFixed(2)}% APR` : '—')(loanEstimate())],
+                    ['Decision', 'Demo decision, no credit check. You accept the offer before anything is lent.'],
+                ]]
+            : type === 'CreditCard'
                 ? [6, 'Card details', [
                     ['Monthly rent or mortgage', fmtMoney(money(get('MonthlyHousingPayment')).value)],
                     ['Cardmember Agreement', get('AgreeCardmemberAgreement') ? 'Agreed' : 'Not agreed'],
@@ -718,6 +803,7 @@
         $$('[data-amount]').forEach(c => c.classList.toggle('active', c.dataset.amount !== 'custom' && money(get('InitialDeposit')).value === +c.dataset.amount));
 
         // Counters, hints, previews
+        if (get('AccountType') === 'Loan') loanUi();
         const count = $('[data-count-for="Nickname"]'); if (count) count.textContent = get('Nickname').length;
         const src = fundingSource();
         const hint = $('[data-source-hint]');

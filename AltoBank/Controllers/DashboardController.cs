@@ -16,9 +16,11 @@ public class DashboardController : Controller
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IPreferencesService _prefs;
     private readonly IBudgetService _budgets;
+    private readonly ILoanService _loans;
 
-    public DashboardController(IBankService bank, UserManager<ApplicationUser> userManager, IPreferencesService prefs, IBudgetService budgets)
+    public DashboardController(IBankService bank, UserManager<ApplicationUser> userManager, IPreferencesService prefs, IBudgetService budgets, ILoanService loans)
     {
+        _loans = loans;
         _budgets = budgets;
         _prefs = prefs;
         _bank = bank;
@@ -50,7 +52,11 @@ public class DashboardController : Controller
             FirstName = prefs.PreferredName ?? user.FirstName,   // Profile → preferred name
             Greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening",
             Accounts = accounts,
-            TotalBalance = accounts.Where(a => a.IsDepositAccount).Sum(a => a.Balance),   // cash only; net worth (minus cards and loans) comes with Feature 7 // summed in memory (SQLite can't SUM decimals)
+            // Summed in memory (SQLite can't SUM decimals). Closed accounts are $0, so they don't change anything.
+            TotalBalance = accounts.Where(a => a.IsDepositAccount).Sum(a => a.Balance),
+            Assets = accounts.Where(a => a.Balance > 0).Sum(a => a.Balance),          // cash + any credit sitting on a card
+            Owed = accounts.Where(a => a.IsCreditCard || a.IsLoan).Sum(a => a.AmountOwed),
+            LoanViews = (await _loans.GetLoansAsync(user.Id)).ToDictionary(v => v.Account.Id),
             RecentTransactions = recent,
             Flows = await _bank.GetDailyFlowsAsync(user.Id, days: 30),
             Budgets = new BudgetWidgetViewModel(budgets.Any(), budgets.Where(b => b.State != "ok").ToList())

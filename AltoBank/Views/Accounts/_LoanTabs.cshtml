@@ -1,0 +1,149 @@
+@model AccountDetailsViewModel
+@* LOAN tabs: Schedule (every payment, paid and to come) and Payments & autopay. (Activity is shared with the other accounts.) *@
+@{
+    var v = Model.Loan!;
+    var l = v.Loan;
+    var a = Model.Account;
+    var active = l.Status == LoanStatus.Active;
+    var paid = v.Payments.Where(p => p.Kind == LoanPaymentKind.Scheduled).OrderBy(p => p.InstallmentNumber).ToList();
+    var autopayFrom = Model.PayFromAccounts.FirstOrDefault(x => x.Id == l.AutopayFromAccountId);
+    var extras = v.Payments.Where(p => p.Kind == LoanPaymentKind.ExtraPrincipal).Sum(p => p.Amount);
+    var originalCount = l.TermMonths;
+}
+
+@* ===================== SCHEDULE ===================== *@
+<section class="tab-pane fade" id="schedule" role="tabpanel" aria-label="Payment schedule">
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="glass overflow-hidden">
+                <div class="table-responsive schedule-wrap">
+                    <table class="table alto-table schedule-table mb-0">
+                        <caption class="visually-hidden">Every payment on this loan: the ones already made, then the ones to come.</caption>
+                        <thead><tr><th>#</th><th>Due</th><th class="text-end">Payment</th><th class="text-end">Interest</th><th class="text-end">Principal</th><th class="text-end">Left to repay</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var p in paid)
+                            {
+                                <tr class="is-paid">
+                                    <td>@p.InstallmentNumber</td>
+                                    <td class="text-nowrap">@p.DueDate?.ToString("MMM d, yyyy")</td>
+                                    <td class="text-end"><money amount="@(p.Amount - p.Fees)" /></td>
+                                    <td class="text-end"><money amount="@p.Interest" /></td>
+                                    <td class="text-end"><money amount="@p.Principal" /></td>
+                                    <td class="text-end"><money amount="@p.PrincipalAfter" /></td>
+                                    <td class="small text-nowrap"><i class="bi bi-check-circle-fill text-success-alto me-1"></i>Paid @BankTime.ToLocal(p.PaidAt).ToString("MMM d")</td>
+                                </tr>
+                            }
+                            @foreach (var r in v.Upcoming)
+                            {
+                                var next = r.Number == l.PaymentsMade + 1;
+                                var late = next && v.PastDue;
+                                <tr class="@(next ? "is-next" : "")">
+                                    <td>@r.Number</td>
+                                    <td class="text-nowrap">@r.DueDate.ToString("MMM d, yyyy")</td>
+                                    <td class="text-end"><money amount="@r.Payment" /></td>
+                                    <td class="text-end"><money amount="@r.Interest" /></td>
+                                    <td class="text-end"><money amount="@r.Principal" /></td>
+                                    <td class="text-end"><money amount="@r.BalanceAfter" /></td>
+                                    <td class="small text-nowrap">@if (late) { <span class="text-danger-alto"><i class="bi bi-exclamation-triangle me-1"></i>Past due</span> } else if (next) { <span>Next</span> } else if (r.BalanceAfter == 0) { <span class="text-muted-alto">Last payment</span> }</td>
+                                </tr>
+                            }
+                            @if (!paid.Any() && !v.Upcoming.Any()) { <tr><td colspan="7" class="text-center text-muted-alto py-4">Paid in full.</td></tr> }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="glass p-4">
+                <h2 class="h5 mb-3">How your payments work</h2>
+                <p class="small mb-2">Each month, part of your <money amount="@l.MonthlyPayment" /> pays that month's <strong>interest</strong> (what you still owe × @l.AprPercent.ToString("0.00")% ÷ 12), and the rest pays down the <strong>principal</strong>. As the principal shrinks, more of each payment goes to it.</p>
+                <p class="small mb-2">The last payment is just what's left, so the loan ends at exactly <money amount="0m" />.</p>
+                @if (active)
+                {
+                    <p class="small mb-0"><strong>Paying extra?</strong> It all goes to principal. Your monthly payment stays the same and the loan ends sooner@(v.PaymentsRemaining + l.PaymentsMade < originalCount ? $": you're now {originalCount - v.PaymentsRemaining - l.PaymentsMade} payment{(originalCount - v.PaymentsRemaining - l.PaymentsMade == 1 ? "" : "s")} ahead of the original schedule" : "")@(extras > 0 ? $" ({extras:C} paid extra so far)" : "").</p>
+                }
+            </div>
+        </div>
+    </div>
+</section>
+
+@* ===================== PAYMENTS & AUTOPAY ===================== *@
+<section class="tab-pane fade" id="payments" role="tabpanel" aria-label="Payments and autopay">
+    <div class="row g-4">
+        <div class="col-lg-7">
+            <div class="glass p-0 overflow-hidden h-100">
+                <h2 class="h5 p-4 pb-2 mb-0">Payment history</h2>
+                @if (!v.Payments.Any())
+                {
+                    <partial name="_EmptyState" model='@(new EmptyStateViewModel("bi-calendar-check", $"No payments yet. Your first payment is due {l.FirstDueDate:MMMM d}."))' />
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table alto-table mb-0">
+                            <thead><tr><th>Date</th><th>Payment</th><th class="text-end">Amount</th><th class="text-end">To principal</th></tr></thead>
+                            <tbody>
+                                @foreach (var p in v.Payments)
+                                {
+                                    <tr>
+                                        <td class="text-nowrap">@BankTime.ToLocal(p.PaidAt).ToString("MMM d, yyyy")</td>
+                                        <td class="small">@(p.Kind switch { LoanPaymentKind.Scheduled => $"{p.DueDate:MMM d} payment", LoanPaymentKind.ExtraPrincipal => "Extra toward principal", _ => "Paid off the loan" })@(p.ByAutopay ? " (autopay)" : "")
+                                            <div class="text-muted-alto">Interest <money amount="@p.Interest" />@if (p.Fees > 0) { <span>, late fees <money amount="@p.Fees" /></span> }</div></td>
+                                        <td class="text-end"><money amount="@p.Amount" /></td>
+                                        <td class="text-end"><money amount="@p.Principal" /></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+        <div class="col-lg-5 d-flex flex-column gap-4">
+            @if (active)
+            {
+                <div class="glass p-4">
+                    <h2 class="h5 mb-1">Autopay</h2>
+                    <p class="small text-muted-alto">Makes your monthly payment on each due date. If it can't go through, we alert you right away so you can pay before the late fee.</p>
+                    @if (l.AutopayEnabled && autopayFrom == null)
+                    {
+                        <div class="notice notice-info small mb-3" role="alert"><i class="bi bi-exclamation-triangle"></i>
+                            <div>The account autopay pays from can't be used right now (it's frozen or closed). Choose another account and save, or autopay will fail.</div></div>
+                    }
+                    <form method="post" asp-controller="Loan" asp-action="Autopay" asp-route-id="@a.Id">
+                        <div class="form-check"><input class="form-check-input" type="radio" name="enabled" id="apOff" value="false" checked="@(!l.AutopayEnabled)" />
+                            <label class="form-check-label" for="apOff">Off: I'll pay each month myself</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="enabled" id="apOn" value="true" checked="@l.AutopayEnabled" />
+                            <label class="form-check-label" for="apOn">On: pay <money amount="@l.MonthlyPayment" /> on each due date</label></div>
+                        <label class="form-label small mt-2" for="apFrom">Pay from</label>
+                        <select id="apFrom" name="fromAccountId" class="form-select">
+                            @foreach (var acct in Model.PayFromAccounts)
+                            {
+                                <option value="@acct.Id" selected="@(acct.Id == l.AutopayFromAccountId)">@acct.DisplayName ••@acct.Last4 (@acct.Balance.ToString("C"))</option>
+                            }
+                        </select>
+                        <button type="submit" class="btn btn-alto btn-sm mt-3">Save autopay</button>
+                    </form>
+                </div>
+            }
+            <div class="glass p-4">
+                <h2 class="h5 mb-3">Loan details</h2>
+                <dl class="info-list">
+                    <div><dt>Borrowed</dt><dd><money amount="@l.Principal" /></dd></div>
+                    <div><dt>APR</dt><dd>@l.AprPercent.ToString("0.00")% fixed</dd></div>
+                    <div><dt>Term</dt><dd>@l.TermMonths months</dd></div>
+                    @if (l.Vehicle != null) { <div><dt>Vehicle</dt><dd>@l.Vehicle</dd></div> }
+                    @if (l.Purpose != null) { <div><dt>Purpose</dt><dd>@l.Purpose</dd></div> }
+                    <div><dt>First payment</dt><dd>@l.FirstDueDate.ToString("MMM d, yyyy")</dd></div>
+                    <div><dt>Late fee</dt><dd><money amount="@v.LateFee" /> if a payment is more than @v.GraceDays days late</dd></div>
+                    <div><dt>Paying early</dt><dd>No penalty, ever</dd></div>
+                    <div><dt>Status</dt><dd>@(active ? (v.Overdue ? "Overdue" : "Active") : "Paid in full")</dd></div>
+                </dl>
+                @if (!active)
+                {
+                    <a class="btn btn-alto-ghost btn-sm" asp-controller="Loan" asp-action="Letter" asp-route-id="@a.Id" target="_blank" rel="noopener"><i class="bi bi-file-earmark-check me-1"></i>Paid-in-full letter</a>
+                }
+            </div>
+        </div>
+    </div>
+</section>

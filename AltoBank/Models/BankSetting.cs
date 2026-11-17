@@ -34,6 +34,19 @@ public class BankSetting
     [Column(TypeName = "decimal(18,2)")] public decimal CardMinimumPaymentFloor { get; set; } = 25m;
     [Column(TypeName = "decimal(6,4)")] public decimal CardMinimumPaymentPercent { get; set; } = 0.02m;   // 2%
 
+    // ----- Loans (personal and auto) -----
+    // APR (percent) by rate tier; auto loans get AutoLoanRateDiscount points off (secured by the vehicle).
+    [Column(TypeName = "decimal(5,2)")] public decimal LoanRateTierA { get; set; } = 8.99m;
+    [Column(TypeName = "decimal(5,2)")] public decimal LoanRateTierB { get; set; } = 11.99m;
+    [Column(TypeName = "decimal(5,2)")] public decimal LoanRateTierC { get; set; } = 15.99m;
+    [Column(TypeName = "decimal(5,2)")] public decimal LoanRateTierD { get; set; } = 19.99m;
+    [Column(TypeName = "decimal(5,2)")] public decimal AutoLoanRateDiscount { get; set; } = 2.50m;
+    // Loans at or above this amount always go to staff review.
+    [Column(TypeName = "decimal(18,2)")] public decimal LoanReviewAmount { get; set; } = 20000m;
+    [Column(TypeName = "decimal(18,2)")] public decimal LoanLateFee { get; set; } = 35m;
+    // A payment is OVERDUE (and the late fee is charged) once it's more than this many days past its due date.
+    public int LoanGraceDays { get; set; } = 10;
+
     // Disputes: ON = credit the customer right away when they file a dispute (taken back if it's denied).
     // Captured on each dispute when it's filed, so changing this doesn't affect open disputes.
     public bool ProvisionalCreditOnDisputes { get; set; }

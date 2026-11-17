@@ -1757,3 +1757,81 @@ h2 .check-status { font-size: .85rem; margin-left: .4rem; }
 .account-card.credit::before { background: linear-gradient(90deg, #E98E5E, #9A4F6E); }
 .choice-card.is-unavailable { opacity: .6; cursor: not-allowed; }
 .choice-card.is-unavailable:hover { transform: none; }
+
+/* ===== Loans (Feature 7) ===== */
+/* The loan "tile" stands where a card's art goes: what the loan is for, at a glance. */
+.loan-tile {
+    width: 100%; max-width: 320px; aspect-ratio: 1.586; border-radius: 16px; padding: 1.1rem 1.25rem;
+    display: flex; flex-direction: column; justify-content: flex-end; gap: .15rem; position: relative; overflow: hidden;
+    background: radial-gradient(circle at 88% 12%, rgba(143, 184, 232, 0.35), transparent 45%),
+                linear-gradient(155deg, #2C4A6E 0%, #1E3150 55%, #18233A 100%);
+    border: 1px solid rgba(143, 184, 232, 0.35);
+}
+.loan-tile--auto {
+    background: radial-gradient(circle at 88% 12%, rgba(76, 195, 138, 0.3), transparent 45%),
+                linear-gradient(155deg, #245A4A 0%, #1C3A3A 55%, #18233A 100%);
+    border-color: rgba(76, 195, 138, 0.35);
+}
+.loan-tile-icon { position: absolute; top: .9rem; left: 1.2rem; font-size: 1.9rem; color: var(--text); opacity: .9; }
+.loan-tile-kind { font-size: .75rem; color: var(--muted); }
+.loan-tile-name { font: 700 1.15rem/1.25 "Bricolage Grotesque", sans-serif; color: var(--text); overflow-wrap: anywhere; }
+.loan-tile-meta { font-size: .8rem; color: var(--muted); }
+.util-bar.util-progress > span { background: var(--success); }
+.status-banner.paid { background: rgba(76, 195, 138, 0.08); border: 1px solid rgba(76, 195, 138, 0.45); color: #9fe3c2; }
+.account-card.loan::before { background: linear-gradient(90deg, #4CC38A, #8FB8E8); }
+
+/* Schedule table: paid rows recede, the next one stands out. */
+.schedule-table tr.is-paid td { color: var(--muted); }
+.schedule-table tr.is-next td { background: rgba(242, 181, 68, 0.07); }
+.schedule-table tr.is-next td:first-child { box-shadow: inset 3px 0 0 var(--primary); }
+.schedule-wrap { max-height: 520px; overflow: auto; }
+.schedule-wrap thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+
+/* Truth-in-Lending style box on the offer page: four boxed figures, like the printed form. */
+.tila { border: 2px solid var(--text); border-radius: 10px; overflow: hidden; }
+.tila-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+.tila-cell { padding: .9rem 1rem; border-right: 1px solid var(--border); }
+.tila-cell:last-child { border-right: 0; }
+.tila-cell.is-key { background: rgba(242, 181, 68, 0.07); }
+.tila-title { font-weight: 700; font-size: .85rem; }
+.tila-help { font-size: .74rem; color: var(--muted); min-height: 2.2em; }
+.tila-value { font: 700 1.35rem/1.2 "Bricolage Grotesque", sans-serif; margin-top: .35rem; }
+.tila-foot { border-top: 1px solid var(--border); padding: .8rem 1rem; font-size: .85rem; }
+.tila-foot dl { display: grid; grid-template-columns: auto 1fr; gap: .25rem 1rem; margin: 0; }
+.tila-foot dt { color: var(--muted); font-weight: 400; }
+.tila-foot dd { margin: 0; }
+@media (max-width: 767.98px) {
+    .tila-grid { grid-template-columns: 1fr 1fr; }
+    .tila-cell:nth-child(2) { border-right: 0; }
+    .tila-cell:nth-child(-n+2) { border-bottom: 1px solid var(--border); }
+}
+
+/* Loan calculator chart (Products/Loans): stacked bars per year, principal vs interest. */
+.amort-chart { position: relative; width: 100%; }
+.amort-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+/* Chart series (checked with the dataviz palette validator on the #18233A panel: lightness, chroma, color-blind separation, contrast all pass). */
+.amort-chart { --series-principal: #5B97DA; --series-interest: #C08326; }
+.amort-chart .bar-principal { fill: var(--series-principal); }
+.amort-chart .bar-interest { fill: var(--series-interest); }
+.amort-chart .axis text, .amort-chart text.axis { fill: var(--muted); font-size: 11px; }
+.amort-chart .axis line { stroke: rgba(135, 150, 174, 0.25); }
+.amort-chart .hit { fill: transparent; cursor: default; }
+.amort-chart .hit:hover + .col-hover, .amort-chart .col-hover { pointer-events: none; }
+.amort-legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: .82rem; color: var(--muted); }
+.amort-legend span::before { content: ""; display: inline-block; width: .75rem; height: .75rem; border-radius: 3px; margin-right: .35rem; vertical-align: -1px; }
+.amort-legend .lg-principal::before { background: #5B97DA; }
+.amort-legend .lg-interest::before { background: #C08326; }
+.amort-tip {
+    position: absolute; pointer-events: none; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+    padding: .5rem .7rem; font-size: .8rem; white-space: nowrap; transform: translate(-50%, -110%); box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.amort-tip[hidden] { display: none; }
+.calc-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+@media (max-width: 575.98px) { .calc-summary { grid-template-columns: 1fr 1fr; } }
+.calc-segment { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 3px; gap: 3px; }
+.calc-segment label { padding: .35rem .9rem; border-radius: 999px; cursor: pointer; font-size: .9rem; }
+.calc-segment input:checked + label { background: var(--primary); color: #1b1405; font-weight: 600; }
+.calc-segment input:focus-visible + label { outline: 2px solid var(--primary); outline-offset: 2px; }
+.choice-card--compact { padding: .9rem 1rem; }
+.loan-estimate-value { font: 700 2rem/1.15 "Bricolage Grotesque", sans-serif; color: var(--text); margin-bottom: .2rem; font-variant-numeric: tabular-nums; }
+.loan-estimate hr { border-color: var(--border); opacity: 1; margin: .8rem 0; }

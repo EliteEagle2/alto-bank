@@ -216,6 +216,16 @@ public class SettingsInput
     [Range(0, 100), Display(Name = "Minimum payment: at least")] public decimal? CardMinimumPaymentFloor { get; set; }
     [Range(0, 10), Display(Name = "Minimum payment: % of balance")] public decimal? CardMinimumPaymentPercent { get; set; }
 
+    // Loans. Optional too: a field that isn't posted keeps its current value.
+    [Range(1, 36), Display(Name = "Tier A APR (%)")] public decimal? LoanRateTierA { get; set; }
+    [Range(1, 36), Display(Name = "Tier B APR (%)")] public decimal? LoanRateTierB { get; set; }
+    [Range(1, 36), Display(Name = "Tier C APR (%)")] public decimal? LoanRateTierC { get; set; }
+    [Range(1, 36), Display(Name = "Tier D APR (%)")] public decimal? LoanRateTierD { get; set; }
+    [Range(0, 10), Display(Name = "Auto loan discount (points)")] public decimal? AutoLoanRateDiscount { get; set; }
+    [Range(1000, 1_000_000), Display(Name = "Staff review at or above")] public decimal? LoanReviewAmount { get; set; }
+    [Range(0, 100), Display(Name = "Loan late fee")] public decimal? LoanLateFee { get; set; }
+    [Range(0, 30), Display(Name = "Grace days before a loan is overdue")] public int? LoanGraceDays { get; set; }
+
     [Required(ErrorMessage = "Enter a reason for this change."), StringLength(500, MinimumLength = 5, ErrorMessage = "Reason must be at least 5 characters.")]
     public string Reason { get; set; } = "";
 

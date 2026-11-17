@@ -24,6 +24,12 @@ public static class ApplicationOptions
 
     public static readonly string[] FundSources = { "Employment", "Savings", "Gift", "Other" };
 
+    // Loans: what the money is for.
+    public static readonly string[] PersonalLoanPurposes =
+        { "Debt consolidation", "Home improvement", "Major purchase", "Medical expenses", "Moving", "Something else" };
+    public static readonly string[] AutoLoanPurposes = { "New vehicle", "Used vehicle", "Refinance my current auto loan" };
+    public static string[] LoanPurposes(LoanKind kind) => kind == LoanKind.Auto ? AutoLoanPurposes : PersonalLoanPurposes;
+
     // 50 states + DC, code -> name.
     public static readonly SortedDictionary<string, string> States = new()
     {

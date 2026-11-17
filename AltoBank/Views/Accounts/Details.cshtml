@@ -20,7 +20,7 @@
      data-default-days="@AccountDetailsViewModel.DefaultDays"
      data-today="@BankTime.Today.ToString("yyyy-MM-dd")"
      data-tz="@BankTime.Zone.Id"
-     data-credit="@(Model.IsCreditCard ? "true" : "false")"
+     data-credit="@(Model.ShowsOwed ? "true" : "false")"
      data-categories="@System.Text.Json.JsonSerializer.Serialize(Categories.All.Select(c => new { key = c.ToString(), label = Categories.Label(c) }))">
     @* Token for the category forms on rows that "Load more" adds (server-rendered rows carry their own). *@
     @Html.AntiForgeryToken()
@@ -28,6 +28,10 @@
     @if (Model.IsCreditCard)
     {
         <partial name="_CreditCardHeader" model="Model" />
+    }
+    else if (Model.IsLoan && Model.Loan != null)
+    {
+        <partial name="_LoanHeader" model="Model" />
     }
     else
     {
@@ -42,6 +46,11 @@
         {
             <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#statements" type="button" role="tab" aria-controls="statements" aria-selected="false">Statements</button></li>
             <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#rewards" type="button" role="tab" aria-controls="rewards" aria-selected="false">Rewards &amp; autopay</button></li>
+        }
+        else if (Model.IsLoan)
+        {
+            <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#schedule" type="button" role="tab" aria-controls="schedule" aria-selected="false">Schedule</button></li>
+            <li class="nav-item" role="presentation"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#payments" type="button" role="tab" aria-controls="payments" aria-selected="false">Payments &amp; autopay</button></li>
         }
         else
         {
@@ -61,8 +70,8 @@
             <partial name="_TransactionFilters" model="Model" />
 
             <div class="activity-summary" aria-live="polite">
-                <div><span class="acct-label">@(Model.IsCreditCard ? "Payments & credits" : "Money in")</span><span class="amount-credit" data-sum="in">+@Model.MoneyIn.ToString("C")</span></div>
-                <div><span class="acct-label">@(Model.IsCreditCard ? "Charges" : "Money out")</span><span class="amount-debit" data-sum="out">−@Model.MoneyOut.ToString("C")</span></div>
+                <div><span class="acct-label">@(Model.ShowsOwed ? "Payments & credits" : "Money in")</span><span class="amount-credit" data-sum="in">+@Model.MoneyIn.ToString("C")</span></div>
+                <div><span class="acct-label">@(Model.ShowsOwed ? "Charges" : "Money out")</span><span class="amount-debit" data-sum="out">−@Model.MoneyOut.ToString("C")</span></div>
                 <div><span class="acct-label">Net</span><span data-sum="net"><money amount="@(Model.MoneyIn - Model.MoneyOut)" colorize="true" show-sign="true" /></span></div>
                 <div class="ms-auto text-muted-alto small" data-count>@Model.TotalCount transactions</div>
             </div>
@@ -102,7 +111,7 @@
                         @foreach (var t in g)
                         {
                             <partial name="_TransactionRow" model="new TransactionRowViewModel(t, t.CounterpartyName ?? (t.CounterpartyAccountId is int c ? Model.AccountLabels.GetValueOrDefault(c) : null),
-                                     Model.Disputable.Contains(t.Id), Model.DisputeStatuses.TryGetValue(t.Id, out var ds) ? ds : null, Model.PartlyRefunded.Contains(t.Id), Model.IsCreditCard)" />
+                                     Model.Disputable.Contains(t.Id), Model.DisputeStatuses.TryGetValue(t.Id, out var ds) ? ds : null, Model.PartlyRefunded.Contains(t.Id), Model.ShowsOwed)" />
                         }
                     </div>
                 }
@@ -121,6 +130,10 @@
         @if (Model.IsCreditCard)
         {
             <partial name="_CreditCardTabs" model="Model" />
+        }
+        else if (Model.IsLoan && Model.Loan != null)
+        {
+            <partial name="_LoanTabs" model="Model" />
         }
         else
         {

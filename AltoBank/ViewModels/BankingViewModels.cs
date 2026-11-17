@@ -11,7 +11,12 @@ public class DashboardViewModel
     public string FirstName { get; set; } = string.Empty;
     public string Greeting { get; set; } = "Hello";
     public List<Account> Accounts { get; set; } = new();
-    public decimal TotalBalance { get; set; }
+    public decimal TotalBalance { get; set; }   // checking + savings (cash)
+    // NET WORTH = what you have (checking, savings, any credit on a card) minus what you owe (cards and loans).
+    public decimal Assets { get; set; }
+    public decimal Owed { get; set; }
+    public decimal NetWorth => Assets - Owed;
+    public Dictionary<int, AltoBank.Services.LoanView> LoanViews { get; set; } = new();
     public List<Transaction> RecentTransactions { get; set; } = new();
     public List<AltoBank.Dtos.DailyFlowDto> Flows { get; set; } = new();   // 30-day in/out chart
     public BudgetWidgetViewModel Budgets { get; set; } = new(false, new());   // budgets at 75%+ this month

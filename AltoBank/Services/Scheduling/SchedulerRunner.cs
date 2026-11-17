@@ -95,6 +95,26 @@ public class SchedulerRunner : ISchedulerRunner
             }
         }
 
+        // Loans: autopay on the due date, the late fee after the grace days, reminders (each idempotent).
+        var loans = await _db.Loans.AsNoTracking().Where(l => l.Status == LoanStatus.Active).Select(l => l.Id).ToListAsync(cancellationToken);
+        foreach (var loanId in loans)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+            try
+            {
+                var l = await _bank.RunLoanCycleAsync(loanId, today);
+                processed += l.AutopaysMade + l.AutopaysFailed + l.LateFees;
+                succeeded += l.AutopaysMade;
+                failed += l.AutopaysFailed;
+            }
+            catch (Exception ex)
+            {
+                _log.LogError(ex, "Scheduler: loan {Id} cycle threw; moving on", loanId);
+                _db.ChangeTracker.Clear();
+                failed++;
+            }
+        }
+
         var expired = 0;
         try { expired = await _requests.ExpireDueAsync(); }
         catch (Exception ex) { _log.LogError(ex, "Scheduler: expiring money requests failed"); _db.ChangeTracker.Clear(); }

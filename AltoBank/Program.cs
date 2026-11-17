@@ -82,6 +82,7 @@ builder.Services.AddScoped<IInsightsService, InsightsService>(); // Spending Ins
 builder.Services.AddSingleton<IFileStore, FileStore>();          // uploads in App_Data/uploads (outside wwwroot), JPG/PNG by signature
 builder.Services.AddScoped<ICheckDepositService, CheckDepositService>();   // Mobile check deposit: submit, limits, duplicates (no money moves)
 builder.Services.AddScoped<IDisputeService, DisputeService>();
+builder.Services.AddScoped<ILoanService, LoanService>();   // Loans: the loan page, schedule, offer, autopay settings (money moves are IBankService)
 builder.Services.AddScoped<ICreditCardService, CreditCardService>();   // Alto Peak: statements + autopay settings (money moves are IBankService)   // Disputes: eligibility, submit (+ provisional credit), lists (deciding is IAdminService)
 
 // Background scheduler: a hosted service (singleton) that runs every minute; each run gets its own scope.

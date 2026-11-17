@@ -8,12 +8,15 @@ namespace AltoBank.Models;
 /// CreditCard (Alto Peak) is money the customer OWES: its Balance is stored as a NEGATIVE number, so a purchase is a debit
 /// like any other (Insights, budgets and disputes treat it as spending) and a payment is a credit. It can't be used for
 /// deposits, withdrawals or transfers; it has its own purchase / pay / rewards actions (BankService.CreditCards.cs).
+/// Loan (personal or auto) is also money OWED, stored negative the same way: the principal still to repay plus any unpaid
+/// late fees. Its terms and schedule live in the Loan table (Models/Loan.cs, BankService.Loans.cs).
 /// </summary>
 public enum AccountType
 {
     Checking,
     Savings,
-    CreditCard
+    CreditCard,
+    Loan
 }
 
 /// <summary>
@@ -104,14 +107,15 @@ public class Account
 
     [NotMapped]
     public string DisplayName => string.IsNullOrWhiteSpace(Nickname)
-        ? (AccountType == AccountType.CreditCard ? "Alto Peak Card" : $"Alto {AccountType}")
+        ? (AccountType switch { AccountType.CreditCard => "Alto Peak Card", AccountType.Loan => "Alto Loan", _ => $"Alto {AccountType}" })
         : Nickname!;
 
     /// <summary>Checking or savings: holds the customer's money and can send / receive it.</summary>
     [NotMapped] public bool IsDepositAccount => AccountType is AccountType.Checking or AccountType.Savings;
     [NotMapped] public bool IsCreditCard => AccountType == AccountType.CreditCard;
-    /// <summary>Credit card: what the customer owes now (0 if they're paid up or have a credit balance).</summary>
-    [NotMapped] public decimal AmountOwed => IsCreditCard ? Math.Max(0m, -Balance) : 0m;
+    [NotMapped] public bool IsLoan => AccountType == AccountType.Loan;
+    /// <summary>Card or loan: what the customer owes now (0 if they're paid up or have a credit balance).</summary>
+    [NotMapped] public decimal AmountOwed => IsCreditCard || IsLoan ? Math.Max(0m, -Balance) : 0m;
     /// <summary>Credit card: how much more can be spent (limit minus what's owed; a credit balance adds to it).</summary>
     [NotMapped] public decimal AvailableCredit => IsCreditCard ? Math.Max(0m, (CreditLimit ?? 0m) + Balance) : 0m;
     /// <summary>Credit card: share of the limit in use, 0-100.</summary>

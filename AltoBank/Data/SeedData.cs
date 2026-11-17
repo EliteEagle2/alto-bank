@@ -127,6 +127,7 @@ public static class SeedData
         if (freshPayments) await SpreadTodaysDemoActivityAsync(db, seedStarted);
         await EnsurePreferencesDemoDataAsync(db, userManager);
         await EnsureCreditCardDemoDataAsync(services, db, userManager);   // before Insights: budgets are sized on this month's spending
+        await EnsureLoanDemoDataAsync(services, db, userManager);
         await CategorizeTransactionsAsync(db);
         await EnsureInsightsDemoDataAsync(services, db, userManager);
         await EnsureCheckDepositDemoDataAsync(services, db, userManager);
@@ -317,6 +318,174 @@ public static class SeedData
         var cardAlerts = await db.Alerts.Where(a => a.Type == AlertType.CardStatement || a.Type == AlertType.CardLateFee).ToListAsync();
         foreach (var g in cardAlerts.GroupBy(a => (a.UserId, a.Type)))
             foreach (var a in g.OrderByDescending(a => a.Id).Skip(1)) a.ReadAt ??= DateTime.UtcNow;
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Loans demo (SIMULATED decisions, no credit check). The terms come from the real LoanDecisionRules and LoanMath, and
+    /// each past payment is split exactly like BankService.PayLoanCoreAsync splits it (interest row + payment row, a
+    /// LoanPayment record). Past money comes from / goes to "an external bank" (seed only), so the checking accounts'
+    /// running balances aren't rewritten; today's late fee is charged by the real scheduler code (RunLoanCycleAsync).
+    ///   Jordan: an auto loan partway through (7 payments made, autopay on from checking), and a personal loan he paid
+    ///           off early last year (the paid-in-full letter and history).
+    ///   Maya:   a personal loan whose latest payment is 15 days late: overdue, with the late fee.
+    ///   Samuel: a large auto loan application waiting for staff review (approve, counter-offer or deny).
+    /// </summary>
+    private static async Task EnsureLoanDemoDataAsync(IServiceProvider services, ApplicationDbContext db, UserManager<ApplicationUser> userManager)
+    {
+        if (await db.Loans.AnyAsync() || await db.AccountApplications.AnyAsync(a => a.AccountType == AccountType.Loan)) return;
+        var jordan = await userManager.FindByEmailAsync(DemoEmail);
+        var maya = await userManager.FindByEmailAsync("maya@altobank.com");
+        var sam = await userManager.FindByEmailAsync("sam@altobank.com");
+        if (jordan == null || maya == null || sam == null) return;
+        var bank = services.GetRequiredService<AltoBank.Services.IBankService>();
+        var settings = await db.GetSettingsAsync();
+        var today = AltoBank.Services.BankTime.Today;
+        DateTime At(DateOnly day, int hour) => AltoBank.Services.BankTime.StartOfDayUtc(day).AddHours(hour);
+        var rng = new Random(77);
+
+        string Number() { string n; do { n = rng.NextInt64(1_000_000_000L, 10_000_000_000L).ToString(); } while (db.Accounts.Any(a => a.AccountNumber == n)); return n; }
+
+        AccountApplication App(ApplicationUser u, SeedCustomer c, LoanKind kind, decimal amount, int term, string purpose,
+                               (int Year, string Make, string Model)? vehicle, int? toAccountId, DateTime submitted,
+                               AltoBank.Services.LoanDecision d, ApplicationStatus status) => new()
+        {
+            UserId = u.Id, Status = status, SubmittedAt = submitted, AccountType = AccountType.Loan,
+            LoanKind = kind, LoanAmount = amount, LoanTermMonths = term, LoanPurpose = purpose,
+            VehicleYear = vehicle?.Year, VehicleMake = vehicle?.Make, VehicleModel = vehicle?.Model, DisburseToAccountId = toAccountId,
+            LoanRateTier = d.Tier, LoanAprPercent = d.AprPercent, LoanMonthlyPayment = d.MonthlyPayment, DecisionNote = d.Note,
+            OfferedAt = status == ApplicationStatus.Pending ? null : submitted.AddMinutes(1),
+            OfferRespondedAt = status == ApplicationStatus.Approved ? submitted.AddMinutes(9) : null,
+            ReviewedAt = status == ApplicationStatus.Pending ? null : submitted.AddMinutes(1),
+            ReviewedBy = status == ApplicationStatus.Pending ? null : "Automatic decision (demo, no credit check)",
+            FirstName = c.First, MiddleInitial = c.Middle, LastName = c.Last, DateOfBirth = c.Dob, Citizenship = "US",
+            Email = c.Email, Phone = c.Phone, Street = c.Street, Apt = c.Apt, City = c.City, State = c.State, Zip = c.Zip,
+            LivedAtAddressTwoYears = true, EmploymentStatus = "Employed", Employer = c.Employer, Occupation = c.Occupation,
+            IncomeRange = c.Income, SourceOfFunds = "Employment", SsnLast4 = new Random(c.RandomSeed + 9).Next(0, 10000).ToString("D4"),
+            OpeningDeposit = 0m, ESignName = $"{c.First} {c.Last}", ESignedAt = submitted
+        };
+
+        // Opens an accepted loan funded on fundedOn, then replays scheduled payments (paid daysEarly before each due date,
+        // for "payments" installments) and, if payoffOn is set, pays it off that day.
+        async Task<Loan> SeedLoan(ApplicationUser u, SeedCustomer c, LoanKind kind, decimal amount, int term, string purpose,
+                                  (int, string, string)? vehicle, DateOnly fundedOn, int payments, int daysEarly, DateOnly? payoffOn, string fundedTo)
+        {
+            var d = AltoBank.Services.LoanDecisionRules.Decide(kind, amount, term, c.Income,
+                new AltoBank.Services.LoanHistory(400, 6000m, false, false), settings);
+            var app = App(u, c, kind, amount, term, purpose, vehicle, null, At(fundedOn, 10), d, ApplicationStatus.Approved);
+            db.AccountApplications.Add(app);
+            var account = new Account
+            {
+                UserId = u.Id, AccountType = AccountType.Loan, AccountNumber = Number(), Status = AccountStatus.Active,
+                Nickname = kind == LoanKind.Auto ? "Auto Loan" : "Personal Loan", OpenedAt = At(fundedOn, 10).AddMinutes(10)
+            };
+            db.Accounts.Add(account);
+            await db.SaveChangesAsync();
+            app.AccountId = account.Id;
+            var firstDue = fundedOn.AddMonths(1);
+            if (firstDue.Day > 28) firstDue = new DateOnly(firstDue.Year, firstDue.Month, 28);
+            var loan = new Loan
+            {
+                AccountId = account.Id, UserId = u.Id, ApplicationId = app.Id, Kind = kind, Purpose = purpose,
+                VehicleYear = vehicle?.Item1, VehicleMake = vehicle?.Item2, VehicleModel = vehicle?.Item3,
+                Principal = amount, AprPercent = d.AprPercent, TermMonths = term, RateTier = d.Tier,
+                MonthlyPayment = LoanMath.MonthlyPayment(amount, d.AprPercent, term),
+                DisbursedAt = account.OpenedAt, FirstDueDate = firstDue, PrincipalRemaining = amount, NextDueDate = firstDue
+            };
+            db.Loans.Add(loan);
+            account.Balance = -amount;
+            db.Transactions.Add(new Transaction
+            {
+                AccountId = account.Id, Type = TransactionType.LoanDisbursement, Amount = amount, BalanceAfter = account.Balance,
+                Description = $"Loan funds sent to {fundedTo}", Memo = "Demo history (simulated)", Date = account.OpenedAt,
+                Category = CategoryRules.For(TransactionType.LoanDisbursement, null)
+            });
+            await db.SaveChangesAsync();
+
+            async Task Pay(LoanPaymentKind k, DateOnly day, decimal amountPaid, decimal interest, decimal principal, int? number, DateOnly? due)
+            {
+                if (interest > 0)
+                {
+                    account.Balance -= interest;
+                    db.Transactions.Add(new Transaction
+                    {
+                        AccountId = account.Id, Type = TransactionType.InterestCharge, Amount = interest, BalanceAfter = account.Balance,
+                        Description = k == LoanPaymentKind.Payoff ? $"Interest to {day:MMM d}" : $"Interest for the {due:MMM d} payment",
+                        Memo = $"{loan.AprPercent:0.00}% APR", Date = At(day, 12), Category = CategoryRules.For(TransactionType.InterestCharge, null)
+                    });
+                }
+                account.Balance += amountPaid;
+                var t = new Transaction
+                {
+                    AccountId = account.Id, Type = TransactionType.LoanPayment, Amount = amountPaid, BalanceAfter = account.Balance,
+                    Description = k == LoanPaymentKind.Payoff ? "Loan payoff from external bank ••6012" : $"Payment, {due:MMM d} installment from external bank ••6012",
+                    Memo = "Demo history (simulated)", Date = At(day, 12).AddMinutes(1), Category = CategoryRules.For(TransactionType.LoanPayment, null)
+                };
+                db.Transactions.Add(t);
+                await db.SaveChangesAsync();
+                loan.PrincipalRemaining -= principal;
+                db.LoanPayments.Add(new LoanPayment
+                {
+                    LoanId = loan.Id, Kind = k, InstallmentNumber = number, DueDate = due, PaidAt = At(day, 12).AddMinutes(1),
+                    Amount = amountPaid, Interest = interest, Principal = principal, PrincipalAfter = loan.PrincipalRemaining, TransactionId = t.Id
+                });
+                await db.SaveChangesAsync();
+            }
+
+            for (var i = 0; i < payments && loan.PrincipalRemaining > 0; i++)
+            {
+                var due = loan.NextDueDate!.Value;
+                var (pay, interest, principal) = LoanMath.NextInstallment(loan.PrincipalRemaining, loan.AprPercent, loan.MonthlyPayment, loan.PaymentsMade + 1 >= loan.TermMonths);
+                await Pay(LoanPaymentKind.Scheduled, due.AddDays(-daysEarly), pay, interest, principal, loan.PaymentsMade + 1, due);
+                loan.PaymentsMade++;
+                loan.NextDueDate = due.AddMonths(1);
+            }
+            if (payoffOn is DateOnly po)
+            {
+                var days = po.DayNumber - loan.NextDueDate!.Value.AddMonths(-1).DayNumber;
+                var interest = LoanMath.AccruedInterest(loan.PrincipalRemaining, loan.AprPercent, days);
+                await Pay(LoanPaymentKind.Payoff, po, loan.PrincipalRemaining + interest, interest, loan.PrincipalRemaining, null, null);
+                loan.Status = LoanStatus.PaidOff;
+                loan.PaidOffAt = At(po, 12).AddMinutes(1);
+                loan.NextDueDate = null;
+                account.Status = AccountStatus.Closed;
+                account.StatusReason = "Paid in full";
+                account.StatusChangedAt = account.ClosedAt = loan.PaidOffAt;
+            }
+            await db.SaveChangesAsync();
+            return loan;
+        }
+
+        var j = Customers.First(c => c.Email == DemoEmail);
+        var m = Customers.First(c => c.Email == "maya@altobank.com");
+        var s3 = Customers.First(c => c.Email == "sam@altobank.com");
+
+        // Jordan: a personal loan paid off early (9 payments, then the payoff), and an auto loan partway through.
+        var oldFunded = today.AddMonths(-16).AddDays(-3);
+        await SeedLoan(jordan, j, LoanKind.Personal, 3000m, 12, "Moving", null, oldFunded, 9, 3, oldFunded.AddMonths(10).AddDays(-12), "external bank ••6012");
+        var autoFunded = today.AddMonths(-7).AddDays(9);
+        var auto = await SeedLoan(jordan, j, LoanKind.Auto, 18500m, 60, "Used vehicle", (2022, "Subaru", "Outback"), autoFunded, 6, 2, null, "Summit Auto Group (dealer)");
+        var jChecking = await db.Accounts.FirstOrDefaultAsync(a => a.UserId == jordan.Id && a.AccountNumber == "4410274821");
+        if (jChecking != null) { auto.AutopayEnabled = true; auto.AutopayFromAccountId = jChecking.Id; }
+        await db.SaveChangesAsync();
+
+        // Maya: 3 payments made; the 4th was due 15 days ago and hasn't been paid (past the 10 grace days → overdue + fee).
+        var mayaFunded = today.AddDays(-15).AddMonths(-4);
+        var ml = await SeedLoan(maya, m, LoanKind.Personal, 6000m, 36, "Home improvement", null, mayaFunded, 3, 1, null, "external bank ••2290");
+        var lastId = await db.Transactions.Where(t => t.AccountId == ml.AccountId).MaxAsync(t => t.Id);
+        db.ChangeTracker.Clear();
+        await bank.RunLoanCycleAsync(ml.Id, today);   // the real late-fee code
+        foreach (var t in await db.Transactions.Where(t => t.AccountId == ml.AccountId && t.Id > lastId).ToListAsync())
+            t.Date = At(ml.NextDueDate!.Value.AddDays(settings.LoanGraceDays + 1), 1);
+        foreach (var a in await db.Alerts.Where(a => a.UserId == maya.Id && a.Type == AlertType.LoanLateFee).ToListAsync())
+            a.CreatedAt = At(ml.NextDueDate!.Value.AddDays(settings.LoanGraceDays + 1), 1);
+        await db.SaveChangesAsync();
+
+        // Samuel: a large auto loan waiting for staff review (loans of $20,000+ always are).
+        var samChecking = await db.Accounts.FirstOrDefaultAsync(a => a.UserId == sam.Id && a.AccountNumber == "6630412257");
+        var sd = AltoBank.Services.LoanDecisionRules.Decide(LoanKind.Auto, 26000m, 72, s3.Income, new AltoBank.Services.LoanHistory(48, 2400m, false, false), settings);
+        db.AccountApplications.Add(App(sam, s3, LoanKind.Auto, 26000m, 72, "New vehicle", (2026, "Toyota", "RAV4 Hybrid"), samChecking?.Id,
+                                       DateTime.UtcNow.AddHours(-5), sd, ApplicationStatus.Pending));
         await db.SaveChangesAsync();
     }
 

@@ -26,7 +26,10 @@ public enum AlertType
     LargeDebit,
     CardStatement,
     CardPaymentDue,
-    CardLateFee
+    CardLateFee,
+    LoanUpdate,        // loan offer ready, loan funded, paid off, autopay made
+    LoanPaymentDue,
+    LoanLateFee
 }
 
 /// <summary>
@@ -76,7 +79,9 @@ public class Alert
         AlertType.LargeDebit => "bi-cash-stack",
         AlertType.CardStatement => "bi-file-earmark-text",
         AlertType.CardPaymentDue => "bi-calendar-event",
-        AlertType.CardLateFee => "bi-exclamation-triangle",
+        AlertType.CardLateFee or AlertType.LoanLateFee => "bi-exclamation-triangle",
+        AlertType.LoanUpdate => "bi-bank",
+        AlertType.LoanPaymentDue => "bi-calendar-event",
         _ => "bi-bell"
     };
 }

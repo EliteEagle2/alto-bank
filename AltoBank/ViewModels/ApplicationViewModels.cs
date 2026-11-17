@@ -134,6 +134,18 @@ public class AccountApplicationViewModel
     public decimal? MonthlyHousingPayment { get; set; }
     public bool AgreeCardmemberAgreement { get; set; }
 
+    // ===== Step 1 + 6 (a loan instead of funding) =====
+    public LoanKind? LoanKind { get; set; }
+    [Range(typeof(decimal), "0", "1000000", ErrorMessage = "Enter a loan amount.")]
+    [Display(Name = "Loan amount")]
+    public decimal? LoanAmount { get; set; }
+    [Display(Name = "Term")] public int? LoanTermMonths { get; set; }
+    [StringLength(60)] [Display(Name = "What it's for")] public string? LoanPurpose { get; set; }
+    [Display(Name = "Year")] public int? VehicleYear { get; set; }
+    [StringLength(30)] [Display(Name = "Make")] public string? VehicleMake { get; set; }
+    [StringLength(40)] [Display(Name = "Model")] public string? VehicleModel { get; set; }
+    [Display(Name = "Send the money to")] public int? DisburseToAccountId { get; set; }
+
     // ===== Step 7: review & sign =====
     public bool AgreeAccountAgreement { get; set; }
     public bool AgreePrivacy { get; set; }
@@ -149,6 +161,10 @@ public class AccountApplicationViewModel
     [ValidateNever] public string? CardUnavailableReason { get; set; }   // already has a Peak card / a pending card application
     [ValidateNever] public decimal CardAprPercent { get; set; }
     [ValidateNever] public decimal CardCashBackPercent { get; set; }
+    [ValidateNever] public string? LoanUnavailableReason { get; set; }   // no checking account / a loan application in progress
+    [ValidateNever] public List<Account> CheckingAccounts { get; set; } = new();   // where loan money can go
+    [ValidateNever] public BankSetting LoanSettings { get; set; } = new();
+    [ValidateNever] public bool EstablishedCustomer { get; set; }        // 60+ days and $1,000+: one rate tier better
     [ValidateNever] public bool IsReturning { get; set; }
     [ValidateNever] public string UserKey { get; set; } = string.Empty;   // sessionStorage key suffix
     [ValidateNever] public string? VerifiedLast4 { get; set; }            // decoded from IdentityToken on re-display

@@ -1,5 +1,6 @@
 @model AccountApplicationViewModel
-@* STEP 1 — choose Checking, Savings or the Alto Peak credit card (+ optional nickname and debit card design). *@
+@* STEP 1 — choose Checking, Savings, the Alto Peak credit card or a loan (+ optional nickname and debit card design;
+   personal or auto for a loan). *@
 @{
     var products = new[]
     {
@@ -9,7 +10,10 @@
          Points: new[] { "4.10% APY on every dollar", "No minimum balance", "Up to 6 withdrawals per month" }),
         (Type: AccountType.CreditCard, Icon: "bi-credit-card-2-front", Title: "Alto Peak Card", Rate: Model.CardCashBackPercent.ToString("0.##") + "%", RateLabel: "cash back",
          Points: new[] { "$0 annual fee", $"{Model.CardAprPercent:0.00}% APR, none if you pay in full", "Decision in minutes" }),
+        (Type: AccountType.Loan, Icon: "bi-bank", Title: "Alto Loan", Rate: Model.LoanSettings.LoanRateTierA.ToString("0.00") + "%", RateLabel: "APR and up",
+         Points: new[] { "Personal $1,000–$25,000 or auto $5,000–$50,000", "Fixed rate and payment, no fees", "Money in checking when you accept" }),
     };
+    var minAuto = Math.Max(AltoBank.Services.LoanDecisionRules.MinApr, Model.LoanSettings.LoanRateTierA - Model.LoanSettings.AutoLoanRateDiscount);
     var design = CardDesigns.All.Contains(Model.CardDesign) ? Model.CardDesign : CardDesigns.Aurora;
 }
 <section class="step-pane" data-step="1" aria-labelledby="s1-title">
@@ -21,8 +25,8 @@
         <div class="row g-3" role="radiogroup" aria-labelledby="s1-title">
             @foreach (var p in products)
             {
-                var unavailable = p.Type == AccountType.CreditCard ? Model.CardUnavailableReason : null;
-                <div class="col-md-6 col-xl-4">
+                var unavailable = p.Type == AccountType.CreditCard ? Model.CardUnavailableReason : p.Type == AccountType.Loan ? Model.LoanUnavailableReason : null;
+                <div class="col-md-6 col-xxl-3">
                     <label class="choice-card @(unavailable != null ? "is-unavailable" : "")">
                         <input type="radio" name="AccountType" value="@p.Type" class="visually-hidden" checked="@(Model.AccountType == p.Type && unavailable == null)" disabled="@(unavailable != null)" />
                         <span class="choice-check" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
@@ -37,12 +41,35 @@
                             @foreach (var point in p.Points) { <li>@point</li> }
                         </ul>
                         @if (unavailable != null) { <span class="d-block small text-muted-alto mt-2"><i class="bi bi-info-circle me-1"></i>@unavailable</span> }
-                        else if (p.Type == AccountType.CreditCard) { <span class="demo-note mt-3">Demo decision, no credit check</span> }
+                        else if (p.Type is AccountType.CreditCard or AccountType.Loan) { <span class="demo-note mt-3">Demo decision, no credit check</span> }
                     </label>
                 </div>
             }
         </div>
         <div class="field-msg" data-msg="AccountType"><span asp-validation-for="AccountType"></span></div>
+    </div>
+
+    @* A loan: personal or auto (it sets the amounts, terms and questions in step 6). *@
+    <div class="field mt-3" data-field="LoanKind" data-show-when="AccountType=Loan" hidden>
+        <span class="form-label d-block" id="kind-label">What kind of loan?</span>
+        <div class="row g-3" role="radiogroup" aria-labelledby="kind-label">
+            @foreach (var (k, icon, title, text) in new[] {
+                (LoanKind.Personal, "bi-person-check", "Personal loan", $"$1,000 to $25,000 over 1 to 5 years, from {Model.LoanSettings.LoanRateTierA:0.00}% APR. For debt consolidation, a project or a big purchase."),
+                (LoanKind.Auto, "bi-car-front", "Auto loan", $"$5,000 to $50,000 over 2 to 6 years, from {minAuto:0.00}% APR. For a new or used car, or to refinance one.") })
+            {
+                <div class="col-md-6">
+                    <label class="choice-card choice-card--compact">
+                        <input type="radio" name="LoanKind" value="@k" class="visually-hidden" checked="@(Model.LoanKind == k)" />
+                        <span class="choice-check" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
+                        <span class="d-flex align-items-center gap-3">
+                            <span class="feature-icon mb-0"><i class="bi @icon"></i></span>
+                            <span><span class="choice-title d-block">@title</span><span class="small text-muted-alto">@text</span></span>
+                        </span>
+                    </label>
+                </div>
+            }
+        </div>
+        <div class="field-msg" data-msg="LoanKind"><span asp-validation-for="LoanKind"></span></div>
     </div>
 
     @* Bootstrap "collapse" toggles the comparison table open and closed. *@
@@ -52,21 +79,21 @@
     <div class="collapse" id="compareAccounts">
         <div class="table-responsive review-card mt-2">
             <table class="table alto-table compare-table mb-0">
-                <thead><tr><th></th><th>Alto Checking</th><th>Summit Savings</th><th>Alto Peak Card</th></tr></thead>
+                <thead><tr><th></th><th>Alto Checking</th><th>Summit Savings</th><th>Alto Peak Card</th><th>Alto Loan</th></tr></thead>
                 <tbody>
-                    <tr><td class="text-muted-alto">What it is</td><td>Where your money lives</td><td>Where your money grows</td><td>Borrow and pay back monthly</td></tr>
-                    <tr><td class="text-muted-alto">Monthly or annual fee</td><td>$0</td><td>$0</td><td>$0</td></tr>
-                    <tr><td class="text-muted-alto">Interest</td><td>None</td><td>You earn 4.10% APY</td><td>You pay @Model.CardAprPercent.ToString("0.00")% APR only on balances you carry</td></tr>
-                    <tr><td class="text-muted-alto">Card</td><td>Debit card</td><td>—</td><td>Credit card</td></tr>
-                    <tr><td class="text-muted-alto">Rewards</td><td>—</td><td>—</td><td>@Model.CardCashBackPercent.ToString("0.##")% cash back</td></tr>
-                    <tr><td class="text-muted-alto">Best for</td><td>Everyday spending</td><td>Growing your savings</td><td>Purchases you'll pay off each month</td></tr>
+                    <tr><td class="text-muted-alto">What it is</td><td>Where your money lives</td><td>Where your money grows</td><td>Borrow and pay back monthly</td><td>Borrow a set amount, repay in fixed monthly payments</td></tr>
+                    <tr><td class="text-muted-alto">Monthly or annual fee</td><td>$0</td><td>$0</td><td>$0</td><td>$0 (no origination fee)</td></tr>
+                    <tr><td class="text-muted-alto">Interest</td><td>None</td><td>You earn 4.10% APY</td><td>You pay @Model.CardAprPercent.ToString("0.00")% APR only on balances you carry</td><td>Fixed @Model.LoanSettings.LoanRateTierA.ToString("0.00")%–@Model.LoanSettings.LoanRateTierD.ToString("0.00")% APR (auto loans less)</td></tr>
+                    <tr><td class="text-muted-alto">Card</td><td>Debit card</td><td>—</td><td>Credit card</td><td>—</td></tr>
+                    <tr><td class="text-muted-alto">Rewards</td><td>—</td><td>—</td><td>@Model.CardCashBackPercent.ToString("0.##")% cash back</td><td>—</td></tr>
+                    <tr><td class="text-muted-alto">Best for</td><td>Everyday spending</td><td>Growing your savings</td><td>Purchases you'll pay off each month</td><td>A car, or one big expense</td></tr>
                 </tbody>
             </table>
         </div>
     </div>
 
     <div class="row g-4 mt-1">
-        <div class="col-md-6">
+        <div class="col-md-6" data-show-when="AccountType!=Loan">
             <div class="field" data-field="Nickname">
                 <label asp-for="Nickname" class="form-label">Account nickname <span class="opt">(optional)</span></label>
                 <input asp-for="Nickname" class="form-control" maxlength="30" placeholder="e.g. Rainy Day Fund" autocomplete="off" />

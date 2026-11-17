@@ -34,6 +34,14 @@ public class ApplicationsController : AdminControllerBase
         return RedirectToAction(nameof(Details), new { id });
     }
 
+    // Loans only: different terms (APR and/or amount) for the customer to accept.
+    [HttpPost]
+    public async Task<IActionResult> Counter(int id, decimal? apr, decimal? amount, string reason)
+    {
+        Flash(await _admin.CounterLoanOfferAsync(id, apr, amount, reason));
+        return RedirectToAction(nameof(Details), new { id });
+    }
+
     [HttpPost]
     public async Task<IActionResult> Deny(int id, string reason)
     {

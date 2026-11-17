@@ -1,0 +1,103 @@
+@model PayLoanViewModel
+@* MAKE A LOAN PAYMENT — /loans/{id}/pay. Three choices with their amounts and what each one means; the server works
+   the amounts out again on POST (the scheduled payment's split, the payoff with interest to today). *@
+@{
+    var v = Model.Loan;
+    var l = v.Loan;
+    var a = v.Account;
+    var q = v.Quote;
+    var f = Model.Form;
+    var due = l.NextDueDate!.Value;
+    var graceEnds = due.AddDays(v.GraceDays);
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    var scheduledHelp = !q.CanPayScheduled
+        ? $"Your {due.AddMonths(-1):MMM d} payment is already made. The next one can be paid from {q.OpensOn:MMM d}."
+        : $"Your {due:MMM d} payment: {q.InstallmentInterest:C} interest + {q.InstallmentPrincipal:C} principal"
+          + (q.Fees > 0 ? $" + {q.Fees:C} late fees" : "") + "."
+          + (v.Overdue ? " It's overdue, so please pay it now." : v.PastDue ? $" Pay by {graceEnds:MMM d} to avoid a late fee." : "");
+    var options = new List<(LoanPaymentKind Kind, string Label, decimal? Amount, string Help, bool Disabled)>
+    {
+        (LoanPaymentKind.Scheduled, v.PastDue ? "Past-due payment" : "Monthly payment", q.CanPayScheduled ? q.ScheduledAmount : null, scheduledHelp, !q.CanPayScheduled),
+        (LoanPaymentKind.ExtraPrincipal, "Extra toward principal", null,
+            "All of it lowers what you owe, so you pay less interest and finish sooner. It doesn't replace your monthly payment.", false),
+        (LoanPaymentKind.Payoff, "Pay off the loan", q.PayoffAmount,
+            $"{l.PrincipalRemaining:C} principal + {q.AccruedInterest:C} interest to today ({q.DaysAccrued} day{(q.DaysAccrued == 1 ? "" : "s")} since {q.OpensOn:MMM d})"
+            + (l.FeesOwed > 0 ? $" + {l.FeesOwed:C} late fees" : "") + ". Then you owe $0.00. No prepayment penalty.", false),
+    };
+    var selected = options.Any(o => o.Kind == f.Kind && !o.Disabled) ? f.Kind : options.First(o => !o.Disabled).Kind;
+}
+
+<div class="container py-4 pay-card-page" style="max-width: 760px">
+    <a asp-controller="Accounts" asp-action="Details" asp-route-id="@a.Id" class="small text-decoration-none"><i class="bi bi-chevron-left"></i> @a.DisplayName ••@a.Last4</a>
+    <div class="feature-head mt-1">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-cash-coin text-gradient me-2"></i>Make a loan payment</h2>
+            <p class="text-muted-alto mb-0">You owe <strong><money amount="@l.TotalOwed" /></strong>. @(v.PastDue ? "Your payment was due" : "Next payment due") @due.ToString("MMM d")@(l.AutopayEnabled && !v.PastDue ? " (autopay is on)" : "").</p>
+        </div>
+    </div>
+
+    @if (!Model.FromAccounts.Any())
+    {
+        <div class="glass p-4"><partial name="_EmptyState" model='@(new EmptyStateViewModel("bi-wallet2", "You need an active checking or savings account to make a payment."))' /></div>
+    }
+    else
+    {
+        <form method="post" asp-action="Pay" asp-route-id="@a.Id" class="glass p-4" id="payLoanForm" novalidate>
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger small" role="alert"></div>
+
+            <fieldset class="mb-4">
+                <legend class="h6 mb-3">What do you want to pay?</legend>
+                <div class="pay-options">
+                    @foreach (var o in options)
+                    {
+                        var id = "opt" + o.Kind;
+                        <label class="pay-option @(o.Disabled ? "is-disabled" : "")" for="@id">
+                            <input type="radio" class="form-check-input" name="Kind" id="@id" value="@o.Kind" checked="@(o.Kind == selected)" disabled="@o.Disabled"
+                                   @(o.Kind == LoanPaymentKind.ExtraPrincipal ? "data-custom-option" : "") />
+                            <span class="pay-option-text">
+                                <span class="pay-option-label">@o.Label</span>
+                                <span class="pay-option-help">@o.Help</span>
+                            </span>
+                            @if (o.Amount is decimal amt) { <span class="pay-option-amount"><money amount="@amt" /></span> }
+                        </label>
+                    }
+                </div>
+                <div class="mt-3" data-custom-amount @(selected == LoanPaymentKind.ExtraPrincipal ? "" : "hidden")>
+                    <label class="form-label" for="ExtraAmount">Extra amount</label>
+                    <div class="input-group" style="max-width: 220px">
+                        <span class="input-group-text">$</span>
+                        <input id="ExtraAmount" name="ExtraAmount" class="form-control" type="number" step="0.01" min="0.01" value="@f.ExtraAmount?.ToString(inv)"
+                               max="@((l.PrincipalRemaining - 0.01m).ToString(inv))" placeholder="0.00" />
+                    </div>
+                    <span class="field-validation-error">@Html.ValidationMessage("ExtraAmount")</span>
+                    <div class="form-text text-muted-alto">Up to <money amount="@(l.PrincipalRemaining - 0.01m)" />. To pay everything, choose Pay off the loan.</div>
+                </div>
+            </fieldset>
+
+            <div class="mb-4">
+                <label class="form-label h6" for="FromAccountId">Pay from</label>
+                <select id="FromAccountId" name="FromAccountId" class="form-select" style="max-width: 420px">
+                    @foreach (var acct in Model.FromAccounts)
+                    {
+                        <option value="@acct.Id" selected="@(acct.Id == f.FromAccountId)">@acct.DisplayName ••@acct.Last4 · @acct.Balance.ToString("C")</option>
+                    }
+                </select>
+                <span class="field-validation-error">@Html.ValidationMessage("FromAccountId")</span>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <button type="submit" class="btn btn-alto"><i class="bi bi-check2 me-1"></i>Pay now</button>
+                <a asp-controller="Accounts" asp-action="Details" asp-route-id="@a.Id" class="btn btn-alto-ghost">Cancel</a>
+                <span class="small text-muted-alto ms-sm-2">The payment posts right away.</span>
+            </div>
+        </form>
+        @if (!l.AutopayEnabled)
+        {
+            <p class="small text-muted-alto mt-3">Never miss a due date: turn on <a asp-controller="Accounts" asp-action="Details" asp-route-id="@a.Id" asp-fragment="payments">autopay</a>.</p>
+        }
+    }
+</div>
+
+@section Scripts {
+    <script src="~/js/credit-card.js" asp-append-version="true"></script>
+}

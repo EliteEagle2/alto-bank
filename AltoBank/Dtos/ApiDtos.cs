@@ -9,8 +9,26 @@ namespace AltoBank.Dtos;
 public record AccountDto(
     int Id, string Type, string Name, string? Nickname,
     string MaskedNumber, decimal Balance, DateTime OpenedAt, string Status,
-    // Alto Peak card only (null otherwise). Balance is negative when money is owed; AmountOwed is the positive amount.
+    // Alto Peak card only (null otherwise). Balance is negative when money is owed; AmountOwed is the positive amount
+    // (AmountOwed is also set for a loan: principal + unpaid fees; GET /api/loans has the loan details).
     decimal? CreditLimit = null, decimal? AvailableCredit = null, decimal? AmountOwed = null, decimal? CashBack = null);
+
+// ===== Loans (GET /api/loans, GET /api/loans/{id}/schedule, GET /api/loans/calculator) =====
+
+/// <summary>One loan: its terms and where it stands. Amounts are positive (what is owed).</summary>
+public record LoanDto(
+    int AccountId, string Kind, string Name, string MaskedNumber, string Status,
+    decimal Principal, decimal AprPercent, int TermMonths, decimal MonthlyPayment,
+    decimal PrincipalRemaining, decimal FeesOwed, decimal PercentPaid,
+    int PaymentsMade, int PaymentsRemaining, DateOnly? NextDueDate, decimal NextPaymentAmount,
+    bool Overdue, bool AutopayEnabled, decimal PayoffAmountToday, string? Vehicle, string? Purpose);
+
+/// <summary>One row of an amortization schedule.</summary>
+public record LoanScheduleRowDto(int Number, DateOnly DueDate, decimal Payment, decimal Interest, decimal Principal, decimal BalanceAfter);
+
+/// <summary>The calculator: the fixed monthly payment, the full schedule (the last payment ends at $0.00) and the totals.</summary>
+public record LoanQuoteDto(decimal Amount, decimal AprPercent, int TermMonths, decimal MonthlyPayment, decimal FinalPayment,
+    decimal TotalInterest, decimal TotalOfPayments, List<LoanScheduleRowDto> Schedule);
 
 /// <summary>Body for POST /api/transfers. Validated automatically because of [ApiController].</summary>
 public class TransferRequestDto

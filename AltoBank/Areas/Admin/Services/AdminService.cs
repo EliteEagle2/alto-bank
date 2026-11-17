@@ -439,6 +439,7 @@ public partial class AdminService : IAdminService
     public Task<AdminResult> FreezeAccountAsync(int accountId, string reason) =>
         ChangeAccountAsync(accountId, reason, "Account.Freeze", account =>
         {
+            if (account.IsLoan) return Fail(UseLoansPage);
             if (account.Status != AccountStatus.Active) return Fail($"Only an active account can be frozen (this one is {account.Status}).");
             SetStatus(account, AccountStatus.Frozen, reason);
             if (account.IsCreditCard)
@@ -463,11 +464,14 @@ public partial class AdminService : IAdminService
 
     // Alto Peak cards have their own staff actions (limit, fee waiver, close at $0) with the card rules built in.
     private const string UseCardsPage = "This is an Alto Peak credit card. Use Credit Cards in the menu to change its limit, waive a fee or close it.";
+    // Loans too: their balance must always match the principal and fees, so they're changed only on the Loans page.
+    private const string UseLoansPage = "This is a loan. Use Loans in the menu to waive a late fee or post an adjustment. A loan closes by itself when it's paid in full.";
 
     public Task<AdminResult> ReopenAccountAsync(int accountId, string reason) =>
         ChangeAccountAsync(accountId, reason, "Account.Reopen", account =>
         {
             if (account.IsCreditCard) return Fail(UseCardsPage);
+            if (account.IsLoan) return Fail(UseLoansPage);
             if (account.Status != AccountStatus.Closed) return Fail("Only a closed account can be reopened.");
             SetStatus(account, AccountStatus.Active, null);
             account.ClosedAt = null;
@@ -481,6 +485,7 @@ public partial class AdminService : IAdminService
             if (account == null) return Fail("Account not found.");
             if (account.Status == AccountStatus.Closed) return Fail("This account is already closed.");
             if (account.IsCreditCard) return Fail(UseCardsPage);   // a card closes only at $0, on the Credit Cards page
+            if (account.IsLoan) return Fail(UseLoansPage);
             var before = AccountSnapshot(account);
             var moved = 0m;
 
@@ -492,7 +497,7 @@ public partial class AdminService : IAdminService
                 if (target == null || target.UserId != account.UserId || target.Id == account.Id)
                     return Fail("The balance can only be moved to another account owned by the same customer.");
                 if (target.Status == AccountStatus.Closed) return Fail("Can't move money into a closed account.");
-                if (!target.IsDepositAccount) return Fail("Move the balance to a checking or savings account, not a credit card.");
+                if (!target.IsDepositAccount) return Fail("Move the balance to a checking or savings account, not a credit card or loan.");
 
                 moved = account.Balance;
                 account.Balance = 0;
@@ -520,6 +525,13 @@ public partial class AdminService : IAdminService
                 Notify(card, AlertType.BillFailed, "Card autopay turned off",
                     $"Autopay on your {card.DisplayName} ••{card.Last4} paid from {account.DisplayName} ••{account.Last4}, which is now closed. Turn autopay on again with another account.");
             }
+            foreach (var loan in await _db.Loans.Include(l => l.Account).Where(l => l.AutopayFromAccountId == account.Id).ToListAsync())
+            {
+                loan.AutopayEnabled = false;
+                loan.AutopayFromAccountId = null;
+                Notify(loan.Account!, AlertType.BillFailed, "Loan autopay turned off",
+                    $"Autopay on your {loan.Account!.DisplayName} ••{loan.Account.Last4} paid from {account.DisplayName} ••{account.Last4}, which is now closed. Turn autopay on again with another account, or pay by each due date.");
+            }
             _audit.Add("Account.Close", $"Closed {account.DisplayName} ••{account.Last4}" + (moved > 0 ? $" after moving {moved:C}" : ""),
                        "Account", account.Id.ToString(), before, AccountSnapshot(account), reason);
             return Ok($"{account.DisplayName} ••{account.Last4} is closed." + (moved > 0 ? $" {moved:C} was moved first." : ""));
@@ -533,6 +545,7 @@ public partial class AdminService : IAdminService
             if (account == null) return Fail("Account not found.");
             if (account.Status == AccountStatus.Closed) return Fail("Can't adjust a closed account. Reopen it first.");
             if (account.IsCreditCard) return Fail(UseCardsPage);
+            if (account.IsLoan) return Fail(UseLoansPage);
             if (!isCredit && amount > account.Balance) return Fail($"Overdrafts aren't allowed: the balance is only {account.Balance:C}.");
 
             var before = AccountSnapshot(account);
@@ -727,6 +740,9 @@ public partial class AdminService : IAdminService
     {
         // Card fees are waived on the Credit Cards page (so a fee can't be credited back twice); cash back redemptions
         // aren't reversible (the cash back balance they came from is gone).
+        // A loan's balance must always match its principal and fees, so its money is corrected on the Loans page.
+        if (tx.Account?.IsLoan == true || linked?.Account?.IsLoan == true)
+            return "Loan transactions (the money sent out, payments, interest and fees) are corrected on the Loans page with an adjustment or a fee waiver.";
         if (tx.Type == TransactionType.LateFee) return "Late fees are waived on the Credit Cards page (Waive), not reversed here.";
         if (tx.Type is TransactionType.CashBackCredit or TransactionType.RewardRedemption or TransactionType.FeeWaiver)
             return "Cash back redemptions and fee waivers can't be reversed.";
@@ -765,6 +781,8 @@ public partial class AdminService : IAdminService
             var app = await _db.AccountApplications.FirstOrDefaultAsync(a => a.Id == applicationId);
             if (app == null) return Fail("Application not found.");
             if (app.Status != ApplicationStatus.Pending) return Fail($"Only pending applications can be approved (this one is {app.Status}).");
+            // A loan isn't opened here: approving sends the customer the OFFER (the terms the decision proposed) to accept.
+            if (app.AccountType == AccountType.Loan) return await OfferLoanAsync(app, counter: false, reason);
 
             // Re-uses the customer account-opening code inside THIS transaction; funds, status and
             // daily limit on the funding account are re-checked now, at approval time.
@@ -821,6 +839,8 @@ public partial class AdminService : IAdminService
             CardCashBackPercent = s.CardCashBackRate * 100m,
             CardMinimumPaymentFloor = s.CardMinimumPaymentFloor,
             CardMinimumPaymentPercent = s.CardMinimumPaymentPercent * 100m,
+            LoanRateTierA = s.LoanRateTierA, LoanRateTierB = s.LoanRateTierB, LoanRateTierC = s.LoanRateTierC, LoanRateTierD = s.LoanRateTierD,
+            AutoLoanRateDiscount = s.AutoLoanRateDiscount, LoanReviewAmount = s.LoanReviewAmount, LoanLateFee = s.LoanLateFee, LoanGraceDays = s.LoanGraceDays,
             UpdatedAt = s.UpdatedAt,
             UpdatedBy = s.UpdatedBy
         };
@@ -846,6 +866,16 @@ public partial class AdminService : IAdminService
             if (input.CardCashBackPercent is decimal cb) s.CardCashBackRate = Math.Round(cb / 100m, 4);
             if (input.CardMinimumPaymentFloor is decimal floor) s.CardMinimumPaymentFloor = Math.Round(floor, 2);
             if (input.CardMinimumPaymentPercent is decimal pct) s.CardMinimumPaymentPercent = Math.Round(pct / 100m, 4);
+            if (input.LoanRateTierA is decimal ta) s.LoanRateTierA = Math.Round(ta, 2);
+            if (input.LoanRateTierB is decimal tb) s.LoanRateTierB = Math.Round(tb, 2);
+            if (input.LoanRateTierC is decimal tc) s.LoanRateTierC = Math.Round(tc, 2);
+            if (input.LoanRateTierD is decimal td) s.LoanRateTierD = Math.Round(td, 2);
+            if (!(s.LoanRateTierA <= s.LoanRateTierB && s.LoanRateTierB <= s.LoanRateTierC && s.LoanRateTierC <= s.LoanRateTierD))
+                return Fail("Loan rate tiers must go up from A to D (A is the best rate).");
+            if (input.AutoLoanRateDiscount is decimal disc) s.AutoLoanRateDiscount = Math.Round(disc, 2);
+            if (input.LoanReviewAmount is decimal review) s.LoanReviewAmount = Math.Round(review, 2);
+            if (input.LoanLateFee is decimal lfee) s.LoanLateFee = Math.Round(lfee, 2);
+            if (input.LoanGraceDays is int grace) s.LoanGraceDays = grace;
             s.UpdatedAt = DateTime.UtcNow;
             s.UpdatedBy = AdminEmail;
             _audit.Add("Settings.Update", "Updated bank settings", "BankSetting", s.Id.ToString(), before, SettingsSnapshot(s), input.Reason);
@@ -1086,7 +1116,8 @@ public partial class AdminService : IAdminService
     {
         s.SavingsApy, s.CheckingApy, s.DefaultDailyTransferLimit, s.LargeTransactionThreshold, s.AutoApproveApplications,
         s.MobileDepositPerCheckLimit, s.MobileDepositDailyLimit, s.ProvisionalCreditOnDisputes,
-        s.CardPurchaseAprPercent, s.CardLateFee, s.CardCashBackRate, s.CardMinimumPaymentFloor, s.CardMinimumPaymentPercent
+        s.CardPurchaseAprPercent, s.CardLateFee, s.CardCashBackRate, s.CardMinimumPaymentFloor, s.CardMinimumPaymentPercent,
+        s.LoanRateTierA, s.LoanRateTierB, s.LoanRateTierC, s.LoanRateTierD, s.AutoLoanRateDiscount, s.LoanReviewAmount, s.LoanLateFee, s.LoanGraceDays
     };
 
     private static object ProfileSnapshot(ApplicationUser u) => new

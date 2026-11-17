@@ -1,65 +1,121 @@
+@inject AltoBank.Services.IBankService Bank
 @{
     ViewData["Title"] = "Loans";
+    // Rates come from the bank settings (Admin → Settings), so this page never disagrees with a real offer.
+    var s = await Bank.GetSettingsAsync();
+    decimal Auto(decimal tier) => Math.Max(AltoBank.Services.LoanDecisionRules.MinApr, tier - s.AutoLoanRateDiscount);
+    var tiers = new[] { ("A", s.LoanRateTierA), ("B", s.LoanRateTierB), ("C", s.LoanRateTierC), ("D", s.LoanRateTierD) };
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
 
-    var loanTypes = new List<BenefitViewModel>
-    {
-        new("bi-person-check", "Personal loans", "$2,000 – $50,000 · APR from 7.49%* · 2 to 7 year terms. Consolidate debt or fund what's next."),
-        new("bi-car-front", "Auto loans", "Up to $100,000 · APR from 5.29%* · New, used, or refinance your current car loan."),
-        new("bi-house-gear", "Home improvement", "$5,000 – $75,000 · APR from 7.99%* · Renovate without tapping your home equity."),
-    };
-
+    var hero = new PageHeroViewModel("Alto Loans", "Borrow with a clear view.",
+        "Fixed rates, no fees, and no penalty for paying early. Know exactly what you'll pay before you commit.",
+        "Apply for a loan", "Accounts", "Apply");
     var steps = new List<StepViewModel>
     {
-        new("Check your rate", "See your rate in minutes. Checking won't affect your credit score."),
-        new("Pick your terms", "Choose the amount and term that fit your budget. No origination fees."),
-        new("Get your money", "Approved funds land in your Alto checking account as soon as the next business day."),
+        new("Apply in minutes", "Tell us how much, for how long and what it's for. Existing customers' details are filled in for you."),
+        new("Get your offer", "See your rate, monthly payment and total cost before you commit. Nothing is lent until you accept."),
+        new("Money in checking", "Accept and the money lands in your Alto checking account right away."),
     };
 }
 
-<partial name="_PageHero" model='new PageHeroViewModel("Alto Loans · Coming soon", "Borrow with a clear view.",
-    "Fixed rates, no origination fees, and no prepayment penalties. Know exactly what you will pay before you commit.")' />
+<partial name="_PageHero" model="hero" />
 
 <div class="container">
     <div class="row g-4">
-        @foreach (var l in loanTypes)
-        {
-            <div class="col-md-4"><partial name="_BenefitCard" model="l" /></div>
-        }
+        <div class="col-lg-4">
+            <div class="glass glass-hover p-4 h-100 d-flex flex-column">
+                <span class="feature-icon"><i class="bi bi-person-check"></i></span>
+                <h3 class="h4 mt-2 mb-1">Personal loan</h3>
+                <p class="text-muted-alto">$1,000 to $25,000 over 12 to 60 months, from @s.LoanRateTierA.ToString("0.00")% APR. Consolidate debt, fix up the house, or cover a big expense.</p>
+                <a class="btn btn-alto mt-auto align-self-start" asp-controller="Accounts" asp-action="Apply" asp-route-type="Loan" asp-route-kind="Personal">Apply for a personal loan</a>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="glass glass-hover p-4 h-100 d-flex flex-column">
+                <span class="feature-icon"><i class="bi bi-car-front"></i></span>
+                <h3 class="h4 mt-2 mb-1">Auto loan</h3>
+                <p class="text-muted-alto">$5,000 to $50,000 over 24 to 72 months, from @Auto(s.LoanRateTierA).ToString("0.00")% APR. New, used, or refinance the loan you have now.</p>
+                <a class="btn btn-alto mt-auto align-self-start" asp-controller="Accounts" asp-action="Apply" asp-route-type="Loan" asp-route-kind="Auto">Apply for an auto loan</a>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="glass p-4 h-100">
+                <h3 class="h5 mb-2">How your rate is set</h3>
+                <p class="small text-muted-alto mb-2">By the income you tell us and your history with Alto (60+ days and $1,000+ in Alto checking and savings moves you up a tier). Fixed for the whole loan.</p>
+                <table class="table alto-table table-sm mb-2">
+                    <thead><tr><th>Tier</th><th class="text-end">Personal</th><th class="text-end">Auto</th></tr></thead>
+                    <tbody>
+                        @foreach (var (t, rate) in tiers) { <tr><td>@t</td><td class="text-end">@rate.ToString("0.00")%</td><td class="text-end">@Auto(rate).ToString("0.00")%</td></tr> }
+                    </tbody>
+                </table>
+                <span class="demo-note">Demo decision, no credit check</span>
+            </div>
+        </div>
     </div>
 
-    @* Loan payment calculator (runs in the browser, see the script below) *@
-    <section class="section">
-        <div class="glass p-4 p-lg-5">
-            <div class="row g-5 align-items-center">
-                <div class="col-lg-6">
-                    <h2 class="section-title mb-2">Payment estimator</h2>
-                    <p class="text-muted-alto mb-4">Estimate your fixed monthly payment.</p>
+    @* Loan calculator: every number comes from GET /api/loans/calculator (the same LoanMath a real loan uses). *@
+    <section class="section" aria-labelledby="calc-title">
+        <div class="glass p-4 p-lg-5" id="loanCalc"
+             data-api="@Url.Action("Calculator", "LoansApi")"
+             data-personal-rate="@s.LoanRateTierA.ToString(inv)" data-auto-rate="@Auto(s.LoanRateTierA).ToString(inv)">
+            <div class="row g-5">
+                <div class="col-lg-5">
+                    <h2 class="section-title mb-2" id="calc-title">Payment calculator</h2>
+                    <p class="text-muted-alto mb-4">Try an amount, a term and a rate. The chart shows how each year's payments split between interest and paying down what you owe.</p>
 
-                    <label class="form-label" for="ln-amount">Loan amount</label>
-                    <div class="input-group mb-3"><span class="input-group-text">$</span>
-                        <input id="ln-amount" class="form-control" type="number" min="0" step="500" value="15000" /></div>
-
-                    <label class="form-label" for="ln-apr">APR</label>
-                    <div class="input-group mb-3">
-                        <input id="ln-apr" class="form-control" type="number" min="0" max="36" step="0.01" value="7.49" />
-                        <span class="input-group-text">%</span></div>
-
-                    <label class="form-label" for="ln-term">Term</label>
-                    <select id="ln-term" class="form-select">
-                        <option value="24">2 years</option>
-                        <option value="36" selected>3 years</option>
-                        <option value="48">4 years</option>
-                        <option value="60">5 years</option>
-                        <option value="84">7 years</option>
-                    </select>
-                </div>
-                <div class="col-lg-6 text-center">
-                    <div class="text-muted-alto small text-uppercase" style="letter-spacing:.14em">Estimated monthly payment</div>
-                    <div id="ln-payment" class="calc-result text-gradient">$0.00</div>
-                    <div class="row mt-3">
-                        <div class="col-6"><div class="text-muted-alto small">Total interest</div><div id="ln-interest" class="fs-5 fw-semibold">$0</div></div>
-                        <div class="col-6"><div class="text-muted-alto small">Total cost</div><div id="ln-total" class="fs-5 fw-semibold">$0</div></div>
+                    <div class="calc-segment mb-4" role="radiogroup" aria-label="Loan type">
+                        <input type="radio" class="visually-hidden" name="calc-kind" id="calc-personal" value="Personal" checked />
+                        <label for="calc-personal">Personal</label>
+                        <input type="radio" class="visually-hidden" name="calc-kind" id="calc-auto" value="Auto" />
+                        <label for="calc-auto">Auto</label>
                     </div>
+
+                    <label class="form-label" for="calc-amount">Loan amount</label>
+                    <div class="input-group mb-2"><span class="input-group-text">$</span>
+                        <input id="calc-amount" class="form-control" type="number" min="1000" max="25000" step="100" value="15000" inputmode="numeric" /></div>
+                    <input id="calc-amount-range" class="form-range mb-3" type="range" min="1000" max="25000" step="500" value="15000" aria-label="Loan amount slider" />
+
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label" for="calc-months">Term</label>
+                            <select id="calc-months" class="form-select">
+                                @foreach (var t in new[] { 12, 24, 36, 48, 60, 72 })
+                                {
+                                    <option value="@t" selected="@(t == 36)">@t months</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label" for="calc-apr">APR</label>
+                            <div class="input-group"><input id="calc-apr" class="form-control" type="number" min="0" max="36" step="0.01" value="@s.LoanRateTierA.ToString(inv)" /><span class="input-group-text">%</span></div>
+                        </div>
+                    </div>
+                    <div class="small text-danger-alto mt-2" data-calc-error role="alert" hidden></div>
+                </div>
+
+                <div class="col-lg-7">
+                    <div class="calc-summary mb-4" aria-live="polite">
+                        <div><div class="text-muted-alto small">Monthly payment</div><div class="calc-result text-gradient" data-calc-payment>—</div></div>
+                        <div><div class="text-muted-alto small">Total interest</div><div class="fs-4 fw-semibold" data-calc-interest>—</div></div>
+                        <div><div class="text-muted-alto small">Total cost</div><div class="fs-4 fw-semibold" data-calc-total>—</div></div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-baseline mb-2 flex-wrap gap-2">
+                        <h3 class="h6 mb-0">Paid each year</h3>
+                        <div class="amort-legend"><span class="lg-principal">Principal (what you borrowed)</span><span class="lg-interest">Interest</span></div>
+                    </div>
+                    <div class="amort-chart" data-calc-chart role="img" aria-label="Principal and interest paid each year">
+                        <div class="amort-tip" data-calc-tip hidden></div>
+                    </div>
+                    <p class="small text-muted-alto mt-2 mb-0" data-calc-final></p>
+                    <details class="mt-3">
+                        <summary class="small">See every payment (amortization schedule)</summary>
+                        <div class="table-responsive schedule-wrap mt-2">
+                            <table class="table alto-table table-sm mb-0">
+                                <thead><tr><th>#</th><th class="text-end">Payment</th><th class="text-end">Interest</th><th class="text-end">Principal</th><th class="text-end">Left to repay</th></tr></thead>
+                                <tbody data-calc-rows></tbody>
+                            </table>
+                        </div>
+                    </details>
                 </div>
             </div>
         </div>
@@ -68,32 +124,12 @@
     <section class="section pt-0">
         <h2 class="section-title mb-4">How it works</h2>
         <partial name="_Steps" model="steps" />
-        <p class="footnote mt-4">*Rates and terms are illustrative for this academic demo. Alto loans are not available and no applications are accepted.</p>
+        <p class="footnote mt-4">Alto Bank is fictional and its loans are simulated for an academic demo: decisions use simple rules on your answers, never a credit check, and no real money is lent.</p>
     </section>
 
-    <partial name="_CtaBand" model='new CtaViewModel("Be first in line", "Create a free Alto account and we will let you know when loans launch.", "Create an account", "Auth", "Register")' />
+    <partial name="_CtaBand" model='new CtaViewModel("Ready when you are", "Already bank with Alto? Sign in and your details are filled in for you.", "Apply for a loan", "Accounts", "Apply")' />
 </div>
 
 @section Scripts {
-    <script>
-        // Standard amortized payment: M = P * r / (1 - (1 + r)^-n), where r is the monthly rate.
-        (function () {
-            const fmt = v => v.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-            const $ = id => document.getElementById(id);
-
-            function update() {
-                const p = Math.max(0, parseFloat($('ln-amount').value) || 0);
-                const r = Math.max(0, parseFloat($('ln-apr').value) || 0) / 100 / 12;
-                const n = parseInt($('ln-term').value, 10);
-                const payment = r === 0 ? p / n : p * r / (1 - Math.pow(1 + r, -n));
-                const total = payment * n;
-
-                $('ln-payment').textContent = fmt(payment);
-                $('ln-total').textContent = fmt(total);
-                $('ln-interest').textContent = fmt(total - p);
-            }
-            ['ln-amount', 'ln-apr', 'ln-term'].forEach(id => $(id).addEventListener('input', update));
-            update();
-        })();
-    </script>
+    <script src="~/js/loan-calculator.js" asp-append-version="true"></script>
 }

@@ -172,7 +172,7 @@ public class AccountsApiController : ControllerBase
         new(a.Id, a.AccountType.ToString(), a.DisplayName, a.Nickname, $"••••{a.Last4}", a.Balance,
             DateTime.SpecifyKind(a.OpenedAt, DateTimeKind.Utc), a.Status.ToString(),
             a.IsCreditCard ? a.CreditLimit : null, a.IsCreditCard ? a.AvailableCredit : null,
-            a.IsCreditCard ? a.AmountOwed : null, a.IsCreditCard ? a.RewardsBalance : null);
+            a.IsCreditCard || a.IsLoan ? a.AmountOwed : null, a.IsCreditCard ? a.RewardsBalance : null);
 
     private static ActivityItemDto ToDto(Transaction t, IReadOnlyDictionary<int, string> labels) =>
         new(t.Id, DateTime.SpecifyKind(t.Date, DateTimeKind.Utc), t.Description, t.TypeLabel, t.Type.ToString(), t.IsCredit,

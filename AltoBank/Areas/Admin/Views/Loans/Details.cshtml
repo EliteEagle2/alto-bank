@@ -1,0 +1,161 @@
+@model LoanDetailViewModel
+@{ ViewData["OwnHeading"] = true; }
+@{
+    var v = Model.View;
+    var l = v.Loan;
+    var a = v.Account;
+    var name = $"{Model.Owner.FirstName} {Model.Owner.LastName}";
+    var active = l.Status == LoanStatus.Active;
+    var status = active ? (v.Overdue ? "Overdue" : "Active") : "PaidOff";
+    string Local(DateTime? t) => t == null ? "—" : BankTime.ToLocal(t.Value).ToString("MMM d, yyyy h:mm tt");
+    var adjust = new ConfirmModalViewModel("adjustModal", $"Post an adjustment to ••{a.Last4}",
+        $"Lowering the principal credits the loan; raising it adds to what {name} owes. The monthly payment stays {l.MonthlyPayment:C}, so the schedule gets shorter or longer. {name} gets an alert.",
+        Url.Action("Adjust", new { id = a.Id })!, "Post adjustment", "primary",
+        new[]
+        {
+            new ConfirmField("direction", "Adjustment", Options: new[] { new KeyValuePair<string, string>("credit", "Lower the principal (credit)"), new KeyValuePair<string, string>("debit", "Raise the principal (debit)") }),
+            new ConfirmField("amount", "Amount ($)", "number", true, "e.g. 25.00", "0.01", "0.01")
+        });
+}
+
+<div class="detail-head">
+    <div>
+        <a asp-action="Index" class="small text-decoration-none"><i class="bi bi-chevron-left"></i> Loans</a>
+        <h2 class="mt-1">@name · @a.DisplayName ••@a.Last4 <partial name="_StatusPill" model="status" /></h2>
+        <div class="text-muted-alto small">Funded @Local(l.DisbursedAt) · <a asp-controller="Customers" asp-action="Details" asp-route-id="@a.UserId">customer profile</a>
+            @if (Model.Application != null) { <span> · <a asp-controller="Applications" asp-action="Details" asp-route-id="@Model.Application.Id">application</a></span> }</div>
+    </div>
+    @if (active)
+    {
+        <div class="detail-actions">
+            <button class="btn btn-admin" data-bs-toggle="modal" data-bs-target="#adjustModal"><i class="bi bi-plus-slash-minus me-1"></i>Post adjustment</button>
+        </div>
+    }
+</div>
+
+@if (v.Overdue)
+{
+    <div class="admin-card mb-3 border-danger-subtle"><i class="bi bi-exclamation-triangle text-danger-alto me-1"></i>
+        <strong>Overdue:</strong> the @l.NextDueDate?.ToString("MMM d") payment is more than @v.GraceDays days late (@v.Quote.PaymentsPastDue payment@(v.Quote.PaymentsPastDue == 1 ? "" : "s") past due).</div>
+}
+
+<div class="row g-3 mb-3">
+    @foreach (var (label, value) in new[] { ("Principal remaining", l.PrincipalRemaining), ("Late fees owed", l.FeesOwed), ("Monthly payment", l.MonthlyPayment), ("Payoff today", v.Quote.PayoffAmount) })
+    {
+        <div class="col-6 col-xl-3"><div class="admin-card h-100"><div class="small text-muted-alto">@label</div><div class="fs-5 fw-semibold"><money amount="@value" /></div></div></div>
+    }
+</div>
+
+<div class="admin-card mb-3">
+    <dl class="kv mb-0">
+        <dt>Loan</dt><dd>@l.KindLabel · <money amount="@l.Principal" /> at @l.AprPercent.ToString("0.00")% APR (tier @l.RateTier) for @l.TermMonths months@(l.Purpose == null ? "" : $" · {l.Purpose}")</dd>
+        @if (l.Vehicle != null) { <dt>Vehicle</dt><dd>@l.Vehicle</dd> }
+        <dt>Repaid</dt><dd>@l.PercentPaid% · @l.PaymentsMade payment@(l.PaymentsMade == 1 ? "" : "s") made@(active ? $" · {v.PaymentsRemaining} to go (ends {v.PayoffDate:MMM yyyy})" : "")</dd>
+        <dt>Next payment</dt><dd>@(l.NextDueDate is DateOnly d ? $"{v.Quote.ScheduledAmount:C} due {d:MMM d, yyyy}" : $"Paid in full {Local(l.PaidOffAt)}")</dd>
+        <dt>Autopay</dt><dd>@(l.AutopayEnabled ? $"On, from {Model.AutopayFrom?.DisplayName} ••{Model.AutopayFrom?.Last4}" : "Off")@(l.AutopayAttemptedFor is DateOnly ap ? $" · last tried for {ap:MMM d}" : "")</dd>
+        <dt>Money sent to</dt><dd>@(Model.DisbursedTo == null ? "External (demo history)" : $"{Model.DisbursedTo.DisplayName} ••{Model.DisbursedTo.Last4}")</dd>
+        @if (Model.Application?.DecisionNote != null) { <dt>Decision</dt><dd>@Model.Application.DecisionNote <span class="demo-note">Demo decision, no credit check</span></dd> }
+    </dl>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-xl-7">
+        <div class="admin-card p-0 h-100">
+            <h2 class="h6 p-3 mb-0">Payment history</h2>
+            <div class="table-responsive">
+                <table class="table admin-table mb-0">
+                    <thead><tr><th>Paid</th><th>What</th><th class="text-end">Amount</th><th class="text-end">Interest</th><th class="text-end">Principal</th><th class="text-end">Fees</th><th class="text-end">Principal after</th></tr></thead>
+                    <tbody>
+                        @if (!v.Payments.Any()) { <tr><td colspan="7" class="text-center text-muted-alto py-3">No payments yet.</td></tr> }
+                        @foreach (var p in v.Payments)
+                        {
+                            <tr>
+                                <td class="text-nowrap">@BankTime.ToLocal(p.PaidAt).ToString("MMM d, yyyy")</td>
+                                <td class="small">@(p.Kind switch { LoanPaymentKind.Scheduled => $"Payment {p.InstallmentNumber} (due {p.DueDate:MMM d})", LoanPaymentKind.ExtraPrincipal => "Extra principal", _ => "Payoff" })@(p.ByAutopay ? " · autopay" : "")</td>
+                                <td class="text-end"><money amount="@p.Amount" /></td>
+                                <td class="text-end"><money amount="@p.Interest" /></td>
+                                <td class="text-end"><money amount="@p.Principal" /></td>
+                                <td class="text-end"><money amount="@p.Fees" /></td>
+                                <td class="text-end"><money amount="@p.PrincipalAfter" /></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-5">
+        <div class="admin-card p-0 h-100">
+            <h2 class="h6 p-3 mb-0">Late fees</h2>
+            <div class="table-responsive">
+                <table class="table admin-table mb-0">
+                    <thead><tr><th>Charged</th><th class="text-end">Fee</th><th>For</th><th></th></tr></thead>
+                    <tbody>
+                        @if (!Model.LateFees.Any()) { <tr><td colspan="4" class="text-center text-muted-alto py-3">No late fees.</td></tr> }
+                        @foreach (var f in Model.LateFees)
+                        {
+                            var waive = new ConfirmModalViewModel($"waive{f.Id}", "Waive this late fee",
+                                $"The {f.Amount:C} fee is credited back to the loan ({(l.FeesOwed > 0 ? "it comes off the fees owed" : "it was already paid, so it lowers the principal")}) and {name} gets an alert.",
+                                Url.Action("WaiveFee", new { id = a.Id, feeTransactionId = f.Id })!, "Waive fee", "primary");
+                            <tr>
+                                <td class="text-nowrap">@BankTime.ToLocal(f.Date).ToString("MMM d, yyyy")</td>
+                                <td class="text-end"><money amount="@f.Amount" /></td>
+                                <td class="small">@f.Memo</td>
+                                <td class="text-end">
+                                    @if (f.Status == TransactionStatus.Reversed) { <span class="small text-muted-alto">Waived</span> }
+                                    else if (active)
+                                    {
+                                        <button class="btn btn-admin-ghost btn-sm" data-bs-toggle="modal" data-bs-target="#waive@(f.Id)">Waive</button>
+                                        <partial name="_ConfirmModal" model="waive" />
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (active)
+{
+    <div class="admin-card p-0 mb-3">
+        <h2 class="h6 p-3 mb-0">Schedule from here (@v.PaymentsRemaining payment@(v.PaymentsRemaining == 1 ? "" : "s"))</h2>
+        <div class="table-responsive" style="max-height: 420px">
+            <table class="table admin-table mb-0">
+                <thead><tr><th>#</th><th>Due</th><th class="text-end">Payment</th><th class="text-end">Interest</th><th class="text-end">Principal</th><th class="text-end">Balance after</th></tr></thead>
+                <tbody>
+                    @foreach (var r in v.Upcoming)
+                    {
+                        <tr><td>@r.Number</td><td class="text-nowrap">@r.DueDate.ToString("MMM d, yyyy")</td><td class="text-end"><money amount="@r.Payment" /></td>
+                            <td class="text-end"><money amount="@r.Interest" /></td><td class="text-end"><money amount="@r.Principal" /></td><td class="text-end"><money amount="@r.BalanceAfter" /></td></tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<div class="admin-card p-0">
+    <h2 class="h6 p-3 mb-0">Recent activity</h2>
+    <div class="table-responsive">
+        <table class="table admin-table mb-0">
+            <thead><tr><th>Date</th><th>Transaction</th><th>Type</th><th class="text-end">Amount</th><th class="text-end">Owed after</th></tr></thead>
+            <tbody>
+                @foreach (var t in Model.Recent)
+                {
+                    <tr>
+                        <td class="text-nowrap">@BankTime.ToLocal(t.Date).ToString("MMM d, h:mm tt")</td>
+                        <td><a asp-controller="Transactions" asp-action="Details" asp-route-id="@t.Id">#@t.Id</a> @t.Description</td>
+                        <td>@t.TypeLabel</td>
+                        <td class="text-end"><money amount="@(t.IsCredit ? -t.Amount : t.Amount)" /></td>
+                        <td class="text-end"><money amount="@Math.Max(0m, -t.BalanceAfter)" /></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@if (active) { <partial name="_ConfirmModal" model="adjust" /> }

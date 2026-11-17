@@ -1,15 +1,29 @@
 @model DashboardViewModel
 @{
     ViewData["Title"] = "Dashboard";
+    ViewData["LoanViews"] = Model.LoanViews;   // the loan cards show their next payment
+    var hasDebt = Model.Accounts.Any(a => (a.IsCreditCard || a.IsLoan) && a.Status != AccountStatus.Closed);
+    var open = Model.Accounts.Where(a => a.Status != AccountStatus.Closed).ToList();
+    // Your accounts, in the order people think about them: money you have, then what you owe.
+    // (A paid-off loan stays on the Accounts page; here it would only be clutter.)
+    var ordered = Model.Accounts.Where(a => !(a.IsLoan && a.Status == AccountStatus.Closed)).OrderBy(a => a.Status == AccountStatus.Closed).ThenBy(a => a.IsDepositAccount ? 0 : a.IsCreditCard ? 1 : 2).ThenBy(a => a.AccountType).ThenBy(a => a.OpenedAt).ToList();
 }
 
 <div class="container">
-    @* Greeting + total balance, over the Ridgeline contour lines *@
-    <section class="balance-hero" aria-label="Total balance">
+    @* Greeting + net worth (or the cash total if nothing is owed), over the Ridgeline contour lines *@
+    <section class="balance-hero" aria-label="@(hasDebt ? "Net worth" : "Total balance")">
         <p class="balance-hero-greeting">@Model.Greeting, @Model.FirstName</p>
         <h1 class="visually-hidden">Dashboard</h1>
-        <div class="total-balance"><money amount="@Model.TotalBalance" /></div>
-        <p class="balance-hero-meta">Total across @Model.Accounts.Count(a => a.Status != AccountStatus.Closed) account@(Model.Accounts.Count(a => a.Status != AccountStatus.Closed) == 1 ? "" : "s")</p>
+        @if (hasDebt)
+        {
+            <div class="total-balance"><money amount="@Model.NetWorth" /></div>
+            <p class="balance-hero-meta">Net worth: <money amount="@Model.Assets" /> you have − <money amount="@Model.Owed" /> you owe on cards and loans</p>
+        }
+        else
+        {
+            <div class="total-balance"><money amount="@Model.TotalBalance" /></div>
+            <p class="balance-hero-meta">Total across @open.Count account@(open.Count == 1 ? "" : "s")</p>
+        }
     </section>
 
     <partial name="_QuickActions" />
@@ -20,7 +34,7 @@
         <a asp-controller="Accounts" asp-action="Index" class="small">View all</a>
     </div>
     <div class="row g-4 mb-5">
-        @if (!Model.Accounts.Any())
+        @if (!ordered.Any())
         {
             <div class="col-12">
                 <div class="glass">
@@ -28,7 +42,7 @@
                 </div>
             </div>
         }
-        @foreach (var account in Model.Accounts)
+        @foreach (var account in ordered)
         {
             <div class="col-md-6 col-xl-4"><partial name="_AccountCard" model="account" /></div>
         }
