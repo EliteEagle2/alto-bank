@@ -73,11 +73,14 @@ Built by **Austin Emig** for **Server Sided Web Development**.
 
 | | |
 |---|---|
-| ![Home page](docs/screenshots/01-home.png) Public home page | ![Account details](docs/screenshots/03-account-details.png) Account details |
+| ![Home page](docs/screenshots/01-home.png) Public home page | ![Dashboard](docs/screenshots/02-dashboard.png) Dashboard with net worth |
+| ![Account details](docs/screenshots/03-account-details.png) Account details | ![Alto Peak credit card](docs/screenshots/16-credit-card.png) Alto Peak credit card |
+| ![Auto loan and its schedule](docs/screenshots/17-loan.png) Auto loan and its schedule | ![Loan calculator](docs/screenshots/18-loan-calculator.png) Loan calculator |
 | ![Send and request](docs/screenshots/04-send-and-request.png) Send & request | ![Bill Pay](docs/screenshots/05-bill-pay.png) Bill Pay |
 | ![Upcoming calendar](docs/screenshots/06-upcoming-calendar.png) Upcoming calendar | ![Insights](docs/screenshots/13-insights.png) Spending insights |
 | ![Budgets](docs/screenshots/14-budgets.png) Budgets | ![Profile and settings](docs/screenshots/07-profile-settings.png) Profile & settings |
-| ![Admin console](docs/screenshots/08-admin-console.png) Admin console | ![Staff page](docs/screenshots/09-admin-staff.png) Staff (Owner only) |
+| ![Admin console](docs/screenshots/08-admin-console.png) Admin console | ![Admin loans](docs/screenshots/19-admin-loans.png) Admin: loans |
+| ![Staff page](docs/screenshots/09-admin-staff.png) Staff (Owner only) | |
 
 On a phone:
 
@@ -86,6 +89,8 @@ On a phone:
   <img src="docs/screenshots/12-mobile-account-details.png" width="200" alt="Account details on a phone" />
   <img src="docs/screenshots/15-mobile-insights.png" width="200" alt="Insights on a phone" />
   <img src="docs/screenshots/11-mobile-upcoming.png" width="200" alt="Upcoming calendar on a phone" />
+  <img src="docs/screenshots/20-mobile-credit-card.png" width="200" alt="Credit card on a phone" />
+  <img src="docs/screenshots/21-mobile-loan.png" width="200" alt="Loan on a phone" />
 </p>
 
 ## How it's built
@@ -176,6 +181,16 @@ B=http://localhost:5299 TEST_DB="C:/temp/alto-test.db" bash tests/run_all.sh
 ```
 
 Each suite's log is saved to `test-logs/`.
+
+## Known issues / next up
+
+- **"May" on Maya's dashboard**: her demo profile sets the preferred name "May", so she's greeted as "May". It's on
+  purpose, but it reads like a cut-off name in screenshots; use her full name in the seed or show "May (Maya)".
+- **Proof of the fixed seed**: demo account, card and loan numbers come from a fixed seed and were checked by hand to match
+  across three reseeds; an automated test that reseeds twice and compares them is still to do.
+- **Wider merchant pool**: seeded card history draws from 13 merchants, so the same names repeat across months.
+- **Payment text on phones**: on narrow screens the "Pay from" account text and some payment option descriptions are cut off.
+- **Credit-used bar colors**: the bar turns amber from 30% of the limit, which clashes with amber meaning "the main action".
 
 ## More detail
 
