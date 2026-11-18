@@ -131,6 +131,34 @@ public class Transaction
     [NotMapped]
     public string TypeLabel => LabelFor(Type);
 
+    /// <summary>
+    /// The activity-list icon for each kind of transaction (Bootstrap Icons). account-details.js has the same map for
+    /// rows added by "Load more"; keep the two in step.
+    /// </summary>
+    public static string IconFor(TransactionType type) => type switch
+    {
+        TransactionType.Deposit => "bi-arrow-down-left",
+        TransactionType.Withdrawal => "bi-arrow-up-right",
+        TransactionType.TransferIn or TransactionType.TransferOut => "bi-arrow-left-right",
+        TransactionType.Interest => "bi-graph-up-arrow",
+        TransactionType.AdjustmentCredit or TransactionType.AdjustmentDebit => "bi-sliders",
+        TransactionType.PaymentSent => "bi-send",
+        TransactionType.PaymentReceived => "bi-person-down",
+        TransactionType.BillPayment => "bi-receipt",
+        TransactionType.CheckDeposit => "bi-camera",
+        TransactionType.ProvisionalCredit => "bi-shield-check",
+        TransactionType.ProvisionalClawback => "bi-shield-x",
+        TransactionType.CardPurchase => "bi-bag",
+        TransactionType.CardPayment => "bi-credit-card-2-back",
+        TransactionType.InterestCharge => "bi-percent",
+        TransactionType.LateFee => "bi-exclamation-diamond",
+        TransactionType.FeeWaiver => "bi-patch-check",
+        TransactionType.CashBackCredit or TransactionType.RewardRedemption => "bi-gift",
+        TransactionType.LoanPayment => "bi-bank",
+        TransactionType.LoanDisbursement or TransactionType.LoanProceeds => "bi-cash-coin",
+        _ => "bi-arrow-counterclockwise"   // reversals
+    };
+
     public static string LabelFor(TransactionType type) => type switch
     {
         TransactionType.TransferIn => "Transfer In",

@@ -178,7 +178,7 @@ public class CardService : ICardService
         string number;
         do
         {
-            var body = Prefix + string.Concat(Enumerable.Range(0, 11).Select(_ => RandomNumberGenerator.GetInt32(10)));
+            var body = Prefix + string.Concat(Enumerable.Range(0, 11).Select(_ => SeededRandom.Next(10)));   // fixed while seeding (Services/SeededRandom.cs)
             number = body + LuhnCheckDigit(body);
         } while (await _db.Cards.AnyAsync(c => c.CardNumber == number) || _db.Cards.Local.Any(c => c.CardNumber == number));
         return number;

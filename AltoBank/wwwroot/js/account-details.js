@@ -68,11 +68,15 @@
     const pageSize = parseInt(root.dataset.pageSize, 10) || 20;
     const state = { page: 1, loaded: list.querySelectorAll('.tx-row').length, total: parseInt(root.dataset.total, 10) || 0 };
 
+    // Same map as Transaction.IconFor (Models/Transaction.cs).
     const ICONS = {
         Deposit: 'bi-arrow-down-left', Withdrawal: 'bi-arrow-up-right', TransferIn: 'bi-arrow-left-right', TransferOut: 'bi-arrow-left-right',
-        Interest: 'bi-percent', AdjustmentCredit: 'bi-sliders', AdjustmentDebit: 'bi-sliders',
+        Interest: 'bi-graph-up-arrow', AdjustmentCredit: 'bi-sliders', AdjustmentDebit: 'bi-sliders',
         PaymentSent: 'bi-send', PaymentReceived: 'bi-person-down', BillPayment: 'bi-receipt', CheckDeposit: 'bi-camera',
-        ProvisionalCredit: 'bi-shield-exclamation', ProvisionalClawback: 'bi-shield-exclamation'
+        ProvisionalCredit: 'bi-shield-check', ProvisionalClawback: 'bi-shield-x',
+        CardPurchase: 'bi-bag', CardPayment: 'bi-credit-card-2-back', InterestCharge: 'bi-percent', LateFee: 'bi-exclamation-diamond',
+        FeeWaiver: 'bi-patch-check', CashBackCredit: 'bi-gift', RewardRedemption: 'bi-gift',
+        LoanPayment: 'bi-bank', LoanDisbursement: 'bi-cash-coin', LoanProceeds: 'bi-cash-coin'
     };
     // Dates follow the BANK's time zone and calendar (not the browser's), same as the server-rendered rows.
     const TZ = root.dataset.tz || 'America/New_York';
@@ -240,8 +244,15 @@
         $('[data-sum="in"]').textContent = '+' + fmt(data.moneyIn);
         $('[data-sum="out"]').textContent = '−' + fmt(data.moneyOut);
         const net = $('[data-sum="net"]');
-        net.textContent = (data.net >= 0 ? '+' : '−') + fmt(data.net);
-        net.className = data.net > 0 ? 'amount-credit' : data.net < 0 ? 'amount-debit' : '';
+        if (root.dataset.credit === 'true') {
+            // A card or loan: the change in what's OWED over the range (charges minus payments), in plain ink.
+            const owed = data.moneyOut - data.moneyIn;
+            net.textContent = (owed > 0 ? '+' : owed < 0 ? '−' : '') + fmt(owed);
+            net.className = '';
+        } else {
+            net.textContent = (data.net >= 0 ? '+' : '−') + fmt(data.net);
+            net.className = data.net > 0 ? 'amount-credit' : data.net < 0 ? 'amount-debit' : '';
+        }
         $('[data-count]').textContent = `${data.totalCount} transaction${data.totalCount === 1 ? '' : 's'}`;
     }
 

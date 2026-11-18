@@ -248,6 +248,8 @@ public class InsightsService : IInsightsService
         TransactionCategory.FoodAndDining => "dining",
         TransactionCategory.BillsAndUtilities => "bills and utilities",
         TransactionCategory.Other => "other things",
+        TransactionCategory.FeesAndInterest => "fees and interest",
+        TransactionCategory.Gas => "gas and transport",
         _ => Categories.Label(c).ToLowerInvariant()
     };
 

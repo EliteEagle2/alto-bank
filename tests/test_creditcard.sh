@@ -56,6 +56,13 @@ has "Rewards & autopay tab" "$P" 'data-bs-target="#rewards"'
 has "Card tab (Alto Peak)" "$P" "Alto Peak ••"
 hasnt "no Direct Deposit tab on a card" "$P" 'data-bs-target="#direct-deposit"'
 has "rows show what's owed, not a negative balance" "$P" 'tx-bal">Owed'
+has "card purchases have their own icon" "$P" 'bi bi-bag'
+has "summary shows the change in what you owe" "$P" 'Change in what you owe'
+hasnt "no red net on a card" "$P" 'acct-label">Net<'
+check "seeded history: varied amounts (almost every purchase a different amount)" "$(sql "SELECT COUNT(DISTINCT Amount) * 10 >= COUNT(*) * 8 FROM Transactions WHERE AccountId = $JCARD AND Type = 'CardPurchase'")" 1
+# Bank time is UTC-4 (summer) or UTC-5 (winter): a purchase is inside 7 AM-10 PM in one of them.
+check "seeded purchases between 7 AM and 10 PM bank time" "$(sql "SELECT COUNT(*) FROM Transactions WHERE Type = 'CardPurchase' AND AccountId IN ($JCARD, $MCARD) AND Date < date('now', '-1 day') AND NOT (CAST(strftime('%H', Date, '-4 hours') AS INT) BETWEEN 7 AND 22 OR CAST(strftime('%H', Date, '-5 hours') AS INT) BETWEEN 7 AND 22)")" 0
+check "statement balances differ month to month" "$(sql "SELECT COUNT(DISTINCT StatementBalance) = COUNT(*) FROM CreditCardStatements WHERE AccountId = $JCARD")" 1
 has "statement links open the printable view" "$P" "/credit-card/statements/"
 JS=$(latest $JCARD)
 SP=$(curl -s -b $J $B/credit-card/statements/$JS)

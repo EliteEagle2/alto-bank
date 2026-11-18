@@ -5,20 +5,7 @@
    then back here), which account-details.js sends to the JSON API instead so the page doesn't reload. *@
 @{
     var t = Model.Transaction;
-    var icon = t.Type switch
-    {
-        TransactionType.Deposit => "bi-arrow-down-left",
-        TransactionType.Withdrawal => "bi-arrow-up-right",
-        TransactionType.TransferIn or TransactionType.TransferOut => "bi-arrow-left-right",
-        TransactionType.Interest => "bi-percent",
-        TransactionType.AdjustmentCredit or TransactionType.AdjustmentDebit => "bi-sliders",
-        TransactionType.PaymentSent => "bi-send",
-        TransactionType.PaymentReceived => "bi-person-down",
-        TransactionType.BillPayment => "bi-receipt",
-        TransactionType.CheckDeposit => "bi-camera",
-        TransactionType.ProvisionalCredit or TransactionType.ProvisionalClawback => "bi-shield-exclamation",
-        _ => "bi-arrow-counterclockwise"
-    };
+    var icon = Transaction.IconFor(t.Type);
     var reversed = t.Status == TransactionStatus.Reversed;
     var returnUrl = $"{Context.Request.Path}{Context.Request.QueryString}#activity";   // keeps any filters
 }

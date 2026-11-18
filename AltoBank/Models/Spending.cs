@@ -12,7 +12,9 @@ public enum TransactionCategory
     Shopping,
     BillsAndUtilities,
     Entertainment,
+    FeesAndInterest,   // interest charged and late fees (card and loan); a fee waiver is a refund here
     Transfers,
+    DebtPayments,      // paying your own card or loan: money moving, not spending (like Transfers)
     Income,
     Other
 }
@@ -49,17 +51,20 @@ public static class Categories
     public static readonly TransactionCategory[] Spending =
     {
         TransactionCategory.FoodAndDining, TransactionCategory.Groceries, TransactionCategory.Gas, TransactionCategory.Shopping,
-        TransactionCategory.BillsAndUtilities, TransactionCategory.Entertainment, TransactionCategory.Other
+        TransactionCategory.BillsAndUtilities, TransactionCategory.Entertainment, TransactionCategory.FeesAndInterest, TransactionCategory.Other
     };
 
     public static readonly TransactionCategory[] All = Enum.GetValues<TransactionCategory>();
 
-    public static bool IsSpending(TransactionCategory c) => c is not (TransactionCategory.Income or TransactionCategory.Transfers);
+    public static bool IsSpending(TransactionCategory c) => c is not (TransactionCategory.Income or TransactionCategory.Transfers or TransactionCategory.DebtPayments);
 
     public static string Label(TransactionCategory c) => c switch
     {
         TransactionCategory.FoodAndDining => "Food & Dining",
         TransactionCategory.BillsAndUtilities => "Bills & Utilities",
+        TransactionCategory.Gas => "Gas & Transport",
+        TransactionCategory.FeesAndInterest => "Fees & Interest",
+        TransactionCategory.DebtPayments => "Debt payments",
         _ => c.ToString()
     };
 
@@ -71,7 +76,9 @@ public static class Categories
         TransactionCategory.Shopping => "bi-bag",
         TransactionCategory.BillsAndUtilities => "bi-lightning-charge",
         TransactionCategory.Entertainment => "bi-film",
+        TransactionCategory.FeesAndInterest => "bi-percent",
         TransactionCategory.Transfers => "bi-arrow-left-right",
+        TransactionCategory.DebtPayments => "bi-credit-card-2-back",
         TransactionCategory.Income => "bi-cash-stack",
         _ => "bi-three-dots"
     };
@@ -89,8 +96,10 @@ public static class Categories
         TransactionCategory.Shopping => "#c98500",
         TransactionCategory.BillsAndUtilities => "#d55181",
         TransactionCategory.Entertainment => "#9085e9",
+        TransactionCategory.FeesAndInterest => "#2f9fb3",   // 7th hue, checked in palette order (after Entertainment)
         TransactionCategory.Income => "#4CC38A",
         TransactionCategory.Transfers => "#8FB8E8",
+        TransactionCategory.DebtPayments => "#A7B3C9",
         _ => "#7f8aa0"
     };
 
@@ -138,7 +147,13 @@ public static class CategoryRules
         ("tickets", TransactionCategory.Entertainment), ("games", TransactionCategory.Entertainment),
 
         ("shopnest", TransactionCategory.Shopping), ("online order", TransactionCategory.Shopping), ("outfitters", TransactionCategory.Shopping),
-        ("pharmacy", TransactionCategory.Shopping), ("store", TransactionCategory.Shopping),
+        ("pharmacy", TransactionCategory.Shopping), ("store", TransactionCategory.Shopping), ("bookshop", TransactionCategory.Shopping),
+        ("books", TransactionCategory.Shopping), ("hardware", TransactionCategory.Shopping), ("dry clean", TransactionCategory.Shopping),
+        ("cleaners", TransactionCategory.Shopping), ("laundry", TransactionCategory.Shopping),
+
+        ("fitness", TransactionCategory.Entertainment), ("gym", TransactionCategory.Entertainment), ("yoga", TransactionCategory.Entertainment),
+
+        ("parking", TransactionCategory.Gas), ("transit", TransactionCategory.Gas), ("toll", TransactionCategory.Gas), ("rideshare", TransactionCategory.Gas),
     };
 
     public static TransactionCategory For(TransactionType type, string? description)
@@ -149,10 +164,11 @@ public static class CategoryRules
             return TransactionCategory.Transfers;
         if (type is TransactionType.Interest or TransactionType.CheckDeposit or TransactionType.CashBackCredit or TransactionType.RewardRedemption)
             return TransactionCategory.Income;
-        if (type == TransactionType.CardPayment) return TransactionCategory.Transfers;   // paying your own card isn't spending
+        // Paying your own card or loan: its own non-spending category, so Insights can show it without counting it twice.
+        if (type is TransactionType.CardPayment or TransactionType.LoanPayment) return TransactionCategory.DebtPayments;
         // Borrowing and repaying a loan moves money between the customer's own accounts: not income, not spending.
-        if (type is TransactionType.LoanDisbursement or TransactionType.LoanProceeds or TransactionType.LoanPayment) return TransactionCategory.Transfers;
-        if (type is TransactionType.InterestCharge or TransactionType.LateFee or TransactionType.FeeWaiver) return TransactionCategory.Other;
+        if (type is TransactionType.LoanDisbursement or TransactionType.LoanProceeds) return TransactionCategory.Transfers;
+        if (type is TransactionType.InterestCharge or TransactionType.LateFee or TransactionType.FeeWaiver) return TransactionCategory.FeesAndInterest;
         // Every Bill Pay payee is a bill (utilities, phone, rent, insurance, credit card). "Test Gas Co" is a gas
         // UTILITY bill, not fuel, so the merchant keywords below don't apply.
         if (type == TransactionType.BillPayment) return TransactionCategory.BillsAndUtilities;

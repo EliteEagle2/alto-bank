@@ -21,14 +21,33 @@ Every suite runs against a separate test server on a freshly reset scratch datab
 | billpay | payees, bill pay, scheduled transfers, the scheduler | 116 |
 | staff | Owner role, staff page, admins can't act on their own records | 56 |
 | profile | personal info, security, alert settings, preferences | 59 |
-| insights | categories, Insights page + API, budgets, budget alerts | 127 |
+| insights | categories, Insights page + API, budgets, budget alerts, Fees & Interest and Debt payments | 135 |
 | checkdeposit | uploads, limits, duplicates, races, pending balance, review queue | 121 |
 | disputes | eligibility, form rules, provisional credit, partial / P2P refunds, clawback overdraft, races | 134 |
-| creditcard | simulated decisions, limit + simultaneous purchases, statement cycle, grace period, interest, late fee + waive, autopay, cash back, card disputes, admin actions | 210 |
+| creditcard | simulated decisions, limit + simultaneous purchases, statement cycle, grace period, interest, late fee + waive, autopay, cash back, card disputes, admin actions, varied seeded history | 216 |
 | loans | calculator math to the cent (independent exact-integer schedule), simulated decisions, offer / accept / decline / expiry, approve + counter-offer, disbursement on both sides, scheduled / extra principal / payoff, final payment to $0.00, late fee + overdue + waive, autopay success / failure / retry, admin adjustments and guards, net worth | 278 |
-| **Total** | | **1,565** |
+| **Total** | | **1,579** |
 
 ## Phase 2
+
+### UI review fixes
+
+- **Seed data**: card history is generated from a fixed random seed (6-12 purchases a month from 13 merchants with
+  their own price ranges, at times from 7 AM to 10 PM), so every month and statement balance is different but a reseed
+  always gives the same history. Every seeded account, card and loan number also comes from a fixed seed
+  (`Services/SeededRandom.cs`, used only while the seeder runs), so screenshots and the README stay correct.
+- **Categories**: new **Fees & Interest** (interest charged, late fees, waivers) and **Debt payments** (card and loan
+  payments, both sides; not spending, like Transfers); new merchant rules for bookshops, hardware and dry cleaning
+  (Shopping), fitness (Entertainment) and parking (Gas, now labelled "Gas & Transport"). Migration
+  `CategoriesFeesAndDebt` recategorizes existing rows; the seeder re-runs the merchant rules on what's left in Other.
+- **Activity list**: each transaction type has its own icon (card purchase, payment, interest, late fee, fee waived, cash
+  back, loan payment, loan funds, provisional credit / clawback); on phones a long title wraps to two lines and the amount
+  column keeps its width; a card or loan shows "Owed +$X" (the change in what you owe) instead of a red "Net".
+- **Pay card / pay loan**: the chosen option uses the customer's own accent color.
+- **UI pass**: one main focus per screen, one spacing scale, amber only for the main action (blue for navigation and
+  selection, red for anything overdue).
+- **Fixes**: a dispute submitted twice at the same instant now opens the dispute that was created instead of showing
+  the form again; parallel test requests use their own cookie jars.
 
 ### Feature 7: Loans, personal and auto (simulated credit)
 

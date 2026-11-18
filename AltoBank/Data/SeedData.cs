@@ -94,6 +94,10 @@ public static class SeedData
         var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
         var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
 
+        // Demo account, card and loan numbers come from a FIXED seed, so every reseed gives the same numbers
+        // (screenshots and the README stay correct). Only this method's own flow is affected (Services/SeededRandom.cs).
+        using var fixedNumbers = AltoBank.Services.SeededRandom.Use(20261117);
+
         // Apply any pending migrations (creates altobank.db on first run).
         await db.Database.MigrateAsync();
 
@@ -142,7 +146,9 @@ public static class SeedData
     ///   Maya:   pays only the minimum (so interest is charged), and one payment was late (late fee, not waived).
     ///   Samuel: a card application waiting for staff review.
     /// Payments come "from an external bank" (seed only) so the checking accounts' running balances aren't rewritten.
-    /// Purchases dated in the current month are uncategorized ("Other") so the seeded budgets keep their states.
+    /// Purchases are generated from a FIXED random seed: 6-12 per statement period from a pool of real-looking
+    /// merchants, each with its own price range, at times spread from 7 AM to 10 PM bank time, so every month (and every
+    /// statement balance) is different but a reseed always gives the same history.
     /// </summary>
     private static async Task EnsureCreditCardDemoDataAsync(IServiceProvider services, ApplicationDbContext db, UserManager<ApplicationUser> userManager)
     {
@@ -154,7 +160,6 @@ public static class SeedData
         if (jordan == null || maya == null || sam == null) return;
         var bank = services.GetRequiredService<AltoBank.Services.IBankService>();
         var today = AltoBank.Services.BankTime.Today;
-        var monthStart = new DateOnly(today.Year, today.Month, 1);
 
         // Statement closes: c3 is 10 days ago (kept on day 1-28), c2 and c1 a month apart before it.
         var c3 = today.AddDays(-10);
@@ -207,8 +212,8 @@ public static class SeedData
             return a;
         }
 
-        // Replays one card's history: purchases[(day, merchant, amount)], payments[(day, amount or null = "the minimum")].
-        async Task Replay(Account card, string userId, (DateOnly Day, string Merchant, decimal Amount)[] purchases,
+        // Replays one card's history: purchases[(day, merchant, amount, time)], payments[(day, amount from the latest statement)].
+        async Task Replay(Account card, string userId, (DateOnly Day, string Merchant, decimal Amount, int Hour, int Minute)[] purchases,
                           (DateOnly Day, Func<CreditCardStatement, decimal> Amount)[] payments)
         {
             var lastId = await db.Transactions.Where(t => t.AccountId == card.Id).Select(t => (int?)t.Id).MaxAsync() ?? 0;
@@ -223,13 +228,19 @@ public static class SeedData
                     st.ClosedAt = At(day, 0, 30);
                 await db.SaveChangesAsync();
                 lastId = await db.Transactions.Where(t => t.AccountId == card.Id).Select(t => (int?)t.Id).MaxAsync() ?? lastId;
-                var hour = 9;
-                foreach (var p in purchases.Where(p => p.Day == day))
+                // Purchases in time order; a payment (at 6 PM) goes between the ones before and after it, so every row's
+                // running "Owed" matches the order the rows are shown in.
+                async Task Buy(IEnumerable<(DateOnly Day, string Merchant, decimal Amount, int Hour, int Minute)> list)
                 {
-                    var r = await bank.CardPurchaseAsync(userId, card.Id, p.Merchant, p.Amount);
-                    if (!r.Success) Console.WriteLine($"  Credit card demo: purchase skipped ({r.Message}).");
-                    lastId = await Backdate(card.Id, lastId, At(day, hour++, 17));
+                    foreach (var p in list.OrderBy(p => p.Hour).ThenBy(p => p.Minute))
+                    {
+                        var r = await bank.CardPurchaseAsync(userId, card.Id, p.Merchant, p.Amount);
+                        if (!r.Success) Console.WriteLine($"  Credit card demo: purchase skipped ({r.Message}).");
+                        lastId = await Backdate(card.Id, lastId, At(day, p.Hour, p.Minute));
+                    }
                 }
+                var todays = purchases.Where(p => p.Day == day).ToList();
+                await Buy(todays.Where(p => p.Hour < 18));
                 foreach (var pay in payments.Where(p => p.Day == day))
                 {
                     db.ChangeTracker.Clear();
@@ -247,12 +258,34 @@ public static class SeedData
                     await db.SaveChangesAsync();
                     lastId = await db.Transactions.Where(t => t.AccountId == card.Id).MaxAsync(t => t.Id);
                 }
+                await Buy(todays.Where(p => p.Hour >= 18));
             }
             // Today's run (closes the statement that ended yesterday, if any) is left to the real scheduler.
         }
 
-        // Current month: uncategorized merchants only (the seeded budgets are sized on this month's spending).
-        string M(DateOnly day, string categorized, string other) => day >= monthStart ? other : categorized;
+        // Merchants and their usual price ranges (every one is auto-categorized by CategoryRules).
+        var merchants = new (string Name, decimal Min, decimal Max)[]
+        {
+            ("Summit Grocer", 38m, 142m), ("Ridgeline Coffee", 4.25m, 13.80m), ("Valley Fuel", 31m, 68m), ("Lantern Bistro", 24m, 86m),
+            ("ShopNest online order", 16m, 175m), ("Harbor Bookshop", 11m, 52m), ("Alpine Fitness Club", 39.99m, 39.99m),
+            ("Trailhead Parking", 6m, 24m), ("Peak Hardware Supply", 14m, 128m), ("Cedar Dry Cleaning", 15m, 46m),
+            ("Northgate Outfitters", 45m, 240m), ("Basecamp Cinema", 13m, 38m), ("Pine Street Pharmacy", 7m, 58m),
+        };
+        // count purchases on random days of [start, end] (never today or later), 7 AM-10 PM, amounts scaled by "scale".
+        List<(DateOnly Day, string Merchant, decimal Amount, int Hour, int Minute)> Period(Random rng, DateOnly start, DateOnly end, int count, decimal scale)
+        {
+            var list = new List<(DateOnly, string, decimal, int, int)>();
+            var last = end < today ? end : today.AddDays(-1);
+            var days = last.DayNumber - start.DayNumber;
+            if (days < 1) return list;
+            for (var i = 0; i < count; i++)
+            {
+                var (name, min, max) = merchants[rng.Next(merchants.Length)];
+                var amount = decimal.Round((min + (max - min) * (decimal)rng.NextDouble()) * (min == max ? 1m : scale), 2, MidpointRounding.AwayFromZero);
+                list.Add((start.AddDays(rng.Next(days + 1)), name, amount, rng.Next(7, 22), rng.Next(60)));
+            }
+            return list;
+        }
         var j = Customers.First(c => c.Email == DemoEmail);
         var m = Customers.First(c => c.Email == "maya@altobank.com");
         var s3 = Customers.First(c => c.Email == "sam@altobank.com");
@@ -260,17 +293,10 @@ public static class SeedData
         // ----- Jordan: paid in full every month -----
         if (await OpenCard(jordan, j, j.Rent, 400, 6000m, "4410274821", CardAutopay.StatementBalance) is { } jc)
         {
-            var p = new List<(DateOnly, string, decimal)>();
+            var rng = new Random(j.RandomSeed + 600);   // fixed: the same history on every reseed
+            var p = new List<(DateOnly Day, string Merchant, decimal Amount, int Hour, int Minute)>();
             foreach (var (start, end) in new[] { (opened, c1), (c1.AddDays(1), c2), (c2.AddDays(1), c3), (c3.AddDays(1), today.AddDays(-1)) })
-            {
-                var len = end.DayNumber - start.DayNumber;
-                if (len < 4) continue;
-                p.Add((start.AddDays(1), M(start.AddDays(1), "Summit Grocer", "Peak Hardware Supply"), 86.42m));
-                p.Add((start.AddDays(len / 3), M(start.AddDays(len / 3), "Ridgeline Coffee", "Trailhead Parking"), 12.75m));
-                p.Add((start.AddDays(len / 2), M(start.AddDays(len / 2), "ShopNest online order", "Alpine Fitness Club"), 64.99m));
-                p.Add((start.AddDays(2 * len / 3), M(start.AddDays(2 * len / 3), "Valley Fuel", "Harbor Bookshop"), 41.30m));
-                p.Add((end.AddDays(-1), M(end.AddDays(-1), "Lantern Bistro", "Cedar Dry Cleaning"), 38.60m));
-            }
+                p.AddRange(Period(rng, start, end, rng.Next(6, 11), 1m));
             await Replay(jc, jordan.Id, p.ToArray(), new (DateOnly, Func<CreditCardStatement, decimal>)[]
             {
                 (c1.AddDays(18), s => s.StatementBalance),   // full statement balance, before the due date
@@ -281,16 +307,17 @@ public static class SeedData
         // ----- Maya: carries a balance (minimum payments), one late payment -----
         if (await OpenCard(maya, m, m.Rent, 400, 4000m, "5520831402", CardAutopay.None) is { } mc)
         {
-            var p = new List<(DateOnly, string, decimal)>
+            // A bigger first month (furniture for a new place), then lighter months: she pays only the minimum, so
+            // the balance carries and interest shows on statements 2 and 3.
+            var rng = new Random(m.RandomSeed + 600);   // fixed: the same history on every reseed
+            var p = new List<(DateOnly Day, string Merchant, decimal Amount, int Hour, int Minute)>
             {
-                (opened.AddDays(3), M(opened.AddDays(3), "Northgate Outfitters", "Peak Hardware Supply"), 412.80m),
-                (opened.AddDays(9), M(opened.AddDays(9), "Summit Grocer", "Alpine Fitness Club"), 132.15m),
-                (opened.AddDays(16), M(opened.AddDays(16), "Riverbend Furniture store", "Cedar Dry Cleaning"), 389.00m),
-                (c1.AddDays(5), M(c1.AddDays(5), "Lantern Bistro", "Trailhead Parking"), 74.20m),
-                (c1.AddDays(14), M(c1.AddDays(14), "Valley Fuel", "Harbor Bookshop"), 52.10m),
-                (c2.AddDays(6), M(c2.AddDays(6), "ShopNest online order", "Peak Hardware Supply"), 118.45m),
-                (c3.AddDays(3), M(c3.AddDays(3), "Summit Grocer", "Alpine Fitness Club"), 46.90m),
+                (opened.AddDays(4), "Riverbend Furniture store", 489.00m, 14, 22),
             };
+            p.AddRange(Period(rng, opened, c1, rng.Next(9, 13), 1.4m));
+            p.AddRange(Period(rng, c1.AddDays(1), c2, rng.Next(6, 10), 1m));
+            p.AddRange(Period(rng, c2.AddDays(1), c3, rng.Next(5, 9), 0.9m));
+            p.AddRange(Period(rng, c3.AddDays(1), today.AddDays(-1), rng.Next(3, 7), 1m));
             await Replay(mc, maya.Id, p.ToArray(), new (DateOnly, Func<CreditCardStatement, decimal>)[]
             {
                 (c1.AddDays(20), s => s.MinimumPayment),   // on time, minimum only -> interest next statement

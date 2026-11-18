@@ -72,7 +72,16 @@
             <div class="activity-summary" aria-live="polite">
                 <div><span class="acct-label">@(Model.ShowsOwed ? "Payments & credits" : "Money in")</span><span class="amount-credit" data-sum="in">+@Model.MoneyIn.ToString("C")</span></div>
                 <div><span class="acct-label">@(Model.ShowsOwed ? "Charges" : "Money out")</span><span class="amount-debit" data-sum="out">−@Model.MoneyOut.ToString("C")</span></div>
-                <div><span class="acct-label">Net</span><span data-sum="net"><money amount="@(Model.MoneyIn - Model.MoneyOut)" colorize="true" show-sign="true" /></span></div>
+                @if (Model.ShowsOwed)
+                {
+                    @* A card or loan: how much what you OWE changed over the range (charges minus payments), not a red "net". *@
+                    var owedChange = Model.MoneyOut - Model.MoneyIn;
+                    <div title="Change in what you owe for these dates"><span class="acct-label">Owed</span><span data-sum="net">@(owedChange > 0 ? "+" : owedChange < 0 ? "−" : "")@Math.Abs(owedChange).ToString("C")</span></div>
+                }
+                else
+                {
+                    <div><span class="acct-label">Net</span><span data-sum="net"><money amount="@(Model.MoneyIn - Model.MoneyOut)" colorize="true" show-sign="true" /></span></div>
+                }
                 <div class="ms-auto text-muted-alto small" data-count>@Model.TotalCount transactions</div>
             </div>
 

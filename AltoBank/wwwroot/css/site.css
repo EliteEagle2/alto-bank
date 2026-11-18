@@ -1942,3 +1942,15 @@ body[data-theme-accent="violet"] { --select: #F2B544; --select-rgb: 242, 181, 68
     .acct-balances > div:not(:first-child) { padding-left: 0; border-left: 0; }
     .acct-actions .btn-alto { flex: 1 1 100%; }
 }
+
+/* Pay card / pay loan: the chosen option takes the customer's own accent color (their theme), not a fixed gold. */
+.pay-option:has(input:checked) { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.pay-option .form-check-input:checked { background-color: var(--primary); border-color: var(--primary); }
+
+/* Activity rows on phones: a long title wraps to two lines instead of being cut off, and the amount column keeps its width. */
+.tx-amounts { flex: 0 0 auto; }
+@media (max-width: 575.98px) {
+    .tx-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3; }
+    .tx-main { align-items: flex-start; }
+    .tx-icon, .tx-caret { margin-top: .15rem; }
+}

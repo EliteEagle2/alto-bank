@@ -88,6 +88,7 @@ public partial class BankService
         from.Balance -= amount;
         card.Balance += amount;
         var outLeg = AddTransaction(from, TransactionType.TransferOut, amount, $"Payment to {card.DisplayName} ••{card.Last4}", counterpartyId: card.Id);
+        outLeg.Category = TransactionCategory.DebtPayments;   // the checking side of paying your own card
         var inLeg = AddTransaction(card, TransactionType.CardPayment, amount,
             autopay ? $"Autopay from {from.DisplayName} ••{from.Last4}" : $"Payment from {from.DisplayName} ••{from.Last4}, thank you", counterpartyId: from.Id);
         await _db.SaveChangesAsync();

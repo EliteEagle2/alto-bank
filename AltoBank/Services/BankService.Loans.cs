@@ -239,6 +239,7 @@ public partial class BankService
         from.Balance -= amount;
         account.Balance += amount;
         var outLeg = AddTransaction(from, TransactionType.TransferOut, amount, $"Payment to {account.DisplayName} ••{account.Last4}", counterpartyId: account.Id);
+        outLeg.Category = TransactionCategory.DebtPayments;   // the checking side of paying your own loan
         var label = kind switch
         {
             LoanPaymentKind.Payoff => "Loan payoff",

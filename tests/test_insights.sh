@@ -31,7 +31,15 @@ rule "Rent payment" "= 'Rent payment'" BillsAndUtilities
 rule "Electric bill" "= 'Electric bill'" BillsAndUtilities
 rule "Payroll (Keystone Logistics: no 'Gas'/'Shopping' false match)" "LIKE 'Payroll - Keystone%'" Income
 rule "Interest earned" "= 'Interest earned'" Income
-check "every transfer leg is Transfers" "$(sql "SELECT COUNT(*) FROM Transactions WHERE Type IN ('TransferIn','TransferOut') AND Category <> 'Transfers'")" 0
+check "every transfer leg is Transfers (except paying your own card or loan)" "$(sql "SELECT COUNT(*) FROM Transactions t WHERE Type IN ('TransferIn','TransferOut') AND Category <> 'Transfers' AND NOT (Type = 'TransferOut' AND Category = 'DebtPayments' AND CounterpartyAccountId IN (SELECT Id FROM Accounts WHERE AccountType IN ('CreditCard','Loan')))")" 0
+check "paying your own card or loan is Debt payments (both sides)" "$(sql "SELECT COUNT(*) FROM Transactions WHERE Type IN ('CardPayment','LoanPayment') AND Category <> 'DebtPayments'")" 0
+check "interest charged and late fees are Fees & Interest" "$(sql "SELECT COUNT(*) FROM Transactions WHERE Type IN ('InterestCharge','LateFee','FeeWaiver') AND CategoryOverridden = 0 AND Category <> 'FeesAndInterest'")" 0
+check "no seeded card purchase is left in Other" "$(sql "SELECT COUNT(*) FROM Transactions WHERE Type = 'CardPurchase' AND Category = 'Other'")" 0
+rule "Bookshop" "= 'Harbor Bookshop'" Shopping
+rule "Fitness" "= 'Alpine Fitness Club'" Entertainment
+rule "Parking" "= 'Trailhead Parking'" Gas
+rule "Hardware" "= 'Peak Hardware Supply'" Shopping
+rule "Dry cleaning" "= 'Cedar Dry Cleaning'" Shopping
 check "every bill payment is Bills & Utilities" "$(sql "SELECT COUNT(*) FROM Transactions WHERE Type = 'BillPayment' AND Category <> 'BillsAndUtilities'")" 0
 check "P2P received is Transfers" "$(sql "SELECT COUNT(*) FROM Transactions WHERE Type = 'PaymentReceived' AND Category <> 'Transfers'")" 0
 check "reversals keep the category of what they undo" "$(sql "SELECT COUNT(*) FROM Transactions r JOIN Transactions o ON r.ReversalOfTransactionId = o.Id WHERE r.Category <> o.Category")" 0
@@ -77,7 +85,7 @@ has "trend ends with the chosen month" "$T" "\"month\":\"$MONTH\""
 check "trend: at most 6 months" "$(printf '%s' "$T" | grep -o '"month"' | wc -l | awk '{print ($1<=6)?"yes":"no"}')" yes
 check "bad month -> 400" "$(code -b $C "$B/api/insights/summary?month=13-2026")" 400
 check "month before the first account clamps (200)" "$(code -b $C "$B/api/insights/summary?month=2001-01")" 200
-check "categories list has all 9" "$(curl -s -b $C $B/api/insights/categories | grep -o '"key"' | wc -l | tr -d ' ')" 9
+check "categories list has all 11" "$(curl -s -b $C $B/api/insights/categories | grep -o '"key"' | wc -l | tr -d ' ')" 11
 check "anonymous API -> 401" "$(code $B/api/insights/summary)" 401
 check "Maya sees her own numbers, not Jordan's" "$( [ "$(json_field "$(curl -s -b $M $B/api/insights/summary)" spending)" != "$(json_field "$SUM" spending)" ] && echo yes)" yes
 
@@ -141,7 +149,7 @@ has "change limit" "$(flash $C $B/budgets)" "changed from \$2,500.00 to \$2,000.
 check "still one row per category" "$(sql "SELECT COUNT(*) FROM Budgets WHERE UserId = '$JID' AND Category = 'BillsAndUtilities'")" 1
 bs $C Income 100 >/dev/null;           has "Income refused" "$(cat /tmp/post.html)" "isn&#x27;t spending"
 bs $C Transfers 100 >/dev/null;        has "Transfers refused" "$(cat /tmp/post.html)" "isn&#x27;t spending"
-bs $C 99 100 >/dev/null;               check "made-up category stores nothing" "$(sql "SELECT COUNT(*) FROM Budgets WHERE Category NOT IN ('FoodAndDining','Groceries','Gas','Shopping','BillsAndUtilities','Entertainment','Other')")" 0
+bs $C 99 100 >/dev/null;               check "made-up category stores nothing" "$(sql "SELECT COUNT(*) FROM Budgets WHERE Category NOT IN ('FoodAndDining','Groceries','Gas','Shopping','BillsAndUtilities','Entertainment','FeesAndInterest','Other')")" 0
 bs $C Other 0 >/dev/null;              has "zero limit refused" "$(cat /tmp/post.html)" "between \$1.00 and \$100,000"
 bs $C Other 100000.01 >/dev/null;      has "too-large limit refused" "$(cat /tmp/post.html)" "between \$1.00 and \$100,000"
 bs $C Other 10.005 >/dev/null;         has "3 decimals refused" "$(cat /tmp/post.html)" "at most 2 decimal places"

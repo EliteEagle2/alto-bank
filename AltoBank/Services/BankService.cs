@@ -782,7 +782,7 @@ public partial class BankService : IBankService
         string number;
         do
         {
-            number = Random.Shared.NextInt64(1_000_000_000L, 10_000_000_000L).ToString();
+            number = SeededRandom.NextInt64(1_000_000_000L, 10_000_000_000L).ToString();   // fixed while seeding (Services/SeededRandom.cs)
         } while (await _db.Accounts.AnyAsync(a => a.AccountNumber == number));
         return number;
     }
